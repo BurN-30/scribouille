@@ -62,7 +62,9 @@ The factor below is compute time divided by audio duration. Under 1 is faster th
 | Modest laptop, 4 to 8 threads | about 2 x | about 0.5 x | about 2 h |
 | NVIDIA card (CUDA, float16) | about 0.1 x | about 0.05 x | about 6 min |
 
-**These are estimates, not guarantees.** They are calibrated on public measurements and adjusted to the number of cores on your machine. The app shows the **time actually measured** after every transcription, and writes it in the header of the output file. Speaker separation adds roughly 0.2 x on CPU.
+**These are starting estimates, not guarantees.** They are calibrated on public measurements and adjusted to the number of cores on your machine. The app shows the **time actually measured** after every transcription, and writes it in the header of the output file. Speaker separation adds roughly 0.2 x on CPU.
+
+**They correct themselves.** As soon as a transcription completes, the observed factor is kept, and it is what the next announcements are based on: the hardware card then says "measured on this machine". The last five measurements are averaged, the most recent and the longest weighing the most, and every combination of model and beam width is tracked separately. Nothing to set up, and nothing goes online: the measurements live in `calibration.json`, next to your settings.
 
 Acceleration in this version: **CPU everywhere** with `int8` quantisation, which is the default and perfectly usable, and **NVIDIA cards** in CUDA `float16`, automatically, when the driver and libraries answer. AMD Radeon cards, Intel integrated graphics and NPUs are detected and displayed but **not used**, because faster-whisper sits on [CTranslate2](https://opennmt.net/CTranslate2/hardware_support.html), which supports x86-64 and ARM64 CPUs and NVIDIA GPUs only. The app says so plainly rather than implying an acceleration that does not exist.
 

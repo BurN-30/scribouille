@@ -12,13 +12,16 @@ Deux presets sont exposés en façade :
 
 Les autres modèles restent atteignables par le mode avancé.
 
-Les facteurs de durée sont des ESTIMATIONS calées sur des mesures publiques
-(voir README). Elles sont recalibrées à chaud après chaque transcription réussie.
+Les facteurs de durée inscrits ici sont des ESTIMATIONS calées sur des mesures
+publiques (voir README), relevées sur une machine qui n'est pas celle de
+l'utilisateur. Ils servent de REPLI : dès qu'une transcription a été menée à son
+terme sur ce poste, c'est le facteur réellement observé qui sert aux annonces,
+modèle par modèle et largeur de faisceau comprise. Voir `app/calibration.py`.
 """
 
 from __future__ import annotations
 
-from . import langues
+from . import calibration, langues
 from .materiel import Materiel, SEUIL_MEMOIRE_CRITIQUE
 
 # Modèle turbo : on nomme le dépôt converti explicitement plutôt que l'alias
@@ -36,8 +39,9 @@ PRESETS: dict[str, dict] = {
         "diarisation_defaut": True,
         "telechargement_go": 3.1,
         "memoire_go": 3.5,
-        # Facteur temps réel de référence (durée de calcul / durée de l'audio)
-        # sur une machine repère : ultraportable 12 fils, sans carte dédiée.
+        # Facteur temps réel de repli (durée de calcul / durée de l'audio) sur une
+        # machine repère : ultraportable 12 fils, sans carte dédiée. Il ne sert que
+        # tant qu'aucune transcription n'a été mesurée sur le poste.
         "facteur_cpu": 1.35,
         "facteur_cuda": 0.10,
     },
@@ -150,24 +154,50 @@ def _coefficient_machine(mat: Materiel) -> float:
     return min(2.5, max(0.35, coefficient))
 
 
+def facteur_mesure(cle_preset: str, mat: Materiel, modele_avance: str = "",
+                   beam: int = 0) -> float:
+    """
+    Facteur relevé sur CE poste pour cette situation, 0 s'il n'y en a pas encore.
+
+    Une mesure remplace le facteur statique ET le coefficient de machine : elle
+    a été prise sur la machine, il n'y a plus rien à extrapoler.
+    """
+    return calibration.facteur_mesure(
+        modele_du_preset(cle_preset, modele_avance),
+        mat.peripherique,
+        beam or preset(cle_preset)["beam_size"],
+        mat,
+    )
+
+
 def facteur_temps_reel(cle_preset: str, mat: Materiel, diarisation: bool = False,
-                       modele_avance: str = "") -> float:
-    """Renvoie le rapport estimé « durée de calcul / durée de l'audio »."""
+                       modele_avance: str = "", beam: int = 0) -> float:
+    """
+    Renvoie le rapport estimé « durée de calcul / durée de l'audio ».
+
+    Le facteur mesuré sur le poste passe devant le facteur statique dès qu'il
+    existe. Le surcoût de la séparation des locuteurs, lui, reste estimé : il
+    n'est pas encore mesuré à part.
+    """
     modele = modele_du_preset(cle_preset, modele_avance)
     sur_gpu = mat.cuda_disponible
-    facteur = _facteur_modele(modele, sur_gpu)
-    if not sur_gpu:
-        facteur *= _coefficient_machine(mat)
+    facteur = facteur_mesure(cle_preset, mat, modele_avance, beam)
+    if not facteur:
+        facteur = _facteur_modele(modele, sur_gpu)
+        if not sur_gpu:
+            facteur *= _coefficient_machine(mat)
     if diarisation:
         facteur += FACTEUR_DIARISATION_CUDA if sur_gpu else FACTEUR_DIARISATION_CPU * _coefficient_machine(mat)
     return round(facteur, 3)
 
 
 def estimer_secondes(duree_audio: float, cle_preset: str, mat: Materiel,
-                     diarisation: bool = False, modele_avance: str = "") -> float:
+                     diarisation: bool = False, modele_avance: str = "",
+                     beam: int = 0) -> float:
     if not duree_audio:
         return 0.0
-    return duree_audio * facteur_temps_reel(cle_preset, mat, diarisation, modele_avance)
+    return duree_audio * facteur_temps_reel(
+        cle_preset, mat, diarisation, modele_avance, beam)
 
 
 def nombre_fr(valeur: float, decimales: int = 1) -> str:
@@ -215,17 +245,15 @@ def recommandation(mat: Materiel) -> dict:
         "phrase": phrase,
         "estimations": [
             {
-                "preset": "qualite",
-                "nom": nom_preset("qualite"),
-                "facteur": facteur_temps_reel("qualite", mat),
-                "pour_une_heure": formater_duree(qualite),
-            },
-            {
-                "preset": "rapide",
-                "nom": nom_preset("rapide"),
-                "facteur": facteur_temps_reel("rapide", mat),
-                "pour_une_heure": formater_duree(rapide),
-            },
+                "preset": cle,
+                "nom": nom_preset(cle),
+                "facteur": facteur_temps_reel(cle, mat),
+                "pour_une_heure": formater_duree(duree),
+                # Vrai quand le chiffre vient d'une transcription faite ici, et
+                # non d'une mesure publique extrapolée : l'interface le dit.
+                "mesure": bool(facteur_mesure(cle, mat)),
+            }
+            for cle, duree in (("qualite", qualite), ("rapide", rapide))
         ],
     }
 

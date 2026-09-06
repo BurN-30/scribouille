@@ -103,6 +103,7 @@ def _taille_donnees() -> tuple[int, int]:
         chemins.FICHIER_JETON_HF, chemins.FICHIER_CHOIX_MODELES,
         chemins.RACINE / "maj-etat.json",
         chemins.RACINE / "surveillance-vus.json",
+        chemins.RACINE / "calibration.json",
     ]
     for fichier in fichiers:
         octets, compte = taille(fichier)

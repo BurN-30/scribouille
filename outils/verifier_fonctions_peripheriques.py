@@ -1,7 +1,7 @@
 """
 Vérification en ligne de commande des fonctions périphériques.
 
-Dix sujets, tous vérifiables sans ouvrir de fenêtre, sans transcrire quoi que
+Onze sujets, tous vérifiables sans ouvrir de fenêtre, sans transcrire quoi que
 ce soit et **sans le moindre appel réseau** :
 
   1. la scrutation du dossier surveillé, avec de vrais fichiers déposés dans un
@@ -34,6 +34,10 @@ ce soit et **sans le moindre appel réseau** :
   10. le backend « xet » de Hugging Face, coupé avant tout import du hub :
      la bibliothèque le confirme elle-même, et un choix explicite de
      l'utilisateur reste respecté.
+  11. la recalibration à chaud des durées : le facteur mesuré sur le poste
+     remplace celui du preset, il se lisse sur les dernières transcriptions,
+     il ne déborde pas d'une situation de calcul à l'autre, et tout incident
+     ramène au facteur statique.
 
 Rien de ce que fait ce script ne touche à l'installation : tout se passe dans
 un dossier temporaire, effacé à la fin.
@@ -58,8 +62,8 @@ if str(RACINE) not in sys.path:
     sys.path.insert(0, str(RACINE))
 
 from app import (  # noqa: E402
-    chemins, compagnon, langues, maj, nommage, presets, stockage, surveillance,
-    vocabulaire)
+    calibration, chemins, compagnon, langues, maj, materiel, nommage, presets,
+    stockage, surveillance, vocabulaire)
 
 # Ces contrôles comparent des chaînes produites par l'application : ils fixent
 # donc la langue d'interface, sans quoi leur résultat dépendrait de la langue de
@@ -1047,6 +1051,104 @@ def essai_transfert_xet() -> None:
              sortie.stdout.strip() or sortie.stderr.strip()[:80])
 
 
+# ---------------------------------------------------------------------------
+# 11. Recalibration à chaud des estimations de durée
+# ---------------------------------------------------------------------------
+
+def essai_calibration(base: Path) -> None:
+    """
+    Ce que la machine mesure d'elle-même remplace le facteur venu d'ailleurs.
+
+    Tout se passe dans un dossier temporaire : la racine des données est
+    déplacée le temps du contrôle, les mesures réelles du poste ne sont ni lues
+    ni touchées.
+    """
+    titre("Recalibration à chaud des durées")
+
+    bac = base / "calibration"
+    bac.mkdir(parents=True, exist_ok=True)
+    racine_reelle = chemins.RACINE
+    chemins.RACINE = bac
+
+    machine = materiel.Materiel(cpu_nom="Processeur d'essai", coeurs_logiques=16,
+                                ram_go=32.0)
+    autre_machine = materiel.Materiel(cpu_nom="Autre processeur", coeurs_logiques=4,
+                                      ram_go=8.0)
+    try:
+        # -- repli : sans mesure, le facteur statique du preset ----------------
+        statique = presets.facteur_temps_reel("qualite", machine)
+        verifier(calibration.facteur_mesure("large-v3", "cpu", 8, machine) == 0.0,
+                 "sans mesure, aucun facteur mesuré")
+        verifier(statique > 0, "le facteur statique reste servi", str(statique))
+        verifier(not calibration.fichier().exists(),
+                 "aucun fichier écrit tant que rien n'a été mesuré")
+
+        # -- une transcription réussie est retenue -----------------------------
+        # 1 200 s d'audio en 2 484 s de calcul, soit le facteur 2,07 relevé le
+        # 21 août 2026 sur le 7800X3D, là où le preset annonçait 1,35.
+        lisse = calibration.enregistrer("large-v3", "cpu", 8, 1200.0, 2484.0, machine)
+        verifier(abs(lisse - 2.07) < 0.001, "facteur mesuré à partir du temps réel",
+                 str(lisse))
+        verifier(calibration.fichier().exists(), "le fichier de mesures est écrit")
+        verifier(abs(calibration.facteur_mesure("large-v3", "cpu", 8, machine) - 2.07) < 0.001,
+                 "et relu tel quel au lancement suivant")
+
+        mesure = presets.facteur_temps_reel("qualite", machine)
+        verifier(abs(mesure - 2.07) < 0.001,
+                 "l'estimation du preset suit la mesure, pas le chiffre d'origine",
+                 f"{statique} puis {mesure}")
+        verifier(presets.estimer_secondes(3600, "qualite", machine) > 3600 * 2,
+                 "une heure d'audio est annoncée pour plus de deux heures de calcul")
+
+        # -- ce qui distingue deux situations ----------------------------------
+        verifier(calibration.facteur_mesure("large-v3", "cpu", 5, machine) == 0.0,
+                 "une autre largeur de faisceau ne réutilise pas la mesure")
+        verifier(calibration.facteur_mesure(presets.MODELE_TURBO, "cpu", 5, machine) == 0.0,
+                 "un autre modèle non plus")
+        verifier(calibration.facteur_mesure("large-v3", "cuda", 8, machine) == 0.0,
+                 "un autre périphérique non plus")
+        verifier(calibration.facteur_mesure("large-v3", "cpu", 8, autre_machine) == 0.0,
+                 "et un dossier de données recopié sur une autre machine repart à zéro")
+
+        # -- lissage : la mesure fraîche pèse plus, la longue aussi -------------
+        calibration.enregistrer("large-v3", "cpu", 8, 1200.0, 1200.0, machine)
+        deux = calibration.facteur_mesure("large-v3", "cpu", 8, machine)
+        verifier(1.0 < deux < 2.07,
+                 "deux mesures donnent une valeur intermédiaire", str(deux))
+        verifier(deux < (1.0 + 2.07) / 2,
+                 "penchée vers la plus récente, pas une moyenne plate", str(deux))
+
+        # Seules les cinq dernières comptent.
+        for _ in range(6):
+            calibration.enregistrer("large-v3", "cpu", 8, 600.0, 300.0, machine)
+        donnees = calibration.charger(calibration.signature_machine(machine))
+        historique = donnees["mesures"][calibration.cle_mesure("large-v3", "cpu", 8)]["historique"]
+        verifier(len(historique) == calibration.MESURES_RETENUES,
+                 "l'historique est borné aux cinq dernières mesures", str(len(historique)))
+        verifier(abs(calibration.facteur_mesure("large-v3", "cpu", 8, machine) - 0.5) < 0.001,
+                 "les vieilles mesures finissent par sortir")
+
+        # -- mesures écartées ---------------------------------------------------
+        calibration.oublier()
+        verifier(calibration.enregistrer("large-v3", "cpu", 8, 30.0, 60.0, machine) == 0.0,
+                 "un enregistrement trop court n'est pas mesuré")
+        verifier(calibration.enregistrer("large-v3", "cpu", 8, 1200.0, 0.0, machine) == 0.0,
+                 "un temps de calcul nul non plus")
+        verifier(calibration.enregistrer("large-v3", "cpu", 8, 1200.0, 200000.0, machine) == 0.0,
+                 "une valeur aberrante non plus")
+        verifier(calibration.facteur_mesure("large-v3", "cpu", 8, machine) == 0.0,
+                 "aucune de ces trois n'a été retenue")
+
+        # -- fichier abîmé : on repart des facteurs statiques --------------------
+        calibration.fichier().write_text("{ceci n'est pas du JSON", encoding="utf-8")
+        verifier(calibration.facteur_mesure("large-v3", "cpu", 8, machine) == 0.0,
+                 "un fichier de mesures illisible ne fait pas tomber l'application")
+        verifier(presets.facteur_temps_reel("qualite", machine) == statique,
+                 "et l'estimation revient au facteur statique")
+    finally:
+        chemins.RACINE = racine_reelle
+
+
 def principal() -> int:
     print(f"Vérification des fonctions périphériques de Scribouille\n{'=' * 54}")
     with tempfile.TemporaryDirectory(prefix="scribouille-verif-") as brut:
@@ -1062,6 +1164,7 @@ def principal() -> int:
         essai_modele_incomplet(base)
         essai_renommage(base)
         essai_transfert_xet()
+        essai_calibration(base)
 
     print(f"\n{'=' * 54}")
     if _echecs:

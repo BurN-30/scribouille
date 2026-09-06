@@ -1023,9 +1023,14 @@ class Passerelle:
 
     def estimation(self, duree_secs: float, cle_preset: str, diarisation_active: bool,
                    modele_avance: str = "") -> str:
+        # La largeur de faisceau change le coût du simple au double : elle entre
+        # dans la clé des mesures relevées sur le poste, elle doit donc être dite.
+        beam = int(self.config.get("beam_size") or 0) \
+            if self.config.get("mode_avance") else 0
         return presets.formater_duree(
             presets.estimer_secondes(duree_secs, cle_preset, self.materiel,
-                                     bool(diarisation_active), modele_avance or "")
+                                     bool(diarisation_active), modele_avance or "",
+                                     beam=beam)
         )
 
     # -- fichiers ----------------------------------------------------------

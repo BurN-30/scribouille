@@ -62,7 +62,9 @@ Le facteur ci-dessous est le rapport durée de calcul sur durée de l'audio. En 
 | Portable modeste, 4 à 8 fils | environ 2 x | environ 0,5 x | environ 2 h |
 | Carte NVIDIA (CUDA, float16) | environ 0,1 x | environ 0,05 x | environ 6 min |
 
-**Ce sont des estimations, pas des garanties.** Elles sont calées sur des mesures publiques et ajustées au nombre de cœurs de votre machine. L'application affiche le **temps réellement mesuré** après chaque transcription, et l'écrit dans l'en-tête du fichier produit. La séparation des locuteurs ajoute à peu près 0,2 x sur processeur.
+**Ce sont des estimations de départ, pas des garanties.** Elles sont calées sur des mesures publiques et ajustées au nombre de cœurs de votre machine. L'application affiche le **temps réellement mesuré** après chaque transcription, et l'écrit dans l'en-tête du fichier produit. La séparation des locuteurs ajoute à peu près 0,2 x sur processeur.
+
+**Elles se corrigent toutes seules.** Dès qu'une transcription arrive à son terme, le facteur observé est retenu, et c'est lui qui sert aux annonces suivantes : la carte du matériel précise alors « mesuré sur cette machine ». Les cinq dernières mesures sont moyennées, la plus récente et la plus longue pesant le plus, et chaque combinaison de modèle et de largeur de faisceau est suivie à part. Rien à régler, et rien qui parte en ligne : les mesures vivent dans `calibration.json`, à côté de vos réglages.
 
 Ce qui est accéléré dans cette version : le **processeur, partout**, en quantification `int8`, qui est le mode par défaut et reste parfaitement utilisable, et les **cartes NVIDIA** en CUDA `float16`, automatiquement, si le pilote et les bibliothèques répondent. Les cartes AMD Radeon, les circuits graphiques intégrés Intel et les NPU sont détectés et affichés mais **pas exploités**, parce que faster-whisper repose sur [CTranslate2](https://opennmt.net/CTranslate2/hardware_support.html), qui ne supporte que le CPU x86-64 ou ARM64 et les GPU NVIDIA. L'application le dit noir sur blanc plutôt que de laisser croire à une accélération qui n'existe pas.
 

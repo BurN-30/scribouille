@@ -52,6 +52,32 @@ croyait tenir un modèle et échouait plus loin sur un fichier absent.
   d'Internet fonctionne mais que le téléchargement échoue encore, la cause est
   presque toujours un antivirus, un pare-feu ou un partage de connexion mobile.
 
+Les durées annoncées se corrigent d'elles-mêmes.
+
+Le preset « Qualité maximale » annonçait 1,35 fois la durée de l'audio et en
+demandait 2,07 sur un Ryzen 7800X3D : une réunion de vingt-trois minutes
+annoncée pour une demi-heure en prenait trois quarts. Les facteurs livrés
+viennent de mesures faites sur une autre machine que la vôtre, ils ne pouvaient
+pas tomber juste.
+
+- **Chaque transcription menée à son terme est mesurée**, et c'est le facteur
+  observé qui sert aux annonces suivantes. La carte du matériel le précise :
+  « mesuré sur cette machine ». Rien à régler, rien qui parte en ligne.
+- **La mesure porte sur la transcription seule** : ni le décodage du fichier, ni
+  le chargement du modèle, ni la séparation des locuteurs, qui a son propre
+  surcoût. Une transcription reprise après coupure n'est pas mesurée, son temps
+  de calcul étant réparti sur deux exécutions.
+- **Les cinq dernières mesures sont moyennées**, la plus récente et la plus
+  longue pesant le plus : une réunion transcrite pendant une sauvegarde du
+  système ne fausse pas durablement les annonces. Les enregistrements de moins
+  d'une minute et les valeurs aberrantes sont écartés d'entrée.
+- **Chaque situation de calcul est suivie à part** : modèle, processeur ou carte
+  graphique, et largeur de faisceau, qui à elle seule change le coût du simple
+  au double. Un dossier de données recopié sur une autre machine repart d'une
+  page blanche plutôt que d'annoncer les durées de la première.
+- Au passage, **la documentation de `presets.py` disait vrai** : elle promettait
+  cette recalibration depuis des mois sans qu'aucune ligne ne l'implémente.
+
 ---
 
 ## 2.3.3

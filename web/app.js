@@ -163,7 +163,9 @@ function dessinerMateriel(mat, reco) {
 
   lignes.push('<div style="height:8px"></div>');
   (reco.estimations || []).forEach((e) => {
-    ajout(e.nom, t('ui.materiel.estimation', {
+    /* Une estimation mesuree sur le poste le dit : c'est la difference entre un
+       chiffre repris d'ailleurs et un chiffre releve ici. */
+    ajout(e.nom, t(e.mesure ? 'ui.materiel.estimation_mesuree' : 'ui.materiel.estimation', {
       duree: e.pour_une_heure, facteur: nb(e.facteur),
     }));
   });

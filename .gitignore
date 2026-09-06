@@ -25,6 +25,7 @@ extensions/
 cache-pip/
 maj-etat.json
 surveillance-vus.json
+calibration.json
 _ffmpeg/
 
 # Système

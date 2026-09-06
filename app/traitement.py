@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import audio as audio_module
+from . import calibration
 from . import config as config_module
 from . import diarisation, journal, langues, moteur, presets, reprise as reprise_module
 from . import sorties, vocabulaire
@@ -304,6 +305,7 @@ class FileTraitement:
             self.materiel,
             diarisation=bool(config.get("diarisation")),
             modele_avance=reglages["modele"] if config.get("mode_avance") else "",
+            beam=int(reglages["beam_size"] or 0),
         )
         rappels.etat(element.identifiant, "transcription", langues.t("etat.transcription"))
 
@@ -335,14 +337,31 @@ class FileTraitement:
                 ),
             })
 
+        debut_transcription = time.time()
         segments, details = instance.transcrire(
             signal, duree_audio, config.get("langue", "fr"), reglages,
             amorce=amorce_info["amorce"], progression=progression,
             interrompu=self._interrompu, decalage=decalage,
             sur_segment=lambda seg: session.ajouter(seg, time.time() - depart),
         )
+        temps_transcription = time.time() - debut_transcription
         segments = deja_transcrits + segments
         session.fermer()
+
+        # 2 bis. Recalibration à chaud des annonces de durée.
+        #
+        # On vient de mesurer, sur cette machine et sur un vrai fichier, ce que
+        # coûte ce modèle : c'est infiniment plus juste que le facteur statique du
+        # preset, relevé ailleurs. La mesure porte sur la transcription SEULE, le
+        # décodage, le chargement du modèle et la séparation des locuteurs restant
+        # dehors. Une reprise après coupure ne compte pas : son temps de calcul
+        # est réparti sur deux exécutions.
+        if not deja_transcrits:
+            calibration.enregistrer(
+                reglages["modele"], self.materiel.peripherique,
+                int(reglages["beam_size"] or 0), duree_audio, temps_transcription,
+                self.materiel,
+            )
 
         # 3. Libération AVANT la diarisation : c'est ce qui tient les 16 Go.
         instance.liberer()

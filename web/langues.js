@@ -69,6 +69,8 @@ fr: {
   'ui.materiel.calcul_cuda': 'NVIDIA CUDA, précision float16',
   'ui.materiel.calcul_cpu': 'processeur, quantification int8',
   'ui.materiel.estimation': "environ {duree} pour une heure d'audio (facteur {facteur})",
+  'ui.materiel.estimation_mesuree': "environ {duree} pour une heure d'audio "
+    + '(facteur {facteur}, mesuré sur cette machine)',
   'ui.materiel.avis': "Estimations, pas des garanties : l'interface affiche le temps "
     + 'réellement mesuré à chaque transcription.',
 
@@ -566,6 +568,8 @@ en: {
   'ui.materiel.calcul_cuda': 'NVIDIA CUDA, float16 precision',
   'ui.materiel.calcul_cpu': 'processor, int8 quantisation',
   'ui.materiel.estimation': 'about {duree} per hour of audio (factor {facteur})',
+  'ui.materiel.estimation_mesuree': 'about {duree} per hour of audio '
+    + '(factor {facteur}, measured on this machine)',
   'ui.materiel.avis': 'Estimates, not guarantees: the interface shows the time actually '
     + 'measured for every transcription.',
 
