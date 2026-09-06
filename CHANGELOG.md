@@ -78,6 +78,24 @@ pas tomber juste.
 - Au passage, **la documentation de `presets.py` disait vrai** : elle promettait
   cette recalibration depuis des mois sans qu'aucune ligne ne l'implémente.
 
+Le panneau d'aide ne sort plus de l'écran quand l'interface est grossie.
+
+Les fenêtres de l'application étaient bornées à 85 % de la hauteur de l'écran
+depuis la 2.3.2, et cela suffisait tant que l'interface restait à sa taille
+d'origine. Le grossissement, lui, multiplie tout ce qu'il touche, y compris
+cette borne : à 125 %, une fenêtre censée occuper 85 % en réclamait 106, et
+le panneau d'aide, le plus long de tous, sortait par le bas sans que rien ne
+défile.
+
+- **Les fenêtres se mesurent maintenant sur la fenêtre réelle**, grossissement
+  déduit, et non plus sur une hauteur d'écran qui ne veut plus rien dire une
+  fois multipliée. Le contenu défile à l'intérieur, l'en-tête et le pied
+  restent en place, comme prévu.
+- **Le corps de page souffrait du même mal** : au-delà de 100 % de
+  grossissement, il dépassait la fenêtre par le bas.
+- La taille est reprise à chaque changement de grossissement et à chaque
+  redimensionnement de la fenêtre.
+
 ---
 
 ## 2.3.3

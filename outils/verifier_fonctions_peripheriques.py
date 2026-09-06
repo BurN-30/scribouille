@@ -1,7 +1,7 @@
 """
 Vérification en ligne de commande des fonctions périphériques.
 
-Onze sujets, tous vérifiables sans ouvrir de fenêtre, sans transcrire quoi que
+Douze sujets, tous vérifiables sans ouvrir de fenêtre, sans transcrire quoi que
 ce soit et **sans le moindre appel réseau** :
 
   1. la scrutation du dossier surveillé, avec de vrais fichiers déposés dans un
@@ -38,6 +38,9 @@ ce soit et **sans le moindre appel réseau** :
      remplace celui du preset, il se lisse sur les dernières transcriptions,
      il ne déborde pas d'une situation de calcul à l'autre, et tout incident
      ramène au facteur statique.
+  12. les bornes de hauteur des fenêtres, qui ne s'expriment plus en unités
+     `vh` : le grossissement de l'interface les multipliait, et le panneau
+     d'aide sortait de l'écran.
 
 Rien de ce que fait ce script ne touche à l'installation : tout se passe dans
 un dossier temporaire, effacé à la fin.
@@ -51,6 +54,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -1149,6 +1153,46 @@ def essai_calibration(base: Path) -> None:
         chemins.RACINE = racine_reelle
 
 
+# ---------------------------------------------------------------------------
+# 12. Mise en page des fenêtres, au grossissement près
+# ---------------------------------------------------------------------------
+
+def essai_bornes_fenetres() -> None:
+    """
+    Aucune fenêtre ne se borne en `vh`, et le script publie la taille réelle.
+
+    Une lecture de fichiers, faute de navigateur : le grossissement passe par
+    `zoom` sur le corps de page, et `zoom` multiplie aussi les unités `vh`. Une
+    fenêtre bornée à 85vh dépassait donc par le bas dès que l'utilisateur
+    grossissait l'interface. Le contrôle est statique, mais il attrape le retour
+    d'un `vh` dans une règle de dimensionnement, qui est exactement la manière
+    dont ce défaut reviendrait.
+    """
+    titre("Bornes des fenêtres, grossissement compris")
+
+    styles = (RACINE / "web" / "styles.css").read_text(encoding="utf-8")
+    script = (RACINE / "web" / "app.js").read_text(encoding="utf-8")
+
+    # Les commentaires parlent de vh, c'est leur sujet : on ne lit que les règles.
+    regles = re.sub(r"/\*.*?\*/", "", styles, flags=re.S)
+    dimensions = [ligne.strip() for ligne in regles.splitlines()
+                  if re.search(r"\b(height|width|max-height|max-width)\s*:", ligne)]
+    en_vh = [ligne for ligne in dimensions if re.search(r"\d\s*v[hw]\b", ligne)]
+
+    verifier(not en_vh, "aucune dimension exprimée en vh ou vw hors des variables",
+             " | ".join(en_vh[:3]))
+    verifier("--hauteur-fenetre: 100vh;" in styles and "--largeur-fenetre: 100vw;" in styles,
+             "les variables gardent une valeur de repli juste au grossissement 1")
+    verifier("height: var(--hauteur-fenetre)" in regles,
+             "le voile et le corps de page suivent la fenêtre réelle")
+    verifier("max-height: 100%;" in regles,
+             "les fenêtres se bornent au voile, qui porte déjà la marge")
+    verifier("--hauteur-fenetre" in script and "window.innerHeight" in script,
+             "le script publie la hauteur réelle divisée par le grossissement")
+    verifier("addEventListener('resize', mesurerFenetre)" in script,
+             "et la remesure quand la fenêtre change de taille")
+
+
 def principal() -> int:
     print(f"Vérification des fonctions périphériques de Scribouille\n{'=' * 54}")
     with tempfile.TemporaryDirectory(prefix="scribouille-verif-") as brut:
@@ -1165,6 +1209,7 @@ def principal() -> int:
         essai_renommage(base)
         essai_transfert_xet()
         essai_calibration(base)
+        essai_bornes_fenetres()
 
     print(f"\n{'=' * 54}")
     if _echecs:

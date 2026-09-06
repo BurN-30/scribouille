@@ -1487,7 +1487,23 @@ function themeSuivant() {
 function appliquerZoom(valeur) {
   etat.config.zoom = Math.min(1.6, Math.max(0.7, valeur));
   document.body.style.zoom = etat.config.zoom;
+  mesurerFenetre();
 }
+
+/* Taille de la fenetre divisee par le grossissement, publiee en variables CSS.
+
+   « zoom » multiplie tout ce que contient le corps de page, unites vh comprises :
+   sans cette division, une fenetre bornee a 85vh depassait par le bas des que le
+   grossissement montait, et le panneau d'aide sortait de l'ecran. Voir le
+   commentaire de :root dans styles.css. */
+function mesurerFenetre() {
+  const grossissement = etat.config.zoom || 1;
+  const style = document.documentElement.style;
+  style.setProperty('--hauteur-fenetre', `${window.innerHeight / grossissement}px`);
+  style.setProperty('--largeur-fenetre', `${window.innerWidth / grossissement}px`);
+}
+
+window.addEventListener('resize', mesurerFenetre);
 
 /* ------------------------------------------------------------ Cablage UI */
 
