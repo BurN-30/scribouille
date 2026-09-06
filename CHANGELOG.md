@@ -33,6 +33,25 @@ dont les anciennes URL redirigent.
   pour l'IA et le dossier des reprises restaient sur le disque, et empêchaient
   au passage la suppression du dossier de données.
 
+Le téléchargement des modèles ne s'arrête plus en une seconde sans rien dire.
+
+Sur certaines connexions, le protocole de transfert maison de Hugging Face
+(« xet ») rendait la main immédiatement sans transférer un octet, alors que le
+même fichier se téléchargeait sans peine depuis un navigateur. L'application
+croyait tenir un modèle et échouait plus loin sur un fichier absent.
+
+- **Les poids passent désormais par le HTTPS ordinaire**, celui qui marche
+  partout, y compris derrière un antivirus ou un pare-feu d'entreprise. Le
+  choix est fait au tout premier instant du programme, avant même que la
+  bibliothèque de téléchargement soit chargée, sans quoi il serait sans effet.
+  Une variable d'environnement posée à la main par un utilisateur averti garde
+  le dernier mot.
+- **La bibliothèque native de ce protocole n'est plus embarquée** dans le
+  programme d'installation, où elle était ramassée sans avoir été demandée.
+- **Le message d'échec nomme la piste du réseau filtrant** : quand le reste
+  d'Internet fonctionne mais que le téléchargement échoue encore, la cause est
+  presque toujours un antivirus, un pare-feu ou un partage de connexion mobile.
+
 ---
 
 ## 2.3.3

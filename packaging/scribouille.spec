@@ -205,7 +205,16 @@ imports_caches += collect_submodules("webview.platforms")
 # pèse à lui seul plus de 2,5 Go. Depuis la version 2.3.0, l'application sait
 # l'installer elle-même, à la demande, dans le dossier d'extensions de
 # l'utilisateur : voir app/extensions.py.
+# hf_xet, la bibliotheque native du protocole « xet » de Hugging Face, etait
+# ramassee sans qu'on l'ait demandee : huggingface_hub l'importe dans le corps
+# de ses fonctions de telechargement, et l'analyse de PyInstaller lit aussi le
+# code des fonctions. Elle est desormais exclue, en accord avec la variable
+# HF_HUB_DISABLE_XET posee dans app/__init__.py : le transfert des modeles passe
+# par le HTTPS ordinaire, celui qui marche partout, y compris derriere un reseau
+# qui filtre. Rien ne s'en plaint a l'execution, huggingface_hub ne charge cette
+# bibliotheque que s'il compte s'en servir.
 exclusions = [
+    "hf_xet",
     "torch",
     "torchaudio",
     "pyannote",

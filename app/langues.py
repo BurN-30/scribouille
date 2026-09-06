@@ -254,7 +254,10 @@ _FR: dict[str, str] = {
         "Le téléchargement du modèle {modele} ({taille}) a échoué. Vérifiez la "
         "connexion Internet et l'espace disque (il faut environ {requis} libres), "
         "puis relancez le fichier. Ce qui a déjà été reçu est conservé : la "
-        "prochaine tentative repartira de là."
+        "prochaine tentative repartira de là. Si le problème revient alors que le "
+        "reste d'Internet fonctionne, la connexion filtre sans doute le "
+        "téléchargement : un antivirus, un pare-feu d'entreprise ou un partage de "
+        "connexion mobile suffisent. Essayez depuis un autre réseau."
     ),
     "moteur.disque_insuffisant": (
         "Le modèle {modele} demande environ {requis} d'espace libre pour être "
@@ -1017,7 +1020,9 @@ _EN: dict[str, str] = {
         "The download of model {modele} ({taille}) failed. Check your Internet "
         "connection and disk space (about {requis} free is needed), then start the file "
         "again. What was already received is kept: the next attempt will resume from "
-        "there."
+        "there. If it keeps failing while the rest of the Internet works, the "
+        "connection is most likely filtering the download: an antivirus, a company "
+        "firewall or a phone hotspot are enough to do that. Try from another network."
     ),
     "moteur.disque_insuffisant": (
         "Model {modele} needs about {requis} of free space to be downloaded, and only "

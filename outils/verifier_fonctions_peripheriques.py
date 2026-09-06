@@ -1,7 +1,7 @@
 """
 Vérification en ligne de commande des fonctions périphériques.
 
-Neuf sujets, tous vérifiables sans ouvrir de fenêtre, sans transcrire quoi que
+Dix sujets, tous vérifiables sans ouvrir de fenêtre, sans transcrire quoi que
 ce soit et **sans le moindre appel réseau** :
 
   1. la scrutation du dossier surveillé, avec de vrais fichiers déposés dans un
@@ -31,6 +31,9 @@ ce soit et **sans le moindre appel réseau** :
   9. la compatibilité du renommage de la 2.4.0 : un fichier compagnon écrit
      sous l'ancien marqueur de format se relit toujours, et le dossier de
      données garde son nom d'origine.
+  10. le backend « xet » de Hugging Face, coupé avant tout import du hub :
+     la bibliothèque le confirme elle-même, et un choix explicite de
+     l'utilisateur reste respecté.
 
 Rien de ce que fait ce script ne touche à l'installation : tout se passe dans
 un dossier temporaire, effacé à la fin.
@@ -43,6 +46,8 @@ Sort avec le code 0 si tout passe, 1 sinon.
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
 import tempfile
 from datetime import datetime, timedelta
@@ -999,6 +1004,49 @@ def essai_renommage(base: Path) -> None:
              "la racine des données suit ce nom dans la version installée")
 
 
+# ---------------------------------------------------------------------------
+# 10. Transfert des modèles : le backend « xet » est coupé
+# ---------------------------------------------------------------------------
+
+def essai_transfert_xet() -> None:
+    """
+    Le téléchargement des poids passe par le HTTPS ordinaire, jamais par « xet ».
+
+    huggingface_hub lit `HF_HUB_DISABLE_XET` au moment où son module de
+    constantes est chargé : la poser après coup ne servirait à rien. Elle est
+    donc posée par `app/__init__.py`, et c'est cela qu'on vérifie ici, en
+    regardant ce que la bibliothèque a réellement retenu.
+    """
+    titre("Transfert des modèles, backend « xet »")
+
+    verifier(os.environ.get("HF_HUB_DISABLE_XET") == "1",
+             "la variable est posée dès l'import du paquet",
+             str(os.environ.get("HF_HUB_DISABLE_XET")))
+
+    from huggingface_hub import constants
+
+    verifier(constants.HF_HUB_DISABLE_XET is True,
+             "huggingface_hub a bien retenu que xet est coupé",
+             str(constants.HF_HUB_DISABLE_XET))
+    from huggingface_hub.utils import _runtime
+
+    verifier(_runtime.is_xet_available() is False,
+             "le hub ne propose plus le transfert xet")
+
+    # Un utilisateur qui pose la variable lui-même garde le dernier mot : c'est
+    # un `setdefault`, pas une affectation. Vérifié dans un vrai processus fils,
+    # le nôtre ayant déjà tout importé.
+    environnement = dict(os.environ, HF_HUB_DISABLE_XET="0")
+    sortie = subprocess.run(
+        [sys.executable, "-c",
+         "import app, os; print(os.environ['HF_HUB_DISABLE_XET'])"],
+        cwd=str(RACINE), env=environnement, capture_output=True, text=True,
+    )
+    verifier(sortie.stdout.strip() == "0",
+             "un choix explicite de l'utilisateur n'est pas écrasé",
+             sortie.stdout.strip() or sortie.stderr.strip()[:80])
+
+
 def principal() -> int:
     print(f"Vérification des fonctions périphériques de Scribouille\n{'=' * 54}")
     with tempfile.TemporaryDirectory(prefix="scribouille-verif-") as brut:
@@ -1013,6 +1061,7 @@ def principal() -> int:
         essai_amorce()
         essai_modele_incomplet(base)
         essai_renommage(base)
+        essai_transfert_xet()
 
     print(f"\n{'=' * 54}")
     if _echecs:
