@@ -1,4 +1,4 @@
-# WhiScribe, le guide complet
+# Scribouille, le guide complet
 
 [Retour au README](../README.fr.md)
 
@@ -18,7 +18,7 @@ Kubernetes
 RGPD
 ```
 
-L'amorce d'un modèle Whisper ne peut pas dépasser **224 jetons**, soit une petite centaine de termes courts. Au-delà, faster-whisper tronque tout seul, et silencieusement. WhiScribe tronque proprement à la place, en gardant les termes **du haut de la liste**, et vous prévient dans l'interface. Mettez donc les plus importants en premier. Le décompte est exact : il utilise le tokeniseur du modèle réellement chargé. La phrase d'introduction de l'amorce suit la **langue parlée** de l'enregistrement, jamais celle de l'interface : le modèle la lit comme un début de texte, une phrase française n'a rien à faire en tête d'un enregistrement anglais.
+L'amorce d'un modèle Whisper ne peut pas dépasser **224 jetons**, soit une petite centaine de termes courts. Au-delà, faster-whisper tronque tout seul, et silencieusement. Scribouille tronque proprement à la place, en gardant les termes **du haut de la liste**, et vous prévient dans l'interface. Mettez donc les plus importants en premier. Le décompte est exact : il utilise le tokeniseur du modèle réellement chargé. La phrase d'introduction de l'amorce suit la **langue parlée** de l'enregistrement, jamais celle de l'interface : le modèle la lit comme un début de texte, une phrase française n'a rien à faire en tête d'un enregistrement anglais.
 
 **Les corrections, `corrections.txt`.** Pour les massacres récurrents que l'amorce ne suffit pas à éviter. Une règle par ligne, appliquée au texte final, insensible à la casse, mot entier uniquement : la règle `git` ne touchera pas `digital`.
 
@@ -27,7 +27,7 @@ guitte lab => GitLab
 cubernetes => Kubernetes
 ```
 
-Les deux fichiers sont du texte brut. Ils s'éditent à la main ou depuis les panneaux de l'application. Le panneau **« Mes données »** les exporte, avec vos réglages et votre gabarit pour l'IA s'il existe, dans une archive `whiscribe-donnees-AAAA-MM-JJ.zip` que vous rangez où vous voulez, clé USB ou sauvegarde d'entreprise. Un import affiche un aperçu de ce qui va changer et n'écrit rien avant votre confirmation, l'état précédent étant sauvegardé à côté au préalable.
+Les deux fichiers sont du texte brut. Ils s'éditent à la main ou depuis les panneaux de l'application. Le panneau **« Mes données »** les exporte, avec vos réglages et votre gabarit pour l'IA s'il existe, dans une archive `scribouille-donnees-AAAA-MM-JJ.zip` que vous rangez où vous voulez, clé USB ou sauvegarde d'entreprise. Un import affiche un aperçu de ce qui va changer et n'écrit rien avant votre confirmation, l'état précédent étant sauvegardé à côté au préalable.
 
 ---
 
@@ -197,9 +197,11 @@ Où vivent les fichiers, selon la manière dont l'application est lancée :
 
 | | Version installée | Version source |
 |---|---|---|
-| Programme | `%LOCALAPPDATA%\Programs\WhiScribe` | le dépôt cloné |
+| Programme | `%LOCALAPPDATA%\Programs\Scribouille` | le dépôt cloné |
 | Réglages, journaux, glossaire | `%LOCALAPPDATA%\WhiScribe` | à côté du script |
 | Modèles | choisi à l'installation, modifiable dans les réglages | `modeles/`, modifiable dans les réglages |
+
+Le dossier de données porte encore l'ancien nom de l'application, et c'est délibéré : le renommer à la 2.4.0 aurait laissé sur place les réglages, le glossaire et les modèles de toutes les installations existantes.
 
 </details>
 
@@ -210,8 +212,8 @@ La publication est automatisée : poser un tag `vX.Y.Z` déclenche `.github/work
 
 ```bat
 pip install -r requirements.txt -r requirements-build.txt
-pyinstaller --noconfirm --clean --distpath dist --workpath build packaging\whiscribe.spec
-dist\WhiScribe\whiscribe-verifier.exe
+pyinstaller --noconfirm --clean --distpath dist --workpath build packaging\scribouille.spec
+dist\Scribouille\scribouille-verifier.exe
 iscc /DVersionApp=2.3.0 packaging\setup.iss
 ```
 
@@ -235,13 +237,13 @@ Trois modes s'ajoutent pour la séparation des locuteurs, sans fenêtre eux non 
 
 ```bat
 REM Poser les composants, ici dans un dossier d'essai plutot que le dossier reel
-dist\WhiScribe\whiscribe-verifier.exe --installer-locuteurs --cible D:\essai --cpu
+dist\Scribouille\scribouille-verifier.exe --installer-locuteurs --cible D:\essai --cpu
 
 REM Essayer l'import reel de torch et de pyannote. Code 0 si tout repond.
-dist\WhiScribe\whiscribe-verifier.exe --verifier-locuteurs --cible D:\essai
+dist\Scribouille\scribouille-verifier.exe --verifier-locuteurs --cible D:\essai
 
 REM Tout effacer
-dist\WhiScribe\whiscribe-verifier.exe --retirer-locuteurs --cible D:\essai
+dist\Scribouille\scribouille-verifier.exe --retirer-locuteurs --cible D:\essai
 ```
 
 `--paquets` remplace la liste par la sienne, ce qui permet d'éprouver le mécanisme avec un paquet léger sans télécharger plusieurs gigaoctets. Sans `--cible`, le dossier d'extensions réel est utilisé. Depuis les sources, les mêmes options existent sur `python -m app.extensions`.

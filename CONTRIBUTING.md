@@ -1,6 +1,6 @@
 # Contributing
 
-Issues and small pull requests are welcome. WhiScribe is maintained by one person, so
+Issues and small pull requests are welcome. Scribouille is maintained by one person, so
 a focused change with a clear reason gets merged much faster than a large one.
 
 Before opening an issue, please check the [known limits](README.md#known-limits): some
@@ -9,8 +9,8 @@ things are missing on purpose. Bug reports need the **log file**, never the audi
 ## Development setup
 
 ```bat
-git clone https://github.com/BurN-30/whiscribe
-cd whiscribe
+git clone https://github.com/BurN-30/scribouille
+cd scribouille
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt

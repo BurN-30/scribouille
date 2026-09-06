@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-Recette PyInstaller de WhiScribe.
+Recette PyInstaller de Scribouille.
 
 Mode « onedir » et non « onefile », volontairement :
   - le démarrage est immédiat, alors qu'un onefile se décompresse dans un dossier
@@ -11,14 +11,14 @@ Mode « onedir » et non « onefile », volontairement :
   - le programme d'installation, lui, présente bien un seul fichier à télécharger.
 
 Deux exécutables sortent de la même analyse :
-  - WhiScribe.exe          l'application, sans console ;
-  - whiscribe-verifier.exe le même programme lancé avec « --verifier », avec
-                           console, pour valider une version construite sans
-                           aucune interaction. C'est ce que fait la chaîne de
+  - Scribouille.exe          l'application, sans console ;
+  - scribouille-verifier.exe le même programme lancé avec « --verifier », avec
+                             console, pour valider une version construite sans
+                             aucune interaction. C'est ce que fait la chaîne de
                            publication avant de fabriquer le programme d'installation.
 
 Construction :
-    .venv\\Scripts\\pyinstaller.exe --noconfirm --clean packaging\\whiscribe.spec
+    .venv\\Scripts\\pyinstaller.exe --noconfirm --clean packaging\\scribouille.spec
 """
 
 import sys
@@ -33,7 +33,7 @@ PAQUET = RACINE / "packaging"
 sys.path.insert(0, str(RACINE))
 from app import EDITEUR, NOM_APPLICATION, URL_PROJET as DEPOT, VERSION  # noqa: E402
 
-ICONE = PAQUET / "whiscribe.ico"
+ICONE = PAQUET / "scribouille.ico"
 
 
 # ---------------------------------------------------------------------------
@@ -49,7 +49,7 @@ def _ressource_version() -> str:
         morceaux.append(0)
     quadruplet = tuple(morceaux[:4])
 
-    contenu = f"""# Généré par packaging/whiscribe.spec, ne pas modifier à la main.
+    contenu = f"""# Généré par packaging/scribouille.spec, ne pas modifier à la main.
 VSVersionInfo(
   ffi=FixedFileInfo(
     filevers={quadruplet}, prodvers={quadruplet},
@@ -59,12 +59,12 @@ VSVersionInfo(
     StringFileInfo([
       StringTable('040C04B0', [
         StringStruct('CompanyName', {EDITEUR!r}),
-        StringStruct('FileDescription', 'WhiScribe, transcription audio locale'),
+        StringStruct('FileDescription', 'Scribouille, transcription audio locale'),
         StringStruct('FileVersion', {VERSION!r}),
-        StringStruct('InternalName', 'WhiScribe'),
+        StringStruct('InternalName', 'Scribouille'),
         StringStruct('LegalCopyright', 'Licence MIT, {EDITEUR}'),
-        StringStruct('OriginalFilename', 'WhiScribe.exe'),
-        StringStruct('ProductName', 'WhiScribe'),
+        StringStruct('OriginalFilename', 'Scribouille.exe'),
+        StringStruct('ProductName', 'Scribouille'),
         StringStruct('ProductVersion', {VERSION!r}),
         StringStruct('Comments', {DEPOT!r}),
       ])
@@ -155,7 +155,7 @@ imports_caches += collect_submodules("app")
 # suffisant tant que rien ne s'ajoutait après coup. Depuis la version 2.3.0,
 # l'application installe PyTorch et pyannote dans un dossier d'extensions :
 # ces bibliothèques importent des modules de la bibliothèque standard dont
-# WhiScribe n'a lui-même aucun usage, et qui ne sont donc pas là.
+# Scribouille n'a lui-même aucun usage, et qui ne sont donc pas là.
 #
 # Ce n'est pas une précaution théorique, et chercher les manquants un par un
 # s'est révélé sans fin : le premier essai sur un gel réel s'est arrêté sur
@@ -270,7 +270,7 @@ verificateur = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="whiscribe-verifier",
+    name="scribouille-verifier",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

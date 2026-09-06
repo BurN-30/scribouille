@@ -3,7 +3,7 @@
 # livrée dans les Releases.
 #
 #   pip install -r requirements.txt -r requirements-build.txt
-#   pyinstaller --noconfirm --clean packaging/whiscribe.spec
+#   pyinstaller --noconfirm --clean packaging/scribouille.spec
 #
 # PyInstaller 6.22 ou plus récent est un minimum réel, pas une précaution : les
 # versions antérieures ne savent pas geler numpy 2.5 et l'exécutable produit

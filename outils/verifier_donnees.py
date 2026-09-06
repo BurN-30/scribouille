@@ -71,7 +71,7 @@ def titre(texte: str) -> None:
 # Bac à sable
 # ---------------------------------------------------------------------------
 
-GLOSSAIRE = "Valenciennes\nCTranslate2\nWhiScribe\n"
+GLOSSAIRE = "Valenciennes\nCTranslate2\nScribouille\n"
 CORRECTIONS = "valencienne => Valenciennes\n"
 GABARIT = "# gabarit de contrôle\nCompte rendu de {fichier} :\n\n{texte}\n"
 
@@ -106,7 +106,8 @@ def manifeste_de(archive: Path) -> dict:
         return json.loads(zip_ouvert.read(donnees.NOM_MANIFESTE).decode("utf-8"))
 
 
-def fabriquer_archive(cible: Path, format_archive: int, contenus: dict) -> Path:
+def fabriquer_archive(cible: Path, format_archive: int, contenus: dict,
+                      application: str = NOM_APPLICATION) -> Path:
     """
     Écrit une archive à la main, pour éprouver la relecture d'un autre format.
 
@@ -114,7 +115,7 @@ def fabriquer_archive(cible: Path, format_archive: int, contenus: dict) -> Path:
     connaît pas le gabarit. On la reconstitue plutôt que de la simuler.
     """
     manifeste = {
-        "application": NOM_APPLICATION,
+        "application": application,
         "format": format_archive,
         "version": "2.1.0" if format_archive == 1 else VERSION,
         "date": "2026-08-18T09:00:00",
@@ -260,8 +261,43 @@ def essai_format_2_sans_gabarit(bac: Path) -> None:
              "gabarit intact, le membre était absent")
 
 
+def essai_archive_ancien_nom(bac: Path) -> None:
+    """
+    Une archive exportée avant le renommage de la 2.4.0 se réimporte.
+
+    Son manifeste annonce « WhiScribe ». Le refuser rendrait inutilisables
+    toutes les sauvegardes déjà faites, ce qui est exactement ce qu'un export
+    de données sert à éviter.
+    """
+    titre("[7] Archive exportée sous l'ancien nom de l'application")
+
+    poser_donnees()
+    archive = fabriquer_archive(bac / "ancien-nom.zip", 2, {
+        "vocabulaire.txt": "Terme venu de WhiScribe\n",
+        "corrections.txt": "faute => correction\n",
+        "config.json": json.dumps({"theme": "clair"}, ensure_ascii=False),
+    }, application="WhiScribe")
+
+    apercu = donnees.analyser(archive)
+    verifier(apercu.get("ok") is True, "archive au nom « WhiScribe » acceptée",
+             str(apercu.get("message")))
+
+    resultat = donnees.importer(archive)
+    verifier(resultat.get("ok") is True, "import de l'archive ancienne appliqué",
+             str(resultat.get("message")))
+    verifier("Terme venu de WhiScribe" in chemins.FICHIER_VOCABULAIRE.read_text(encoding="utf-8"),
+             "glossaire de l'archive ancienne repris")
+
+    # La garde ne tombe pas pour autant : un export d'un autre logiciel reste refusé.
+    etrangere = fabriquer_archive(bac / "etrangere.zip", 2, {
+        "vocabulaire.txt": "peu importe\n",
+    }, application="UnAutreLogiciel")
+    refus = donnees.analyser(etrangere)
+    verifier(refus.get("ok") is False, "une archive d'un autre logiciel reste refusée")
+
+
 def essai_format_trop_recent(bac: Path) -> None:
-    titre("[7] Archive de format 3, refusée")
+    titre("[8] Archive de format 3, refusée")
 
     archive = fabriquer_archive(bac / "format-3.zip", 3, {
         "vocabulaire.txt": "Terme venu du futur\n",
@@ -283,7 +319,7 @@ def essai_format_trop_recent(bac: Path) -> None:
 
 
 def essai_filet(bac: Path) -> None:
-    titre("[8] Sauvegarde automatique avant import")
+    titre("[9] Sauvegarde automatique avant import")
 
     poser_donnees(gabarit="Gabarit à sauvegarder avant tout.\n")
     archive = fabriquer_archive(bac / "pour-le-filet.zip", 2, {
@@ -314,7 +350,7 @@ def essai_filet(bac: Path) -> None:
 def principal() -> int:
     print(f"Vérification de l'import et de l'export des données\n{'=' * 50}")
 
-    with tempfile.TemporaryDirectory(prefix="whiscribe-donnees-") as temporaire:
+    with tempfile.TemporaryDirectory(prefix="scribouille-donnees-") as temporaire:
         bac = Path(temporaire)
         installer_bac(bac)
 
@@ -324,6 +360,7 @@ def principal() -> int:
         essai_import_complet(bac, avec)
         essai_format_1(bac)
         essai_format_2_sans_gabarit(bac)
+        essai_archive_ancien_nom(bac)
         essai_format_trop_recent(bac)
         essai_filet(bac)
 

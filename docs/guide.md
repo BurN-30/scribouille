@@ -1,4 +1,4 @@
-# WhiScribe, the full guide
+# Scribouille, the full guide
 
 [Back to the README](../README.md)
 
@@ -18,7 +18,7 @@ Kubernetes
 GDPR
 ```
 
-A Whisper prompt cannot exceed **224 tokens**, roughly a hundred short terms. Beyond that, faster-whisper silently truncates. WhiScribe truncates cleanly instead, keeping the terms **at the top of the list**, and says so in the interface. Put the important ones first. The token count is exact: it uses the tokeniser of the model actually loaded. The introduction sentence of the prompt follows the **spoken language** of the recording, never the interface language: the model reads it as the beginning of a text, and a French sentence has no business at the head of an English recording.
+A Whisper prompt cannot exceed **224 tokens**, roughly a hundred short terms. Beyond that, faster-whisper silently truncates. Scribouille truncates cleanly instead, keeping the terms **at the top of the list**, and says so in the interface. Put the important ones first. The token count is exact: it uses the tokeniser of the model actually loaded. The introduction sentence of the prompt follows the **spoken language** of the recording, never the interface language: the model reads it as the beginning of a text, and a French sentence has no business at the head of an English recording.
 
 **The corrections, `corrections.txt`.** For the recurring damage the prompt does not prevent. One rule per line, applied to the final text, case insensitive, whole words only, so the rule `git` will not touch `digital`.
 
@@ -27,7 +27,7 @@ guitte lab => GitLab
 cubernetes => Kubernetes
 ```
 
-Both files are plain text. Edit them by hand or from the panels in the app. The **My data** panel exports them, with your settings and your AI template if you have one, as a single `whiscribe-donnees-YYYY-MM-DD.zip` you can put on a USB stick or in a company backup. An import shows a preview of what would change and writes nothing before you confirm, and the previous state is saved next to it first.
+Both files are plain text. Edit them by hand or from the panels in the app. The **My data** panel exports them, with your settings and your AI template if you have one, as a single `scribouille-donnees-YYYY-MM-DD.zip` you can put on a USB stick or in a company backup. An import shows a preview of what would change and writes nothing before you confirm, and the previous state is saved next to it first.
 
 ---
 
@@ -199,9 +199,11 @@ Where files live, depending on how the app was started:
 
 | | Installed version | Source version |
 |---|---|---|
-| Program | `%LOCALAPPDATA%\Programs\WhiScribe` | the cloned repository |
+| Program | `%LOCALAPPDATA%\Programs\Scribouille` | the cloned repository |
 | Settings, logs, glossary | `%LOCALAPPDATA%\WhiScribe` | next to the script |
 | Models | chosen at install time, changeable in the settings | `modeles/`, changeable in the settings |
+
+The data folder still carries the old application name, on purpose: renaming it in 2.4.0 would have left the settings, the glossary and the models of every existing installation behind.
 
 </details>
 
@@ -212,8 +214,8 @@ Publication is automated: pushing a `vX.Y.Z` tag triggers `.github/workflows/rel
 
 ```bat
 pip install -r requirements.txt -r requirements-build.txt
-pyinstaller --noconfirm --clean --distpath dist --workpath build packaging\whiscribe.spec
-dist\WhiScribe\whiscribe-verifier.exe
+pyinstaller --noconfirm --clean --distpath dist --workpath build packaging\scribouille.spec
+dist\Scribouille\scribouille-verifier.exe
 iscc /DVersionApp=2.3.0 packaging\setup.iss
 ```
 
@@ -237,13 +239,13 @@ Three more modes cover speaker separation, again without a window. They are what
 
 ```bat
 REM Install the components, here into a scratch folder rather than the real one
-dist\WhiScribe\whiscribe-verifier.exe --installer-locuteurs --cible D:\scratch --cpu
+dist\Scribouille\scribouille-verifier.exe --installer-locuteurs --cible D:\scratch --cpu
 
 REM Actually import torch and pyannote. Exit code 0 when both answer.
-dist\WhiScribe\whiscribe-verifier.exe --verifier-locuteurs --cible D:\scratch
+dist\Scribouille\scribouille-verifier.exe --verifier-locuteurs --cible D:\scratch
 
 REM Wipe it
-dist\WhiScribe\whiscribe-verifier.exe --retirer-locuteurs --cible D:\scratch
+dist\Scribouille\scribouille-verifier.exe --retirer-locuteurs --cible D:\scratch
 ```
 
 `--paquets` replaces the list with your own, which proves the mechanism with a light package instead of several gigabytes. Without `--cible`, the real extensions folder is used. From source, the same options live on `python -m app.extensions`.

@@ -6,9 +6,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        WhiScribe is a small, focused tool: transcribe local audio well, on the machine,
+        Scribouille is a small, focused tool: transcribe local audio well, on the machine,
         without an account. Ideas that keep it that way have the best chance.
-        The [known limits](https://github.com/BurN-30/whiscribe#known-limits) section of the
+        The [known limits](https://github.com/BurN-30/scribouille#known-limits) section of the
         README lists what is deliberately out of scope.
 
   - type: textarea

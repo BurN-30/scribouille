@@ -1,4 +1,4 @@
-# Chaîne de publication de WhiScribe.
+# Chaîne de publication de Scribouille.
 #
 # Deux déclenchements :
 #   - un tag « vX.Y.Z » : construit, vérifie, et publie une Release avec le
@@ -80,7 +80,7 @@ jobs:
 
       - name: Construire l'application
         shell: pwsh
-        run: pyinstaller --noconfirm --clean --distpath dist --workpath build packaging/whiscribe.spec
+        run: pyinstaller --noconfirm --clean --distpath dist --workpath build packaging/scribouille.spec
 
       - name: Vérifier l'exécutable construit
         shell: pwsh
@@ -88,7 +88,7 @@ jobs:
           # Le mode « --verifier » contrôle les imports, FFmpeg et l'écriture des
           # dossiers de travail. Son code de retour arrête la chaîne si quelque
           # chose manque, avant que le programme d'installation ne soit fabriqué.
-          & .\dist\WhiScribe\whiscribe-verifier.exe
+          & .\dist\Scribouille\scribouille-verifier.exe
           if ($LASTEXITCODE -ne 0) {
             Write-Error "La verification de l'executable a echoue."
             exit 1
@@ -131,7 +131,7 @@ jobs:
       - name: Déposer les fichiers construits
         uses: actions/upload-artifact@v4
         with:
-          name: WhiScribe-${{ steps.version.outputs.version }}
+          name: Scribouille-${{ steps.version.outputs.version }}
           path: |
             packaging/sortie/*.exe
             notes-version.md
@@ -141,8 +141,8 @@ jobs:
         if: steps.version.outputs.publier == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          name: WhiScribe ${{ steps.version.outputs.version }}
+          name: Scribouille ${{ steps.version.outputs.version }}
           body_path: notes-version.md
           draft: false
           prerelease: false
-          files: packaging/sortie/WhiScribe-Setup-${{ steps.version.outputs.version }}.exe
+          files: packaging/sortie/Scribouille-Setup-${{ steps.version.outputs.version }}.exe

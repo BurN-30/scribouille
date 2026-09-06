@@ -369,7 +369,7 @@ def _paires_js(source: str, code: str) -> list[tuple[str, str]]:
 # ---------------------------------------------------------------------------
 
 def principal() -> int:
-    print(f"Vérification des traductions de WhiScribe\n{'=' * 42}")
+    print(f"Vérification des traductions de Scribouille\n{'=' * 42}")
     catalogue = (RACINE / "web" / "langues.js").read_text(encoding="utf-8")
 
     essai_parite_python()

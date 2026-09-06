@@ -196,7 +196,7 @@ def principal() -> int:
 
     chemins.assurer_dossiers()
 
-    with tempfile.TemporaryDirectory(prefix="whiscribe-verif-") as temporaire:
+    with tempfile.TemporaryDirectory(prefix="scribouille-verif-") as temporaire:
         bac = Path(temporaire)
         # Les fichiers personnels sont mis de côté le temps du contrôle.
         chemins.FICHIER_CORRECTIONS = bac / "corrections.txt"

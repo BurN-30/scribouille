@@ -29,6 +29,12 @@ import os
 import sys
 from pathlib import Path
 
+#: Nom du dossier de données, sous %LOCALAPPDATA%. Il porte encore l'ancien nom
+#: de l'application, et c'est VOULU : le renommer en 2.4.0 aurait abandonné sur
+#: place la configuration, le glossaire, les corrections et les modèles déjà
+#: téléchargés de toutes les installations existantes. Le programme
+#: d'installation lit le même chemin en dur (packaging/setup.iss), et son
+#: identifiant Inno ne bouge pas non plus.
 NOM_DOSSIER_UTILISATEUR = "WhiScribe"
 
 #: Écrit par le programme d'installation, à côté de l'exécutable.

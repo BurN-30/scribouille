@@ -1,14 +1,14 @@
 **English** · [Français](README.fr.md)
 
-# WhiScribe
+# Scribouille
 
 Turn recordings into text on your own machine. No account, no cloud, no upload.
 
-[![Release](https://img.shields.io/github/v/release/BurN-30/whiscribe?label=release)](https://github.com/BurN-30/whiscribe/releases)
+[![Release](https://img.shields.io/github/v/release/BurN-30/scribouille?label=release)](https://github.com/BurN-30/scribouille/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Platform: Windows](https://img.shields.io/badge/platform-Windows%2064--bit-lightgrey)
 
-WhiScribe is a desktop app for Windows built on [faster-whisper](https://github.com/SYSTRAN/faster-whisper). Drop audio files on the window, get text files next to them. It was written for meeting recordings: room audio, several voices, proper nouns and in-house jargon. The interface is available in English and French.
+Scribouille is a desktop app for Windows built on [faster-whisper](https://github.com/SYSTRAN/faster-whisper). Drop audio files on the window, get text files next to them. It was written for meeting recordings: room audio, several voices, proper nouns and in-house jargon. The interface is available in English and French.
 
 <!-- screenshot 1: main window, dark theme, drop area empty, hardware card visible -->
 
@@ -16,11 +16,13 @@ WhiScribe is a desktop app for Windows built on [faster-whisper](https://github.
 
 ## Install
 
-1. Download **`WhiScribe-Setup-X.Y.Z.exe`** from the [Releases](https://github.com/BurN-30/whiscribe/releases) page.
+1. Download **`Scribouille-Setup-X.Y.Z.exe`** from the [Releases](https://github.com/BurN-30/scribouille/releases) page.
 2. Run it.
-3. Start **WhiScribe** from the Start menu.
+3. Start **Scribouille** from the Start menu.
 
-Nothing else to install. The setup is per user, **no administrator rights**, and it installs into `%LOCALAPPDATA%\Programs\WhiScribe`. Your settings, glossary and logs live in `%LOCALAPPDATA%\WhiScribe`, never inside the program folder, so reinstalling a newer version over the old one loses nothing.
+Nothing else to install. The setup is per user, **no administrator rights**, and it installs into `%LOCALAPPDATA%\Programs\Scribouille`. Your settings, glossary and logs live in `%LOCALAPPDATA%\WhiScribe`, never inside the program folder, so reinstalling a newer version over the old one loses nothing.
+
+> **The application was called WhiScribe up to 2.3.3.** The repository name has changed, the old addresses redirect. On a machine that already has it, the update installs over the existing setup, in its original folder `%LOCALAPPDATA%\Programs\WhiScribe`, and the data folder keeps its name too: nothing to move, nothing lost.
 
 The setup asks **where to keep the transcription models**, 1.6 to 3.1 GB depending on the preset. The models are not bundled: they are downloaded once, on first use, and the app tells you the size before starting. After that it works offline.
 
@@ -91,7 +93,7 @@ The Hugging Face token used for speaker separation is never included in an expor
 One reason left: **change the code**. Speaker separation installs from a button in both modes, so the source route is now for developers only.
 
 ```bat
-git clone https://github.com/BurN-30/whiscribe
+git clone https://github.com/BurN-30/scribouille
 installer.bat
 lancer.bat
 ```

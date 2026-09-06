@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Question or idea
-    url: https://github.com/BurN-30/whiscribe/discussions
+    url: https://github.com/BurN-30/scribouille/discussions
     about: For anything that is not a bug report or a concrete feature request.
   - name: Read the documentation first
-    url: https://github.com/BurN-30/whiscribe#readme
+    url: https://github.com/BurN-30/scribouille#readme
     about: Install, privacy, known limits and the source install are all covered in the README.

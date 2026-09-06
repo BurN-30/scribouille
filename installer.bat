@@ -3,7 +3,7 @@ chcp 65001 >nul
 setlocal
 
 rem ===========================================================================
-rem  WhiScribe - installation
+rem  Scribouille - installation
 rem  Double-cliquez sur ce fichier. Relancable autant de fois que necessaire.
 rem
 rem  Options :

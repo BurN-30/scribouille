@@ -1,14 +1,14 @@
 [English](README.md) · **Français**
 
-# WhiScribe
+# Scribouille
 
 Transformez vos enregistrements en texte sur votre propre machine. Pas de compte, pas de cloud, aucun envoi.
 
-[![Version](https://img.shields.io/github/v/release/BurN-30/whiscribe?label=release)](https://github.com/BurN-30/whiscribe/releases)
+[![Version](https://img.shields.io/github/v/release/BurN-30/scribouille?label=release)](https://github.com/BurN-30/scribouille/releases)
 [![Licence : MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Plateforme : Windows](https://img.shields.io/badge/platform-Windows%2064--bit-lightgrey)
 
-WhiScribe est une application de bureau Windows bâtie sur [faster-whisper](https://github.com/SYSTRAN/faster-whisper). Vous glissez des fichiers audio sur la fenêtre, vous récupérez des fichiers texte à côté. Elle a été écrite pour les réunions : audio de salle, plusieurs voix, noms propres et jargon maison. L'interface existe en français et en anglais.
+Scribouille est une application de bureau Windows bâtie sur [faster-whisper](https://github.com/SYSTRAN/faster-whisper). Vous glissez des fichiers audio sur la fenêtre, vous récupérez des fichiers texte à côté. Elle a été écrite pour les réunions : audio de salle, plusieurs voix, noms propres et jargon maison. L'interface existe en français et en anglais.
 
 <!-- capture 1 : fenêtre principale, thème sombre, zone de dépôt vide, carte matériel visible -->
 
@@ -16,11 +16,13 @@ WhiScribe est une application de bureau Windows bâtie sur [faster-whisper](http
 
 ## Installation
 
-1. Téléchargez **`WhiScribe-Setup-X.Y.Z.exe`** depuis la page [Releases](https://github.com/BurN-30/whiscribe/releases).
+1. Téléchargez **`Scribouille-Setup-X.Y.Z.exe`** depuis la page [Releases](https://github.com/BurN-30/scribouille/releases).
 2. Lancez-le.
-3. Ouvrez **WhiScribe** depuis le menu Démarrer.
+3. Ouvrez **Scribouille** depuis le menu Démarrer.
 
-Rien d'autre à installer. L'installation se fait par utilisateur, **sans droits administrateur**, dans `%LOCALAPPDATA%\Programs\WhiScribe`. Vos réglages, votre glossaire et vos journaux vivent dans `%LOCALAPPDATA%\WhiScribe`, jamais dans le dossier du programme : réinstaller une version plus récente par-dessus l'ancienne ne fait donc rien perdre.
+Rien d'autre à installer. L'installation se fait par utilisateur, **sans droits administrateur**, dans `%LOCALAPPDATA%\Programs\Scribouille`. Vos réglages, votre glossaire et vos journaux vivent dans `%LOCALAPPDATA%\WhiScribe`, jamais dans le dossier du programme : réinstaller une version plus récente par-dessus l'ancienne ne fait donc rien perdre.
+
+> **L'application s'appelait WhiScribe jusqu'à la 2.3.3.** Le nom du dépôt a changé, les anciennes adresses redirigent. Sur un poste déjà équipé, la mise à jour se pose par-dessus l'installation existante, dans son dossier d'origine `%LOCALAPPDATA%\Programs\WhiScribe`, et le dossier de données garde lui aussi son nom : rien n'est à déplacer, rien n'est perdu.
 
 L'assistant demande **où ranger les modèles de transcription**, de 1,6 à 3,1 Go selon le preset. Les modèles ne sont pas embarqués : ils se téléchargent une seule fois, au premier usage, et l'application annonce la taille avant de commencer. Ensuite elle fonctionne hors connexion.
 
@@ -91,7 +93,7 @@ Le jeton Hugging Face utilisé par la séparation des locuteurs n'est jamais inc
 Une seule raison désormais : **modifier le code**. La séparation des locuteurs s'installe d'un bouton dans les deux modes, la voie source ne sert plus qu'aux développeurs.
 
 ```bat
-git clone https://github.com/BurN-30/whiscribe
+git clone https://github.com/BurN-30/scribouille
 installer.bat
 lancer.bat
 ```

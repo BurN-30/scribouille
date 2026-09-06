@@ -3,7 +3,7 @@
 __pycache__/
 *.pyc
 
-# Produits de construction. Le fichier packaging/whiscribe.spec, lui, est versionné :
+# Produits de construction. Le fichier packaging/scribouille.spec, lui, est versionné :
 # c'est la recette, pas un résultat.
 build/
 dist/

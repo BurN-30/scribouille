@@ -1,6 +1,6 @@
 # Passer le dépôt en public : check-list
 
-Dépôt : **`BurN-30/whiscribe`**. Le nom du dépôt est `whiscribe`, en minuscules, et il est
+Dépôt : **`BurN-30/scribouille`**. Le nom du dépôt est `scribouille`, en minuscules, et il est
 déjà écrit en dur dans `app/__init__.py` (`URL_PROJET`), dans `packaging/setup.iss` et dans
 les deux README. Ne pas le renommer sans repasser sur ces quatre endroits, sinon la
 vérification des mises à jour interroge une page qui n'existe plus.
@@ -21,7 +21,7 @@ vérification des mises à jour interroge une page qui n'existe plus.
       utilisateur nominatif, aucun contenu de transcription réel. Prévoir un jeu
       d'enregistrements de démonstration.
 - [ ] `LICENSE` présent, MIT, au nom de Nathan SACCOL.
-- [ ] Une Release existe déjà, avec le `WhiScribe-Setup-X.Y.Z.exe` en pièce jointe.
+- [ ] Une Release existe déjà, avec le `Scribouille-Setup-X.Y.Z.exe` en pièce jointe.
 
 ---
 
@@ -83,7 +83,7 @@ Quelques remarques :
 - Éviter les topics fourre-tout du type `ai`, `machine-learning`, `tool` : trop de bruit,
   aucun retour.
 
-Le **titre du dépôt** compte aussi dans la recherche : `whiscribe` seul ne dit rien, c'est
+Le **titre du dépôt** compte aussi dans la recherche : `scribouille` seul ne dit rien, c'est
 la description qui porte les mots-clés. D'où l'importance de l'étape 2.
 
 ---
@@ -95,7 +95,7 @@ L'image affichée quand le lien est partagé sur Slack, Teams, Mastodon, LinkedI
 - **Dimensions** : 1280 x 640 px, ratio 2:1. GitHub recommande ce format et affiche en
   1280 x 640. Poids maximum 1 Mo, PNG ou JPG.
 - **Contenu** : une capture de la fenêtre principale, thème sombre, légèrement recadrée,
-  avec le nom **WhiScribe** et une ligne de promesse. Marge de sécurité d'environ 60 px
+  avec le nom **Scribouille** et une ligne de promesse. Marge de sécurité d'environ 60 px
   sur les bords, certains clients rognent.
 - **Lisibilité** : le rendu est souvent affiché à 400 px de large, donc texte gros,
   pas plus de six ou sept mots.
@@ -154,25 +154,25 @@ Sans forcer, une annonce sobre suffit. Par ordre de rapport signal sur bruit :
 **Ce qu'il faudrait faire.** Winget n'héberge rien. Publier revient à ouvrir une pull
 request sur le dépôt `microsoft/winget-pkgs` avec un manifeste YAML de trois ou quatre
 fichiers (version, installateur, locale par défaut), rangé dans
-`manifests/b/BurN-30/WhiScribe/X.Y.Z/`. Le manifeste pointe vers l'URL de téléchargement du
+`manifests/b/BurN-30/Scribouille/X.Y.Z/`. Le manifeste pointe vers l'URL de téléchargement du
 setup et porte son **empreinte SHA256**.
 
 **Prérequis, honnêtement.**
 
-| Point | État côté WhiScribe |
+| Point | État côté Scribouille |
 |---|---|
 | URL de release stable et versionnée | **OK**, la Release GitHub fournit une URL permanente par version |
 | Installateur silencieux | **OK**, Inno Setup gère `/VERYSILENT` nativement, c'est un type d'installateur reconnu par winget |
 | Signature de code | **pas exigée**, un installateur non signé est accepté |
 | Empreinte SHA256 à jour | **contrainte réelle**, elle change à chaque version |
-| Identifiant de paquet stable | à choisir une fois, `BurN-30.WhiScribe` |
+| Identifiant de paquet stable | à choisir une fois, `BurN-30.Scribouille` |
 | Licence et URL de licence | **OK**, MIT |
 | Politique de validation | le paquet doit s'installer et se désinstaller proprement en mode silencieux, sur une machine neuve |
 
 **La friction.** Elle est à chaque release, pas à la première : nouvelle version, nouveau
 manifeste, nouvelle empreinte, nouvelle PR, et une validation automatique qui peut demander
 des allers-retours. `wingetcreate` (`winget install Microsoft.WingetCreate`) automatise la
-majeure partie : `wingetcreate update BurN-30.WhiScribe --version X.Y.Z --urls <url> --submit`
+majeure partie : `wingetcreate update BurN-30.Scribouille --version X.Y.Z --urls <url> --submit`
 récupère le fichier, calcule l'empreinte, met à jour le manifeste et ouvre la PR. Il existe
 aussi une action GitHub qui déclenche cela depuis le workflow de release, ce qui ramènerait
 le coût à presque rien une fois réglée.
@@ -181,7 +181,7 @@ Deux frottements qui subsistent quoi qu'il arrive : SmartScreen continue d'avert
 n'y change rien puisque le binaire reste non signé ; et une PR refusée ou en attente laisse
 un décalage entre la version GitHub et la version winget, qu'il faut surveiller.
 
-**Recommandation.** Faisable, sans certificat, et l'identifiant `BurN-30.WhiScribe` mérite
+**Recommandation.** Faisable, sans certificat, et l'identifiant `BurN-30.Scribouille` mérite
 d'être réservé un jour. Mais **attendre deux ou trois releases publiques stables** avant de
 s'y mettre : tant que le rythme de version est rapide, chaque publication traîne une PR
 externe derrière elle, et un paquet winget en retard d'une version donne une plus mauvaise

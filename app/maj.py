@@ -80,7 +80,7 @@ CODES_INDISPONIBLE = (403, 404)
 
 
 def _depot() -> str:
-    """« BurN-30/whiscribe » déduit de l'adresse du dépôt, source unique."""
+    """« BurN-30/scribouille » déduit de l'adresse du dépôt, source unique."""
     correspondance = re.search(r"github\.com/([^/]+/[^/#?]+)", str(URL_PROJET or ""))
     return correspondance.group(1).rstrip("/").removesuffix(".git") if correspondance else ""
 
@@ -188,7 +188,7 @@ def _interroger(url: str) -> dict:
         url,
         headers={
             "Accept": "application/vnd.github+json",
-            "User-Agent": f"WhiScribe/{VERSION}",
+            "User-Agent": f"Scribouille/{VERSION}",
         },
     )
     with urllib.request.urlopen(requete, timeout=DELAI_SECONDES) as reponse:

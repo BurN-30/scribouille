@@ -1,5 +1,5 @@
 /* =========================================================================
-   WhiScribe : logique d'interface
+   Scribouille : logique d'interface
 
    Le Python appelle les fonctions globales onXxx() definies plus bas.
    L'interface appelle Python via pywebview.api.*

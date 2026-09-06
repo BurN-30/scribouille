@@ -1,11 +1,11 @@
 """
-Génère l'icône Windows de WhiScribe, sans aucune dépendance.
+Génère l'icône Windows de Scribouille, sans aucune dépendance.
 
 L'icône reprend l'identité de l'application : le fond sombre de la fenêtre
 (#12151b) et les cinq barres de l'onde sonore dans le bleu d'accentuation
 (#2f5fe0, éclairci pour rester lisible sur fond sombre à 16 pixels).
 
-Le fichier produit, « packaging/whiscribe.ico », est versionné : ce script ne
+Le fichier produit, « packaging/scribouille.ico », est versionné : ce script ne
 sert qu'à le régénérer si l'identité visuelle change.
 
     python packaging/generer_icone.py
@@ -17,7 +17,7 @@ import struct
 import zlib
 from pathlib import Path
 
-DESTINATION = Path(__file__).resolve().parent / "whiscribe.ico"
+DESTINATION = Path(__file__).resolve().parent / "scribouille.ico"
 
 TAILLES = (16, 24, 32, 48, 64, 128, 256)
 

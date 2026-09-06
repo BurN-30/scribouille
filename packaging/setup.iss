@@ -1,12 +1,12 @@
 ﻿; ===========================================================================
-;  WhiScribe, programme d'installation
+;  Scribouille, programme d'installation
 ;
-;  Prend la sortie « onedir » de PyInstaller (dist\WhiScribe) et produit un
-;  fichier unique WhiScribe-Setup-X.Y.Z.exe.
+;  Prend la sortie « onedir » de PyInstaller (dist\Scribouille) et produit un
+;  fichier unique Scribouille-Setup-X.Y.Z.exe.
 ;
 ;  Partis pris :
 ;    - installation PAR UTILISATEUR, sans droits administrateur, dans
-;      {localappdata}\Programs\WhiScribe. C'est ce qui permet de poser
+;      {localappdata}\Programs\Scribouille. C'est ce qui permet de poser
 ;      l'application sur un poste d'entreprise verrouillé ;
 ;    - les modèles de transcription, de 1,6 à 3,1 Go, ont leur propre page de
 ;      choix d'emplacement : on doit pouvoir les envoyer sur un autre disque ;
@@ -18,18 +18,18 @@
 ;  Compilation :
 ;      iscc /DVersionApp=2.2.0 packaging\setup.iss
 ;
-;  Le dossier « dist\WhiScribe » doit exister au préalable.
+;  Le dossier « dist\Scribouille » doit exister au préalable.
 ; ===========================================================================
 
 #ifndef VersionApp
   #define VersionApp "2.2.0"
 #endif
 
-#define NomApp        "WhiScribe"
+#define NomApp        "Scribouille"
 #define Editeur       "Nathan SACCOL"
-#define UrlProjet     "https://github.com/BurN-30/whiscribe"
-#define ExeApp        "WhiScribe.exe"
-#define DossierSource "..\dist\WhiScribe"
+#define UrlProjet     "https://github.com/BurN-30/scribouille"
+#define ExeApp        "Scribouille.exe"
+#define DossierSource "..\dist\Scribouille"
 
 ; Lien officiel et permanent de Microsoft vers le programme d'amorçage WebView2.
 ; Aucun binaire tiers n'est embarqué : c'est Microsoft qui sert le fichier.
@@ -37,7 +37,13 @@
 
 [Setup]
 ; Identifiant figé : c'est lui qui fait qu'une nouvelle version se pose
-; par-dessus l'ancienne au lieu de créer une deuxième entrée.
+; par-dessus l'ancienne au lieu de créer une deuxième entrée. Il n'a PAS suivi
+; le renommage de la 2.4.0, et ne le suivra jamais : le changer donnerait une
+; deuxième installation à côté de la première, et deux entrées dans la liste des
+; programmes. Inno retient aussi le dossier d'installation par identifiant : un
+; poste équipé depuis WhiScribe se met donc à jour dans son dossier d'origine,
+; « Programs\WhiScribe », et seules les nouvelles installations vont dans
+; « Programs\Scribouille ».
 AppId={{4E1B7C86-8F2A-4B5D-9C31-6D0A4F7E2B93}
 AppName={#NomApp}
 AppVersion={#VersionApp}
@@ -86,7 +92,7 @@ MinVersion=10.0
 
 OutputDir=sortie
 OutputBaseFilename={#NomApp}-Setup-{#VersionApp}
-SetupIconFile=whiscribe.ico
+SetupIconFile=scribouille.ico
 WizardStyle=modern
 WizardSizePercent=110
 ; Aucune boîte de choix de langue : Inno retient tout seul la langue d'interface
@@ -161,6 +167,9 @@ var
   Emplacements partagés avec l'application, voir app/chemins.py
   -------------------------------------------------------------------------- }
 
+{ Le dossier de données porte encore l'ancien nom de l'application, comme dans
+  app/chemins.py : le renommer aurait abandonné sur place la configuration, le
+  glossaire et les modèles de toutes les installations existantes. }
 function DossierDonnees(): String;
 begin
   Result := ExpandConstant('{localappdata}') + '\WhiScribe';
@@ -436,9 +445,14 @@ begin
   DeleteFile(Base + '\dossier-modeles.txt');
   DeleteFile(Base + '\vocabulaire.txt');
   DeleteFile(Base + '\corrections.txt');
+  DeleteFile(Base + '\gabarit-ia.txt');
+  DeleteFile(Base + '\calibration.json');
   { Sauvegardes automatiques posées avant chaque import de données. }
+  DelTree(Base + '\scribouille-donnees-avant-import-*.zip', False, True, False);
+  { Même chose sous l'ancien nom, pour les sauvegardes d'avant la 2.4.0. }
   DelTree(Base + '\whiscribe-donnees-avant-import-*.zip', False, True, False);
   DelTree(Base + '\logs', True, True, True);
+  DelTree(Base + '\reprises', True, True, True);
   { La séparation des locuteurs et son cache de téléchargement : 2,5 Go, annoncés
     dans la question posée juste avant. }
   DelTree(Base + '\extensions', True, True, True);

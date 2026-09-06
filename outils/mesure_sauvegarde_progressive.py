@@ -81,7 +81,7 @@ def _taille_reprises() -> int:
 def une_passe(audio: Path, modele: str, sauvegarde: bool, mat) -> dict:
     """Transcrit une fois, renvoie le temps mesuré et la place occupée."""
     _CHRONO["total"], _CHRONO["appels"] = 0.0, 0
-    with tempfile.TemporaryDirectory(prefix="whiscribe-mesure-") as temporaire:
+    with tempfile.TemporaryDirectory(prefix="scribouille-mesure-") as temporaire:
         dossier = Path(temporaire)
         file = traitement.FileTraitement(mat)
         file.ajouter([str(audio)])

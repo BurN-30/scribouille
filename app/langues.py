@@ -475,7 +475,7 @@ _FR: dict[str, str] = {
     "val.preset": "valeur du preset",
     "val.vide": "vide",
     "val.date_inconnue": "date inconnue",
-    "arch.type": "Archive de données WhiScribe (*.zip)",
+    "arch.type": "Archive de données Scribouille (*.zip)",
     "arch.tous_fichiers": "Tous les fichiers (*.*)",
     "arch.aucun_emplacement": "Aucun emplacement d'enregistrement choisi.",
     "arch.export_message": (
@@ -485,14 +485,14 @@ _FR: dict[str, str] = {
     ),
     "arch.membre_inattendu": (
         "L'archive contient un élément inattendu (« {nom} »). Ce n'est pas un export "
-        "WhiScribe, ou il a été modifié."
+        "Scribouille, ou il a été modifié."
     ),
     "arch.chemin_invalide": "L'archive contient un chemin de fichier invalide, elle est refusée.",
     "arch.fichier_absent": "Ce fichier n'existe plus, ou n'est pas lisible.",
     "arch.fichier_illisible": "Ce fichier n'a pas pu être lu ({erreur}).",
     "arch.vide": "Ce fichier est vide.",
     "arch.trop_gros": (
-        "Ce fichier est bien trop gros pour un export WhiScribe ({mo} Mo). Un export pèse "
+        "Ce fichier est bien trop gros pour un export Scribouille ({mo} Mo). Un export pèse "
         "quelques kilooctets."
     ),
     "arch.pas_zip": (
@@ -512,11 +512,11 @@ _FR: dict[str, str] = {
         "UTF-8)."
     ),
     "arch.zip_corrompue": "Cette archive zip est corrompue et n'a pas pu être ouverte.",
-    "arch.manifeste_absent": "Ce fichier n'est pas un export WhiScribe : son manifeste est absent.",
+    "arch.manifeste_absent": "Ce fichier n'est pas un export Scribouille : son manifeste est absent.",
     "arch.manifeste_illisible": "Le manifeste de cette archive est illisible.",
     "arch.manifeste_forme": "Le manifeste de cette archive n'a pas la forme attendue.",
     "arch.autre_application": (
-        "Ce fichier n'est pas un export WhiScribe : son manifeste annonce « {application} »."
+        "Ce fichier n'est pas un export Scribouille : son manifeste annonce « {application} »."
     ),
     "arch.application_inconnue": "application inconnue",
     "arch.format_invalide": "Le manifeste de cette archive n'indique pas de format valide.",
@@ -1227,7 +1227,7 @@ _EN: dict[str, str] = {
     "val.preset": "preset value",
     "val.vide": "empty",
     "val.date_inconnue": "unknown date",
-    "arch.type": "WhiScribe data archive (*.zip)",
+    "arch.type": "Scribouille data archive (*.zip)",
     "arch.tous_fichiers": "All files (*.*)",
     "arch.aucun_emplacement": "No save location was chosen.",
     "arch.export_message": (
@@ -1236,7 +1236,7 @@ _EN: dict[str, str] = {
         "not in it."
     ),
     "arch.membre_inattendu": (
-        "The archive contains an unexpected item (\"{nom}\"). This is not a WhiScribe "
+        "The archive contains an unexpected item (\"{nom}\"). This is not a Scribouille "
         "export, or it has been modified."
     ),
     "arch.chemin_invalide": "The archive contains an invalid file path, it is rejected.",
@@ -1244,7 +1244,7 @@ _EN: dict[str, str] = {
     "arch.fichier_illisible": "This file could not be read ({erreur}).",
     "arch.vide": "This file is empty.",
     "arch.trop_gros": (
-        "This file is far too large for a WhiScribe export ({mo} MB). An export weighs a "
+        "This file is far too large for a Scribouille export ({mo} MB). An export weighs a "
         "few kilobytes."
     ),
     "arch.pas_zip": (
@@ -1263,11 +1263,11 @@ _EN: dict[str, str] = {
         "The file \"{nom}\" in the archive is not readable text (expected encoding: UTF-8)."
     ),
     "arch.zip_corrompue": "This zip archive is corrupted and could not be opened.",
-    "arch.manifeste_absent": "This file is not a WhiScribe export: its manifest is missing.",
+    "arch.manifeste_absent": "This file is not a Scribouille export: its manifest is missing.",
     "arch.manifeste_illisible": "The manifest of this archive cannot be read.",
     "arch.manifeste_forme": "The manifest of this archive does not have the expected shape.",
     "arch.autre_application": (
-        "This file is not a WhiScribe export: its manifest declares \"{application}\"."
+        "This file is not a Scribouille export: its manifest declares \"{application}\"."
     ),
     "arch.application_inconnue": "unknown application",
     "arch.format_invalide": "The manifest of this archive does not declare a valid format.",

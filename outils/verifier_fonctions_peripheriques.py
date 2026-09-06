@@ -1,7 +1,7 @@
 """
 Vérification en ligne de commande des fonctions périphériques.
 
-Huit sujets, tous vérifiables sans ouvrir de fenêtre, sans transcrire quoi que
+Neuf sujets, tous vérifiables sans ouvrir de fenêtre, sans transcrire quoi que
 ce soit et **sans le moindre appel réseau** :
 
   1. la scrutation du dossier surveillé, avec de vrais fichiers déposés dans un
@@ -28,6 +28,9 @@ ce soit et **sans le moindre appel réseau** :
      traceback, le manque de place est vu avant de commencer, et la réparation
      n'a lieu qu'une fois par modèle. Rien n'est réellement téléchargé, le
      moteur comme le réseau sont simulés.
+  9. la compatibilité du renommage de la 2.4.0 : un fichier compagnon écrit
+     sous l'ancien marqueur de format se relit toujours, et le dossier de
+     données garde son nom d'origine.
 
 Rien de ce que fait ce script ne touche à l'installation : tout se passe dans
 un dossier temporaire, effacé à la fin.
@@ -39,6 +42,7 @@ Sort avec le code 0 si tout passe, 1 sinon.
 
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 from datetime import datetime, timedelta
@@ -49,7 +53,8 @@ if str(RACINE) not in sys.path:
     sys.path.insert(0, str(RACINE))
 
 from app import (  # noqa: E402
-    langues, maj, nommage, presets, stockage, surveillance, vocabulaire)
+    chemins, compagnon, langues, maj, nommage, presets, stockage, surveillance,
+    vocabulaire)
 
 # Ces contrôles comparent des chaînes produites par l'application : ils fixent
 # donc la langue d'interface, sans quoi leur résultat dépendrait de la langue de
@@ -208,7 +213,7 @@ def essai_versions() -> None:
     # Lecture d'une réponse de l'API, sans réseau.
     publication = {
         "tag_name": "v2.3.0",
-        "html_url": "https://github.com/exemple/whiscribe/releases/tag/v2.3.0",
+        "html_url": "https://github.com/exemple/scribouille/releases/tag/v2.3.0",
         "body": "Des nouveautés.",
     }
     lu = maj.analyser_release(publication, "2.2.0")
@@ -569,7 +574,7 @@ def essai_barre_taches() -> None:
     verifier(True, "les appels sans fenêtre ne lèvent rien")
 
     verifier(
-        barre_taches.definir_fenetre("WhiScribe-fenetre-qui-n-existe-pas") == 0,
+        barre_taches.definir_fenetre("Scribouille-fenetre-qui-n-existe-pas") == 0,
         "une fenêtre introuvable renvoie zéro sans erreur",
     )
 
@@ -915,7 +920,7 @@ def essai_amorce() -> None:
     """
     titre("Amorce du glossaire, dans la langue parlée")
 
-    glossaire = "Valenciennes\nCTranslate2\nWhiScribe"
+    glossaire = "Valenciennes\nCTranslate2\nScribouille"
     try:
         # Interface en anglais, enregistrement en français : c'est la langue
         # parlée qui décide, l'en-tête doit rester français.
@@ -949,9 +954,54 @@ def essai_amorce() -> None:
              "le décompte porte sur la chaîne réellement envoyée")
 
 
+# ---------------------------------------------------------------------------
+# 9. Compatibilité du renommage (2.4.0)
+# ---------------------------------------------------------------------------
+
+def essai_renommage(base: Path) -> None:
+    """
+    Ce que la 2.4.0 a laissé en place, exprès, en changeant de nom.
+
+    Le fichier compagnon d'une transcription faite avant le renommage porte
+    l'ancien marqueur de format. La vue de relecture doit continuer de l'ouvrir :
+    sinon le changement de nom effacerait le surlignage de tout ce qui a déjà
+    été transcrit. Le dossier de données, lui, ne bouge pas du tout.
+    """
+    titre("Compatibilité du renommage")
+
+    bac = base / "renommage"
+    bac.mkdir(parents=True, exist_ok=True)
+    sortie = bac / "reunion.txt"
+    sortie.write_text("Texte de la réunion.\n", encoding="utf-8")
+
+    def poser(marqueur: str) -> None:
+        compagnon.chemin_pour(sortie).write_text(json.dumps({
+            "format": marqueur,
+            "version": 1,
+            "produit_par": "peu importe",
+            "segments": [{"d": 0.0, "f": 1.5, "t": "Texte de la réunion."}],
+        }, ensure_ascii=False), encoding="utf-8")
+
+    poser(compagnon.FORMAT_HISTORIQUE)
+    ancien = compagnon.lire(sortie)
+    verifier(ancien is not None, "un compagnon écrit avant le renommage se relit")
+
+    poser(compagnon.FORMAT)
+    verifier(compagnon.lire(sortie) is not None, "un compagnon écrit après aussi")
+
+    poser("autre-chose")
+    verifier(compagnon.lire(sortie) is None, "un marqueur inconnu reste refusé")
+
+    verifier(chemins.NOM_DOSSIER_UTILISATEUR == "WhiScribe",
+             "le dossier de données garde son nom d'origine",
+             chemins.NOM_DOSSIER_UTILISATEUR)
+    verifier(chemins.RACINE.name == "WhiScribe" or not chemins.EST_GELE,
+             "la racine des données suit ce nom dans la version installée")
+
+
 def principal() -> int:
-    print(f"Vérification des fonctions périphériques de WhiScribe\n{'=' * 54}")
-    with tempfile.TemporaryDirectory(prefix="whiscribe-verif-") as brut:
+    print(f"Vérification des fonctions périphériques de Scribouille\n{'=' * 54}")
+    with tempfile.TemporaryDirectory(prefix="scribouille-verif-") as brut:
         base = Path(brut)
         essai_surveillance(base)
         essai_versions()
@@ -962,6 +1012,7 @@ def principal() -> int:
         essai_langues()
         essai_amorce()
         essai_modele_incomplet(base)
+        essai_renommage(base)
 
     print(f"\n{'=' * 54}")
     if _echecs:

@@ -17,9 +17,9 @@ Structure, version 1
 --------------------------------------------------------------------------
 
     {
-      "format": "whiscribe-transcription",
+      "format": "scribouille-transcription",
       "version": 1,
-      "produit_par": "WhiScribe 2.1.0",
+      "produit_par": "Scribouille 2.1.0",
       "source": {
         "nom": "reunion.m4a",
         "chemin": "C:/.../reunion.m4a",
@@ -66,7 +66,15 @@ from pathlib import Path
 
 from . import VERSION, journal
 
-FORMAT = "whiscribe-transcription"
+FORMAT = "scribouille-transcription"
+
+#: Marqueur écrit jusqu'à la version 2.3.3, sous l'ancien nom de l'application.
+#: Il reste ACCEPTÉ en lecture : les compagnons déjà produits doivent continuer
+#: de s'ouvrir dans la vue de relecture, le renommage ne regarde qu'eux.
+FORMAT_HISTORIQUE = "whiscribe-transcription"
+
+FORMATS_LUS = (FORMAT, FORMAT_HISTORIQUE)
+
 VERSION_FORMAT = 1
 
 #: Seuils de confiance retenus pour le surlignage.
@@ -129,7 +137,7 @@ def construire(source: Path, segments, details: dict) -> dict:
     return {
         "format": FORMAT,
         "version": VERSION_FORMAT,
-        "produit_par": f"WhiScribe {VERSION}",
+        "produit_par": f"Scribouille {VERSION}",
         "source": {
             "nom": source.name,
             "chemin": str(source),
@@ -179,7 +187,7 @@ def lire(chemin_sortie: str | Path) -> dict | None:
         journal.attention("Compagnon illisible (%s) : %s", cible.name, exc)
         return None
 
-    if not isinstance(donnees, dict) or donnees.get("format") != FORMAT:
+    if not isinstance(donnees, dict) or donnees.get("format") not in FORMATS_LUS:
         return None
     version = donnees.get("version")
     if not isinstance(version, int) or version > VERSION_FORMAT:

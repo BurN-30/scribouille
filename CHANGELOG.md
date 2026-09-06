@@ -6,6 +6,35 @@ version : la chaîne de publication en extrait la section correspondant au tag.
 
 ---
 
+## 2.4.0
+
+*Non publiée.*
+
+L'application s'appelle Scribouille.
+
+« WhiScribe » entrait en collision avec deux autres projets du même nom, ce
+qui rendait le dépôt introuvable et le nom impossible à dire à voix haute.
+Le renommage touche tout ce qui se voit : la fenêtre, les README, le guide,
+le programme d'installation, la recette de construction et l'adresse du dépôt,
+dont les anciennes URL redirigent.
+
+- **Deux choses n'ont pas été renommées, exprès.** Le dossier de données
+  `%LOCALAPPDATA%\WhiScribe`, où vivent la configuration, le glossaire, les
+  corrections et les modèles téléchargés ; et l'identifiant Inno du programme
+  d'installation, qui est ce qui fait qu'une version se pose PAR-DESSUS
+  l'ancienne. Les changer aurait donné, sur les postes déjà équipés, une
+  deuxième installation à côté de la première et des réglages abandonnés sur
+  place. Une mise à jour reste donc une mise à jour, et rien n'est à déplacer.
+- **Ce qui a été écrit sous l'ancien nom continue d'être lu.** Les fichiers
+  compagnons de confiance produits jusqu'à la 2.3.3 s'ouvrent toujours dans la
+  vue de relecture, et une archive de données exportée avant le renommage se
+  réimporte sans être prise pour l'export d'un autre logiciel.
+- **La désinstallation nettoie ce qu'elle laissait derrière elle** : le gabarit
+  pour l'IA et le dossier des reprises restaient sur le disque, et empêchaient
+  au passage la suppression du dossier de données.
+
+---
+
 ## 2.3.3
 
 *Publiée le 21 août 2026.*

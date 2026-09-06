@@ -45,6 +45,12 @@ from . import VERSION, NOM_APPLICATION, chemins, journal, langues, vocabulaire
 
 NOM_MANIFESTE = "manifeste.json"
 
+#: Noms d'application acceptés dans le manifeste d'une archive. Le second est
+#: celui d'avant le renommage de la 2.4.0 : une archive exportée par une version
+#: antérieure doit continuer de se réimporter, sans quoi le changement de nom
+#: rendrait toutes les sauvegardes déjà faites inutilisables.
+NOMS_APPLICATION_LUS = (NOM_APPLICATION.lower(), "whiscribe")
+
 #: Version du format d'archive. Un export produit par une version future de
 #: l'application sera refusé plutôt que mal interprété.
 #:
@@ -62,7 +68,7 @@ FICHIER_CONFIG = "config.json"
 MEMBRES_AUTORISES = (NOM_MANIFESTE, FICHIER_CONFIG, *FICHIERS_TEXTE)
 
 #: Bornes de sécurité. Ces fichiers pèsent quelques kilooctets : au-delà de ces
-#: seuils, on a affaire à autre chose qu'un export WhiScribe.
+#: seuils, on a affaire à autre chose qu'un export Scribouille.
 TAILLE_MAX_ARCHIVE = 8 * 1024 * 1024
 TAILLE_MAX_MEMBRE = 2 * 1024 * 1024
 TAILLE_MAX_TOTALE = 8 * 1024 * 1024
@@ -101,11 +107,11 @@ def _horodatage_seconde() -> str:
 
 def nom_export_propose() -> str:
     """Nom de fichier proposé dans la boîte d'enregistrement."""
-    return f"whiscribe-donnees-{_horodatage_jour()}.zip"
+    return f"scribouille-donnees-{_horodatage_jour()}.zip"
 
 
 def nom_sauvegarde_avant_import() -> str:
-    return f"whiscribe-donnees-avant-import-{_horodatage_seconde()}.zip"
+    return f"scribouille-donnees-avant-import-{_horodatage_seconde()}.zip"
 
 
 def _lire_texte(fichier: Path) -> str:
@@ -330,7 +336,7 @@ def _ouvrir_archive(chemin: str | Path) -> tuple[dict, dict]:
         raise ErreurArchive(langues.t("arch.manifeste_illisible")) from exc
     if not isinstance(manifeste, dict):
         raise ErreurArchive(langues.t("arch.manifeste_forme"))
-    if str(manifeste.get("application", "")).strip().lower() != NOM_APPLICATION.lower():
+    if str(manifeste.get("application", "")).strip().lower() not in NOMS_APPLICATION_LUS:
         raise ErreurArchive(langues.t(
             "arch.autre_application",
             application=manifeste.get("application")

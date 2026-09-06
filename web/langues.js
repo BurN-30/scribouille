@@ -1,5 +1,5 @@
 /* =========================================================================
-   WhiScribe : catalogue des chaînes de l'interface web.
+   Scribouille : catalogue des chaînes de l'interface web.
 
    Jumeau de `app/langues.py`, qui porte les chaînes fabriquées par Python.
    Les deux fichiers sont indépendants, mais soumis à la même règle : les clés
@@ -41,9 +41,9 @@ fr: {
   /* -- bandeau de mise à jour ------------------------------------------- */
   'ui.maj.voir': 'Voir la version',
   'ui.maj.masquer': 'Masquer',
-  'ui.maj.reinstallation': 'WhiScribe {version} est disponible. Cette version demande de '
+  'ui.maj.reinstallation': 'Scribouille {version} est disponible. Cette version demande de '
     + 'désinstaller puis réinstaller : vos données et vos modèles sont conservés.',
-  'ui.maj.par_dessus': 'WhiScribe {version} est disponible. Téléchargez la mise à jour, '
+  'ui.maj.par_dessus': 'Scribouille {version} est disponible. Téléchargez la mise à jour, '
     + "elle s'installera par-dessus sans rien vous faire perdre.",
   'ui.maj.journal': 'Version {version} disponible.',
   'ui.maj.activee': 'La page des versions du projet sera interrogée au lancement, au plus '
@@ -365,7 +365,7 @@ fr: {
   'ui.import.echec': "L'import n'a pas pu être appliqué. Le détail est dans le journal.",
   'ui.import.rechargee': 'Interface rechargée avec les données importées.',
   'ui.import.non_rechargee': "Les données sont importées, mais l'interface n'a pas pu se "
-    + 'recharger : fermez puis rouvrez WhiScribe pour les voir.',
+    + 'recharger : fermez puis rouvrez Scribouille pour les voir.',
   'ui.import.avant': '{avant}  vers  {apres}',
 
   /* -- modale aperçu ----------------------------------------------------- */
@@ -438,7 +438,7 @@ fr: {
 
   /* -- modale espace utilisé --------------------------------------------- */
   'ui.modale.stockage.titre': 'Espace utilisé',
-  'ui.modale.stockage.intro': 'Où vivent les fichiers de WhiScribe sur ce poste, et ce '
+  'ui.modale.stockage.intro': 'Où vivent les fichiers de Scribouille sur ce poste, et ce '
     + "qu'ils occupent. La mesure se fait à chaque ouverture, elle peut prendre quelques "
     + 'secondes sur un gros dossier de modèles.',
   'ui.stockage.mesure': 'Mesure en cours...',
@@ -490,7 +490,7 @@ fr: {
   'ui.aide.p_deposer1': "Glissez des enregistrements n'importe où sur la fenêtre. Un "
     + "<strong>dossier</strong> déposé ajoute les fichiers audio qu'il contient, au premier "
     + "niveau seulement : les sous-dossiers ne sont pas parcourus, et l'application dit "
-    + "combien de fichiers ont été retenus. Une <strong>archive d'export WhiScribe</strong> "
+    + "combien de fichiers ont été retenus. Une <strong>archive d'export Scribouille</strong> "
     + "déposée propose l'import de vos données, avec le même aperçu qu'en passant par les "
     + 'réglages.',
   'ui.aide.p_deposer2': 'Le panneau « Dossier surveillé » va plus loin : les enregistrements '
@@ -540,9 +540,9 @@ en: {
 
   'ui.maj.voir': 'View release',
   'ui.maj.masquer': 'Dismiss',
-  'ui.maj.reinstallation': 'WhiScribe {version} is available. This one has to be uninstalled '
+  'ui.maj.reinstallation': 'Scribouille {version} is available. This one has to be uninstalled '
     + 'and reinstalled: your data and your models are kept.',
-  'ui.maj.par_dessus': 'WhiScribe {version} is available. Download the update, it installs '
+  'ui.maj.par_dessus': 'Scribouille {version} is available. Download the update, it installs '
     + 'over this one without losing anything.',
   'ui.maj.journal': 'Version {version} available.',
   'ui.maj.activee': 'The project releases page will be checked at startup, once a day at most.',
@@ -835,7 +835,7 @@ en: {
   'ui.import.echec': 'The import could not be applied. The details are in the log.',
   'ui.import.rechargee': 'Interface reloaded with the imported data.',
   'ui.import.non_rechargee': 'The data was imported, but the interface could not reload: '
-    + 'close and reopen WhiScribe to see it.',
+    + 'close and reopen Scribouille to see it.',
   'ui.import.avant': '{avant}  to  {apres}',
 
   'ui.modale.apercu.titre': 'Preview',
@@ -901,7 +901,7 @@ en: {
   'ui.gabarit.enregistre': 'Instruction template saved.',
 
   'ui.modale.stockage.titre': 'Disk usage',
-  'ui.modale.stockage.intro': 'Where the WhiScribe files live on this machine, and how much '
+  'ui.modale.stockage.intro': 'Where the Scribouille files live on this machine, and how much '
     + 'room they take. The measurement runs every time you open this window, and can take a '
     + 'few seconds on a large models folder.',
   'ui.stockage.mesure': 'Measuring...',
@@ -950,7 +950,7 @@ en: {
   'ui.aide.h_deposer': 'Dropping files',
   'ui.aide.p_deposer1': 'Drag recordings anywhere on the window. A <strong>folder</strong> '
     + 'you drop adds the audio files it contains, at the top level only: subfolders are not '
-    + 'scanned, and the application says how many files were kept. A <strong>WhiScribe export '
+    + 'scanned, and the application says how many files were kept. A <strong>Scribouille export '
     + 'archive</strong> you drop offers to import your data, with the same preview as going '
     + 'through the settings.',
   'ui.aide.p_deposer2': 'The "Watched folder" panel goes further: recordings that land in the '
@@ -988,6 +988,8 @@ en: {
 
 const LANGUES_DISPONIBLES = ['fr', 'en'];
 const LANGUE_PAR_DEFAUT = 'en';
+/* Clé historique, conservée telle quelle : la renommer ferait oublier la langue
+   déjà choisie sur les postes qui tournaient avant le renommage de la 2.4.0. */
 const CLE_MEMOIRE = 'whiscribe.langue';
 
 let _langue = LANGUE_PAR_DEFAUT;

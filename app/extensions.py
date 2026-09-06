@@ -19,7 +19,7 @@ Un bouton dans l'application, qui fait le travail dans les deux modes.
     « installer.bat --locuteurs ».
 
   - **Depuis la version installée**, il n'y a ni Python ni pip sur le poste.
-    pip est donc embarqué dans le gel (voir `packaging/whiscribe.spec`) et les
+    pip est donc embarqué dans le gel (voir `packaging/scribouille.spec`) et les
     paquets sont posés dans un **dossier d'extensions** propre à l'utilisateur,
     `%LOCALAPPDATA%\\WhiScribe\\extensions`, par « pip install --target ». Ce
     dossier est ajouté à `sys.path` au démarrage, avant tout import de torch ou
@@ -64,7 +64,7 @@ Points d'attention, tous appris à la construction et vérifiés sur le gel rée
 Limite connue, dite ici plutôt que découverte plus tard
 ------------------------------------------------------
 torchcodec, tiré par pyannote.audio, cherche au chargement les bibliothèques
-partagées de FFmpeg, « avcodec-61.dll » et compagnie. WhiScribe n'en pose
+partagées de FFmpeg, « avcodec-61.dll » et compagnie. Scribouille n'en pose
 aucune : il embarque un exécutable FFmpeg entier, ce qui n'est pas la même
 chose. torchcodec écrit donc quelques lignes d'avertissement à l'import, et ses
 décodeurs restent inertes.
@@ -81,10 +81,10 @@ le périmètre de la question « supprimer vos données » de la désinstallatio
 
 Ligne de commande, utilisée par l'application et par la recette :
 
-    WhiScribe.exe --installer-locuteurs [--cible DOSSIER] [--cpu|--cuda]
-                                        [--paquets a==1,b==2] [--index-url URL]
-    WhiScribe.exe --verifier-locuteurs  [--cible DOSSIER]
-    WhiScribe.exe --retirer-locuteurs   [--cible DOSSIER]
+    Scribouille.exe --installer-locuteurs [--cible DOSSIER] [--cpu|--cuda]
+                                          [--paquets a==1,b==2] [--index-url URL]
+    Scribouille.exe --verifier-locuteurs  [--cible DOSSIER]
+    Scribouille.exe --retirer-locuteurs   [--cible DOSSIER]
 
 Depuis les sources, le même point d'entrée existe :
 
@@ -648,7 +648,7 @@ def executer_pip(arguments: list[str], sur_ligne: Callable[[str], None]) -> int:
 
 #: Préfixe des lignes destinées à l'application. Tout le reste est du bruit de
 #: pip, conservé dans le journal mais jamais montré tel quel.
-MARQUE = "WHISCRIBE|"
+MARQUE = "SCRIBOUILLE|"
 
 
 def _emettre(evenement: str, detail: str = "") -> None:
@@ -791,7 +791,7 @@ def commande_travailleur(options: list[str]) -> tuple[list[str], str]:
     Commande à lancer pour faire le travail dans un processus séparé, et son
     dossier de travail.
 
-    Version installée : l'exécutable lui-même. On préfère « whiscribe-verifier.exe »
+    Version installée : l'exécutable lui-même. On préfère « scribouille-verifier.exe »
     quand il est là : construit avec une console, il a des flux standard francs,
     là où un exécutable fenêtré n'en a que par la grâce de son parent. Il est
     lancé sans fenêtre visible.
@@ -800,7 +800,7 @@ def commande_travailleur(options: list[str]) -> tuple[list[str], str]:
     """
     if chemins.EST_GELE:
         dossier = Path(sys.executable).resolve().parent
-        console = dossier / "whiscribe-verifier.exe"
+        console = dossier / "scribouille-verifier.exe"
         exe = console if console.is_file() else Path(sys.executable)
         return [str(exe), *options], str(dossier)
     racine = Path(__file__).resolve().parent.parent

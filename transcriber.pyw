@@ -1,5 +1,5 @@
 """
-WhiScribe : point d'entrée.
+Scribouille : point d'entrée.
 
 Fenêtre pywebview, interface web dans `web/`, moteur faster-whisper.
 Tout se passe sur la machine : aucun envoi vers un service en ligne.
@@ -184,7 +184,7 @@ def verification() -> int:
     return 0 if tout_va_bien else 1
 
 
-# L'exécutable « whiscribe-verifier.exe » produit par PyInstaller n'a pas d'autre
+# L'exécutable « scribouille-verifier.exe » produit par PyInstaller n'a pas d'autre
 # raison d'être : il déclenche la vérification même sans argument.
 _NOM_EXECUTABLE = Path(sys.argv[0] if sys.argv else "").stem.lower()
 if "--verifier" in sys.argv or _NOM_EXECUTABLE.endswith("verifier"):
@@ -1054,7 +1054,7 @@ class Passerelle:
         """
         Trie ce qui vient d'être déposé sur la fenêtre.
 
-        Trois cas, dans cet ordre : une archive d'export WhiScribe seule propose
+        Trois cas, dans cet ordre : une archive d'export Scribouille seule propose
         l'import, un dossier livre ses fichiers audio de premier niveau, et tout
         le reste part dans la file comme avant.
         """
