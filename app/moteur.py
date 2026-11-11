@@ -739,13 +739,34 @@ class MoteurTranscription:
         if options["vad_filter"]:
             options["vad_parameters"] = {"min_silence_duration_ms": 500}
 
+        # Traitement par lots : les passages de parole repérés par le VAD sont
+        # décodés plusieurs à la fois. Chaque passage est alors transcrit sans le
+        # texte du précédent (pas de condition_on_previous_text, pas de repli de
+        # température ni de seuil de compression), ce qui supprime aussi les
+        # boucles de répétition qui se propagent d'une fenêtre à l'autre. Le VAD
+        # est obligatoire dans ce mode : sans lui, rien ne découpe le signal.
+        lot = int(reglages.get("lot") or 0)
+        par_lots = lot > 1 and options["vad_filter"]
+
         journal.info(
-            "Transcription : langue=%s, beam=%s, VAD=%s, amorce=%s caractères",
-            langue, beam, options["vad_filter"], len(amorce),
+            "Transcription : langue=%s, beam=%s, VAD=%s, lots=%s, amorce=%s caractères",
+            langue, beam, options["vad_filter"], lot if par_lots else "non", len(amorce),
         )
 
         with journal.SortieMuette("transcription"):
-            iterateur, info = self._modele.transcribe(signal, **options)
+            if par_lots:
+                from faster_whisper import BatchedInferencePipeline
+
+                for inutile in ("condition_on_previous_text", "hallucination_silence_threshold"):
+                    options.pop(inutile, None)
+                options["temperature"] = 0.0
+                # Horodatages internes conservés : sans eux, un segment couvre
+                # tout un passage du VAD (jusqu'à 30 s), illisible en sous-titre.
+                options["without_timestamps"] = False
+                iterateur, info = BatchedInferencePipeline(model=self._modele).transcribe(
+                    signal, batch_size=lot, **options)
+            else:
+                iterateur, info = self._modele.transcribe(signal, **options)
 
             segments: list[Segment] = []
             for brut in iterateur:

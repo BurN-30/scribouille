@@ -1087,7 +1087,7 @@ def essai_calibration(base: Path) -> None:
     try:
         # -- repli : sans mesure, le facteur statique du preset ----------------
         statique = presets.facteur_temps_reel("qualite", machine)
-        verifier(calibration.facteur_mesure("large-v3", "cpu", 8, machine) == 0.0,
+        verifier(calibration.facteur_mesure("large-v3", "cpu", 5, machine) == 0.0,
                  "sans mesure, aucun facteur mesuré")
         verifier(statique > 0, "le facteur statique reste servi", str(statique))
         verifier(not calibration.fichier().exists(),
@@ -1096,33 +1096,46 @@ def essai_calibration(base: Path) -> None:
         # -- une transcription réussie est retenue -----------------------------
         # 1 200 s d'audio en 2 484 s de calcul, soit le facteur 2,07 relevé le
         # 21 août 2026 sur le 7800X3D, là où le preset annonçait 1,35.
-        lisse = calibration.enregistrer("large-v3", "cpu", 8, 1200.0, 2484.0, machine)
+        lisse = calibration.enregistrer("large-v3", "cpu", 5, 1200.0, 2484.0, machine)
         verifier(abs(lisse - 2.07) < 0.001, "facteur mesuré à partir du temps réel",
                  str(lisse))
         verifier(calibration.fichier().exists(), "le fichier de mesures est écrit")
-        verifier(abs(calibration.facteur_mesure("large-v3", "cpu", 8, machine) - 2.07) < 0.001,
+        verifier(abs(calibration.facteur_mesure("large-v3", "cpu", 5, machine) - 2.07) < 0.001,
                  "et relu tel quel au lancement suivant")
 
-        mesure = presets.facteur_temps_reel("qualite", machine)
+        mesure = presets.facteur_temps_reel("qualite", machine, lot=0)
         verifier(abs(mesure - 2.07) < 0.001,
                  "l'estimation du preset suit la mesure, pas le chiffre d'origine",
                  f"{statique} puis {mesure}")
-        verifier(presets.estimer_secondes(3600, "qualite", machine) > 3600 * 2,
+        verifier(presets.estimer_secondes(3600, "qualite", machine, lot=0) > 3600 * 2,
                  "une heure d'audio est annoncée pour plus de deux heures de calcul")
 
+        # -- le traitement par lots a sa propre mesure -------------------------
+        verifier(presets.taille_lot("qualite", machine) == 8,
+                 "32 Go de mémoire : le preset traite par lots de 8")
+        verifier(presets.taille_lot("qualite", autre_machine) == 0,
+                 "8 Go de mémoire : le preset reste passage par passage")
+        verifier(presets.facteur_temps_reel("qualite", machine) == statique,
+                 "une mesure sans lots ne sert pas d'estimation au traitement par lots")
+        calibration.enregistrer("large-v3", "cpu", 5, 1200.0, 1620.0, machine, lot=8)
+        verifier(abs(presets.facteur_temps_reel("qualite", machine) - 1.35) < 0.001,
+                 "la mesure par lots sert l'estimation par lots")
+        verifier(abs(calibration.facteur_mesure("large-v3", "cpu", 5, machine) - 2.07) < 0.001,
+                 "sans toucher à celle du traitement un à un")
+
         # -- ce qui distingue deux situations ----------------------------------
-        verifier(calibration.facteur_mesure("large-v3", "cpu", 5, machine) == 0.0,
+        verifier(calibration.facteur_mesure("large-v3", "cpu", 8, machine) == 0.0,
                  "une autre largeur de faisceau ne réutilise pas la mesure")
         verifier(calibration.facteur_mesure(presets.MODELE_TURBO, "cpu", 5, machine) == 0.0,
                  "un autre modèle non plus")
-        verifier(calibration.facteur_mesure("large-v3", "cuda", 8, machine) == 0.0,
+        verifier(calibration.facteur_mesure("large-v3", "cuda", 5, machine) == 0.0,
                  "un autre périphérique non plus")
-        verifier(calibration.facteur_mesure("large-v3", "cpu", 8, autre_machine) == 0.0,
+        verifier(calibration.facteur_mesure("large-v3", "cpu", 5, autre_machine) == 0.0,
                  "et un dossier de données recopié sur une autre machine repart à zéro")
 
         # -- lissage : la mesure fraîche pèse plus, la longue aussi -------------
-        calibration.enregistrer("large-v3", "cpu", 8, 1200.0, 1200.0, machine)
-        deux = calibration.facteur_mesure("large-v3", "cpu", 8, machine)
+        calibration.enregistrer("large-v3", "cpu", 5, 1200.0, 1200.0, machine)
+        deux = calibration.facteur_mesure("large-v3", "cpu", 5, machine)
         verifier(1.0 < deux < 2.07,
                  "deux mesures donnent une valeur intermédiaire", str(deux))
         verifier(deux < (1.0 + 2.07) / 2,
@@ -1130,28 +1143,28 @@ def essai_calibration(base: Path) -> None:
 
         # Seules les cinq dernières comptent.
         for _ in range(6):
-            calibration.enregistrer("large-v3", "cpu", 8, 600.0, 300.0, machine)
+            calibration.enregistrer("large-v3", "cpu", 5, 600.0, 300.0, machine)
         donnees = calibration.charger(calibration.signature_machine(machine))
-        historique = donnees["mesures"][calibration.cle_mesure("large-v3", "cpu", 8)]["historique"]
+        historique = donnees["mesures"][calibration.cle_mesure("large-v3", "cpu", 5)]["historique"]
         verifier(len(historique) == calibration.MESURES_RETENUES,
                  "l'historique est borné aux cinq dernières mesures", str(len(historique)))
-        verifier(abs(calibration.facteur_mesure("large-v3", "cpu", 8, machine) - 0.5) < 0.001,
+        verifier(abs(calibration.facteur_mesure("large-v3", "cpu", 5, machine) - 0.5) < 0.001,
                  "les vieilles mesures finissent par sortir")
 
         # -- mesures écartées ---------------------------------------------------
         calibration.oublier()
-        verifier(calibration.enregistrer("large-v3", "cpu", 8, 30.0, 60.0, machine) == 0.0,
+        verifier(calibration.enregistrer("large-v3", "cpu", 5, 30.0, 60.0, machine) == 0.0,
                  "un enregistrement trop court n'est pas mesuré")
-        verifier(calibration.enregistrer("large-v3", "cpu", 8, 1200.0, 0.0, machine) == 0.0,
+        verifier(calibration.enregistrer("large-v3", "cpu", 5, 1200.0, 0.0, machine) == 0.0,
                  "un temps de calcul nul non plus")
-        verifier(calibration.enregistrer("large-v3", "cpu", 8, 1200.0, 200000.0, machine) == 0.0,
+        verifier(calibration.enregistrer("large-v3", "cpu", 5, 1200.0, 200000.0, machine) == 0.0,
                  "une valeur aberrante non plus")
-        verifier(calibration.facteur_mesure("large-v3", "cpu", 8, machine) == 0.0,
+        verifier(calibration.facteur_mesure("large-v3", "cpu", 5, machine) == 0.0,
                  "aucune de ces trois n'a été retenue")
 
         # -- fichier abîmé : on repart des facteurs statiques --------------------
         calibration.fichier().write_text("{ceci n'est pas du JSON", encoding="utf-8")
-        verifier(calibration.facteur_mesure("large-v3", "cpu", 8, machine) == 0.0,
+        verifier(calibration.facteur_mesure("large-v3", "cpu", 5, machine) == 0.0,
                  "un fichier de mesures illisible ne fait pas tomber l'application")
         verifier(presets.facteur_temps_reel("qualite", machine) == statique,
                  "et l'estimation revient au facteur statique")

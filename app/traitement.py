@@ -185,6 +185,9 @@ class FileTraitement:
 
     def _boucle(self, config: dict, rappels: Rappels) -> None:
         reglages = config_module.reglages_effectifs(config)
+        # Traitement par lots selon la mémoire de CE poste : la configuration
+        # ne connaît pas le matériel, la file si.
+        reglages["lot"] = presets.taille_lot(reglages["preset"], self.materiel)
         moteur.limiter_parallelisme(self.materiel.fils_calcul)
 
         instance = moteur.MoteurTranscription(
@@ -311,6 +314,7 @@ class FileTraitement:
             diarisation=bool(config.get("diarisation")),
             modele_avance=reglages["modele"] if config.get("mode_avance") else "",
             beam=int(reglages["beam_size"] or 0),
+            lot=int(reglages.get("lot") or 0),
         )
         rappels.etat(element.identifiant, "transcription", langues.t("etat.transcription"))
 
@@ -365,7 +369,7 @@ class FileTraitement:
             calibration.enregistrer(
                 reglages["modele"], self.materiel.peripherique,
                 int(reglages["beam_size"] or 0), duree_audio, temps_transcription,
-                self.materiel,
+                self.materiel, lot=int(reglages.get("lot") or 0),
             )
 
         # 3. Libération AVANT la diarisation : c'est ce qui tient les 16 Go.

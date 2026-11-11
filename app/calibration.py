@@ -94,9 +94,17 @@ def signature_machine(mat: Materiel) -> str:
     ])
 
 
-def cle_mesure(modele: str, peripherique: str, beam: int) -> str:
-    """Identifiant d'une situation de calcul : modèle, périphérique, faisceau."""
-    return f"{modele}|{peripherique or 'cpu'}|beam{max(1, int(beam or 1))}"
+def cle_mesure(modele: str, peripherique: str, beam: int, lot: int = 0) -> str:
+    """
+    Identifiant d'une situation de calcul : modèle, périphérique, faisceau, lots.
+
+    Le traitement par lots change le coût du tout au tout : il a sa propre clé.
+    Sans lots, la clé reste celle des versions précédentes, et les mesures déjà
+    prises restent valables.
+    """
+    cle = f"{modele}|{peripherique or 'cpu'}|beam{max(1, int(beam or 1))}"
+    lot = int(lot or 0)
+    return f"{cle}|lot{lot}" if lot > 1 else cle
 
 
 # ---------------------------------------------------------------------------
@@ -178,7 +186,7 @@ def moyenne_lissee(historique: list) -> float:
 
 
 def facteur_mesure(modele: str, peripherique: str, beam: int,
-                   mat: Materiel | None = None) -> float:
+                   mat: Materiel | None = None, lot: int = 0) -> float:
     """
     Facteur observé sur cette machine dans cette situation, 0 s'il n'y en a pas.
 
@@ -187,7 +195,7 @@ def facteur_mesure(modele: str, peripherique: str, beam: int,
     le facteur statique du preset.
     """
     donnees = charger(signature_machine(mat) if mat else "")
-    entree = donnees["mesures"].get(cle_mesure(modele, peripherique, beam))
+    entree = donnees["mesures"].get(cle_mesure(modele, peripherique, beam, lot))
     if not isinstance(entree, dict):
         return 0.0
     historique = entree.get("historique")
@@ -195,7 +203,7 @@ def facteur_mesure(modele: str, peripherique: str, beam: int,
 
 
 def enregistrer(modele: str, peripherique: str, beam: int, duree_audio: float,
-                temps_calcul: float, mat: Materiel | None = None) -> float:
+                temps_calcul: float, mat: Materiel | None = None, lot: int = 0) -> float:
     """
     Retient le facteur d'une transcription réussie et renvoie le facteur lissé.
 
@@ -220,7 +228,7 @@ def enregistrer(modele: str, peripherique: str, beam: int, duree_audio: float,
     donnees = charger(signature)
     donnees["machine"] = signature or donnees.get("machine", "")
 
-    cle = cle_mesure(modele, peripherique, beam)
+    cle = cle_mesure(modele, peripherique, beam, lot)
     entree = donnees["mesures"].get(cle)
     historique = entree.get("historique", []) if isinstance(entree, dict) else []
     if not isinstance(historique, list):

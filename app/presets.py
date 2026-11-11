@@ -3,12 +3,16 @@ Presets de transcription, estimations de durée et garde-fous mémoire.
 
 Deux presets sont exposés en façade :
 
-  « Qualité maximale » : large-v3, int8 sur processeur, VAD actif, beam 8,
-      température 0. C'est le défaut pour les réunions, quand le texte doit être
-      fidèle mot à mot. On lance et on laisse tourner.
+  « Qualité maximale » : large-v3, int8 sur processeur, VAD actif, beam 5,
+      température 0, passages de parole décodés par lots de 8. C'est le défaut
+      pour les réunions, quand le texte doit être fidèle mot à mot.
 
   « Rapide » : large-v3-turbo (dépôt CTranslate2 explicite), mêmes réglages,
       environ quatre fois plus rapide, qualité légèrement en retrait.
+
+Le faisceau de 8 de la « Qualité maximale » est revenu à 5 en 2.4.0 : mesuré
+sur le même extrait, il doublait le temps de calcul par lots sans changer un
+seul mot du texte produit (voir le CHANGELOG).
 
 Les autres modèles restent atteignables par le mode avancé.
 
@@ -32,17 +36,19 @@ PRESETS: dict[str, dict] = {
     "qualite": {
         "cle": "qualite",
         "modele": "large-v3",
-        "beam_size": 8,
-        "best_of": 8,
+        "beam_size": 5,
+        "best_of": 5,
         "temperature": 0.0,
         "vad": True,
+        "lot": 8,
         "diarisation_defaut": True,
         "telechargement_go": 3.1,
         "memoire_go": 3.5,
         # Facteur temps réel de repli (durée de calcul / durée de l'audio) sur une
-        # machine repère : ultraportable 12 fils, sans carte dédiée. Il ne sert que
-        # tant qu'aucune transcription n'a été mesurée sur le poste.
-        "facteur_cpu": 1.35,
+        # machine repère : ultraportable 12 fils, sans carte dédiée, traitement
+        # un à un. Il ne sert que tant qu'aucune transcription n'a été mesurée
+        # sur le poste. Le traitement par lots applique GAIN_LOTS_CPU en plus.
+        "facteur_cpu": 1.15,
         "facteur_cuda": 0.10,
     },
     "rapide": {
@@ -52,6 +58,7 @@ PRESETS: dict[str, dict] = {
         "best_of": 5,
         "temperature": 0.0,
         "vad": True,
+        "lot": 8,
         "diarisation_defaut": False,
         "telechargement_go": 1.6,
         "memoire_go": 2.0,
@@ -90,6 +97,29 @@ FACTEUR_DIARISATION_CUDA = 0.05
 
 # Machine repère servant de base aux facteurs ci-dessus.
 FILS_REFERENCE = 12
+
+# Rapport de durée mesuré entre traitement par lots de 8 et traitement un à un,
+# sur processeur et à faisceau égal : 0,39 avec large-v3, 0,44 avec turbo
+# (Ryzen 7 7800X3D, novembre 2026). Il ne sert qu'aux estimations de repli.
+GAIN_LOTS_CPU = 0.45
+
+# Mémoire vive en dessous de laquelle le traitement par lots est écarté. Mesuré
+# sur large-v3 en int8 : 5,8 Go au pic par lots de 8, contre 3,3 Go passage par
+# passage. Sous ce seuil, on garde le chemin qui tient en mémoire.
+SEUIL_MEMOIRE_LOTS = 12.0
+
+
+def taille_lot(cle_preset: str, mat: Materiel) -> int:
+    """
+    Nombre de passages de parole décodés ensemble, 0 pour le traitement un à un.
+
+    Le traitement par lots va nettement plus vite à qualité égale (mesures dans
+    le CHANGELOG de la 2.4.0), au prix d'environ 2,5 Go de mémoire de plus.
+    """
+    lot = int(preset(cle_preset).get("lot") or 0)
+    if lot > 1 and 0 < mat.ram_go < SEUIL_MEMOIRE_LOTS:
+        return 0
+    return lot
 
 
 def preset(cle: str) -> dict:
@@ -155,7 +185,7 @@ def _coefficient_machine(mat: Materiel) -> float:
 
 
 def facteur_mesure(cle_preset: str, mat: Materiel, modele_avance: str = "",
-                   beam: int = 0) -> float:
+                   beam: int = 0, lot: int | None = None) -> float:
     """
     Facteur relevé sur CE poste pour cette situation, 0 s'il n'y en a pas encore.
 
@@ -167,11 +197,13 @@ def facteur_mesure(cle_preset: str, mat: Materiel, modele_avance: str = "",
         mat.peripherique,
         beam or preset(cle_preset)["beam_size"],
         mat,
+        taille_lot(cle_preset, mat) if lot is None else lot,
     )
 
 
 def facteur_temps_reel(cle_preset: str, mat: Materiel, diarisation: bool = False,
-                       modele_avance: str = "", beam: int = 0) -> float:
+                       modele_avance: str = "", beam: int = 0,
+                       lot: int | None = None) -> float:
     """
     Renvoie le rapport estimé « durée de calcul / durée de l'audio ».
 
@@ -181,11 +213,15 @@ def facteur_temps_reel(cle_preset: str, mat: Materiel, diarisation: bool = False
     """
     modele = modele_du_preset(cle_preset, modele_avance)
     sur_gpu = mat.cuda_disponible
-    facteur = facteur_mesure(cle_preset, mat, modele_avance, beam)
+    if lot is None:
+        lot = taille_lot(cle_preset, mat)
+    facteur = facteur_mesure(cle_preset, mat, modele_avance, beam, lot)
     if not facteur:
         facteur = _facteur_modele(modele, sur_gpu)
         if not sur_gpu:
             facteur *= _coefficient_machine(mat)
+            if lot > 1:
+                facteur *= GAIN_LOTS_CPU
     if diarisation:
         facteur += FACTEUR_DIARISATION_CUDA if sur_gpu else FACTEUR_DIARISATION_CPU * _coefficient_machine(mat)
     return round(facteur, 3)
@@ -193,11 +229,11 @@ def facteur_temps_reel(cle_preset: str, mat: Materiel, diarisation: bool = False
 
 def estimer_secondes(duree_audio: float, cle_preset: str, mat: Materiel,
                      diarisation: bool = False, modele_avance: str = "",
-                     beam: int = 0) -> float:
+                     beam: int = 0, lot: int | None = None) -> float:
     if not duree_audio:
         return 0.0
     return duree_audio * facteur_temps_reel(
-        cle_preset, mat, diarisation, modele_avance, beam)
+        cle_preset, mat, diarisation, modele_avance, beam, lot)
 
 
 def nombre_fr(valeur: float, decimales: int = 1) -> str:
