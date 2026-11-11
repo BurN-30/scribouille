@@ -16,7 +16,8 @@ corrections de l'utilisateur, puis écrit dans un dossier local :
   - `cote-a-cote.html` : les deux textes horodatés face à face, les passages
     où ils divergent surlignés, les mots incertains de CTranslate2 soulignés,
     et la référence en troisième colonne si l'utilisateur en fournit une. Ce
-    fichier contient la transcription : il reste sur le poste ;
+    fichier contient la transcription : il reste sur le poste, comme
+    `textes-ctranslate2.json` et `textes-openvino.json`, les segments bruts ;
   - `rapport-chiffres.txt` : des nombres seulement, sans un mot de la
     transcription, sans nom ni chemin. C'est lui qu'on peut transmettre.
 
@@ -1362,14 +1363,16 @@ def executer(fichier: str, debut: float = 0.0, duree: float = 0.0, reference: st
                 "comp.moteur.openvino", peripherique=peripherique)
             dire(langues.t("comp.etape.moteur", moteur=nom,
                            duree=presets.formater_duree(duree_extrait)), pct)
-            fichier_segments = dossier / f"segments-{cle}-temporaire.json"
+            # Segments horodatés, mots compris : gardés à côté de la page, dans le
+            # même dossier local (ils ne contiennent rien de plus qu'elle), pour
+            # une relecture ou une analyse ultérieure.
+            fichier_segments = dossier / f"textes-{moteur_nom}.json"
             parametres = {**commun, "moteur": moteur_nom, "sortie": str(fichier_segments),
                           "peripherique": peripherique, "faisceau_openvino": faisceau_openvino,
                           "faisceau_ct2": faisceau_ct2}
             infos[cle] = lancer_moteur(parametres, delai, interrompu)
             if infos[cle].get("etat") == "ok" and fichier_segments.is_file():
                 textes[cle] = construire_texte(json.loads(fichier_segments.read_text(encoding="utf-8")))
-            fichier_segments.unlink(missing_ok=True)
     finally:
         extrait.unlink(missing_ok=True)
 
