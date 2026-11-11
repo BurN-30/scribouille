@@ -1740,6 +1740,152 @@ def essai_extension_openvino() -> None:
              "l'option d'installation est reconnue par le point d'entrée")
 
 
+def essai_comparaison(base: Path) -> None:
+    """Comparaison des moteurs : normalisation, alignement, référence, rapport sans texte."""
+    titre("Comparaison des moteurs sur un vrai fichier")
+    import random
+
+    from app import banc, comparaison as c, materiel
+
+    verifier([c.nombre_en_lettres(n) for n in (21, 71, 80, 91, 1990, 2022)] == [
+        "vingt et un", "soixante et onze", "quatre vingt", "quatre vingt onze",
+        "mille neuf cent quatre vingt dix", "deux mille vingt deux"],
+        "nombres en lettres (21, 71, 80, 91, 1990, 2022)")
+    verifier(c.ordinal_en_lettres(1) == "premier" and c.ordinal_en_lettres(3) == "troisième"
+             and c.ordinal_en_lettres(9) == "neuvième", "ordinaux en lettres")
+    verifier(c.normaliser("Euh, l'équipe livre le 3e lot à 14h30 : 25 % ; O.K. (rires)") == [
+        "l", "équipe", "livre", "le", "troisième", "lot", "à", "quatorze", "heures", "trente",
+        "vingt", "cinq", "pour", "cent", "ok"],
+        "normalisation : élisions, ordinal, heure, pourcentage, ok, hésitation et annotation retirées")
+    verifier(c.normaliser("deux mille vingt-deux") == c.normaliser("2022")
+             and c.normaliser("p(eu)t-être") == c.normaliser("peut-être"),
+             "« 2022 » et « deux mille vingt-deux » comptent pareil, élision notée dans le mot")
+
+    hasard = random.Random(7)
+    exact, couvert = True, True
+    for _ in range(150):
+        a = [hasard.choice("abcde") for _ in range(hasard.randint(1, 25))]
+        b = [hasard.choice("abcde") for _ in range(hasard.randint(0, 25))]
+        bilan = c.aligner(a, b)
+        exact &= abs(bilan.taux("a") - banc.taux_erreur_mots(" ".join(a), " ".join(b))) < 0.01
+        couvert &= ([o[1] for o in bilan.operations if o[0] != "ins"] == list(range(len(a)))
+                    and [o[3] for o in bilan.operations if o[0] != "sup"] == list(range(len(b))))
+    verifier(exact, "l'alignement donne le même WER que le banc (150 tirages)")
+    verifier(couvert, "chaque mot des deux textes apparaît une fois dans l'alignement")
+    ancien = c.CELLULES_MAX
+    try:
+        c.CELLULES_MAX = 50
+        a = ("un deux trois quatre cinq six sept huit neuf dix " * 4).split()
+        b = list(a)
+        b[5], b[22] = "x", "y"
+        del b[30]
+        ancre = c.aligner(a, b)
+    finally:
+        c.CELLULES_MAX = ancien
+    verifier(ancre.editions == 3, "alignement ancré des longs textes : mêmes trois écarts",
+             str(ancre.editions))
+
+    srt = base / "ref.srt"
+    srt.write_text("1\n00:00:01,000 --> 00:00:03,000\nLocuteur 1 : Bonjour à tous\n\n"
+                   "2\n00:00:04,000 --> 00:00:06,500\nMarie : on commence\n\n"
+                   "3\n00:00:20,000 --> 00:00:22,000\nhors extrait\n", encoding="utf-8")
+    ref = c.lire_reference(srt)
+    verifier(ref.horodatee and [b[2] for b in ref.blocs][:2] == ["Bonjour à tous", "on commence"],
+             "référence SRT : horodatages lus, noms de locuteurs retirés")
+    texte, d, f, motif = c.reference_sur_extrait(ref, 0.0, 10.0, False)
+    verifier(not motif and texte == "Bonjour à tous on commence" and d == 1.0 and f == 6.5,
+             "seules les répliques comprises dans l'extrait sont gardées, fenêtre resserrée")
+    txt = base / "export.txt"
+    txt.write_text("=" * 68 + "\nTranscription : reunion.m4a\n" + "=" * 68 + "\nSource : x\n"
+                   + "=" * 68 + "\n\n[00:00:01] Locuteur 1 : Bonjour à tous\n\n"
+                   "[00:00:04] Locuteur 2 : on commence\nla suite\n", encoding="utf-8")
+    ref_txt = c.lire_reference(txt)
+    verifier(ref_txt.horodatee and len(ref_txt.blocs) == 2
+             and ref_txt.blocs[1][2] == "on commence la suite" and ref_txt.blocs[0][1] == 4.0,
+             "export texte de Scribouille : en-tête ignoré, horodatages et locuteurs compris")
+    teams = base / "teams.txt"
+    teams.write_text("Marie Durand   0:03\nBonjour à tous\n\nPaul Martin   1:02:05\nOn commence.\n",
+                     encoding="utf-8")
+    vtt = base / "teams.vtt"
+    vtt.write_text("WEBVTT\n\nab12/3-0\n00:00:03.000 --> 00:00:05.500\n<v Marie Durand>Bonjour à tous</v>\n",
+                   encoding="utf-8")
+    ref_teams, ref_vtt = c.lire_reference(teams), c.lire_reference(vtt)
+    verifier([b[0] for b in ref_teams.blocs] == [3.0, 3725.0]
+             and c.normaliser(ref_teams.blocs[0][2]) == ["bonjour", "à", "tous"]
+             and ref_vtt.blocs[0][:2] == (3.0, 5.5)
+             and c.normaliser(ref_vtt.blocs[0][2]) == ["bonjour", "à", "tous"],
+             "transcriptions de visioconférence : « Nom   0:03 » et WebVTT à balises <v>")
+    brut = base / "brut.txt"
+    brut.write_text("Bonjour à tous.\nOn commence.\n", encoding="utf-8")
+    ref_brut = c.lire_reference(brut)
+    verifier(c.reference_sur_extrait(ref_brut, 300.0, 900.0, False)[3] == "sans_horodatage"
+             and c.reference_sur_extrait(ref_brut, 0.0, 60.0, True)[0] == "Bonjour à tous. On commence.",
+             "texte brut : refusé sur un extrait, accepté sur le fichier entier")
+
+    segments_a = [
+        {"d": 0.0, "f": 3.0, "t": "Bonjour Bérénice, on lance le sprint",
+         "m": [["Bonjour", 0.0, 0.5, 0.9], ["Bérénice,", 0.5, 1.0, 0.3], ["on", 1.0, 1.2, 0.9],
+               ["lance", 1.2, 1.6, 0.9], ["le", 1.6, 1.8, 0.9], ["sprint", 1.8, 2.4, 0.4]]},
+        {"d": 4.0, "f": 7.0, "t": "zygomatique pentagone hexagone octogone",
+         "m": [["zygomatique", 4.0, 4.8, 0.9], ["pentagone", 4.8, 5.5, 0.9],
+               ["hexagone", 5.5, 6.2, 0.9], ["octogone", 6.2, 7.0, 0.9]]},
+    ]
+    segments_b = [
+        {"d": 0.0, "f": 3.0, "t": "Bonjour Bérénice, on lance le spring", "m": [
+            ["Bonjour", 0.0, 0.5, -1], ["Bérénice,", 2.0, 2.4, -1], ["on", 1.0, 1.2, -1],
+            ["lance", 1.2, 1.6, -1], ["le", 1.6, 1.8, -1], ["spring", 1.8, 2.4, -1]]},
+    ]
+    a, b = c.construire_texte(segments_a), c.construire_texte(segments_b)
+    mesures = c.mesurer(a, b, ["sprint", "Bérénice"])
+    r = mesures["repartition"]
+    verifier(r["seulement_a"] == 1 and r["seulement_b"] == 0 and mesures["suppressions"] == 4,
+             "un passage de quatre mots manquant chez OpenVINO est compté comme tel")
+    verifier(mesures["ecarts_horodatage"] == 1, "un mot identique placé 1,5 s plus loin est relevé")
+    verifier(mesures["incertains"] == 2 and mesures["incertains_divergents"] == 1,
+             "mots incertains, et ceux qui tombent dans un passage divergent")
+    verifier(mesures["glossaire"]["a"]["termes"] == 2 and mesures["glossaire"]["b"]["termes"] == 1
+             and mesures["anglais_a"] == 1 and mesures["anglais_b"] == 0,
+             "termes du glossaire et mots anglais comptés pour chaque moteur")
+    corrige = c.construire_texte([{"d": 0.0, "f": 2.0, "t": "le Kubernetes tourne", "m": [
+        ["le", 0.0, 0.3, 0.9], ["cube", 0.3, 0.8, 0.4], ["air", 0.8, 1.0, 0.4],
+        ["net", 1.0, 1.2, 0.4], ["tourne", 1.2, 2.0, 0.9]]}])
+    verifier(corrige.jetons[1].probabilite is None and corrige.jetons[2].debut == 1.2,
+             "un mot réécrit par une correction perd sa probabilité, garde un horodatage voisin")
+
+    mat = materiel.detecter()
+    info = {"etat": "ok", "modele": "large-v3", "calcul_s": 10.0, "chargement_s": 1.0,
+            "memoire_go": 2.0, "peripherique": "CPU", "faisceau": 1, "type_calcul": "int8"}
+    phrase = c.normaliser("Bonjour Bérénice on lance le sprint zygomatique pentagone hexagone octogone")
+    ref_infos = {"couverture_s": 7.0, "mots": 10, "format": "srt", "anglais": 1,
+                 "a": c.mesurer_reference(phrase, a, 0.0, 7.0, ["sprint"]),
+                 "b": c.mesurer_reference(phrase, b, 0.0, 7.0, ["sprint"])}
+    rapport = c.rediger_rapport(mat, 7.0, 0.0, info, info, mesures, ref_infos,
+                                {"langue": "fr", "preset": "qualite", "glossaire": True,
+                                 "corrections": True})
+    mots_du_texte = ("Bérénice", "zygomatique", "pentagone", "spring", "sprint", "Bonjour")
+    verifier(not any(m.lower() in rapport.lower() for m in mots_du_texte),
+             "le rapport de chiffres ne contient aucun mot de la transcription")
+    verifier(str(Path.home()) not in rapport, "le rapport ne contient pas le dossier personnel")
+    verifier(ref_infos["a"]["wer"] == 0.0 and ref_infos["b"]["wer"] == 50.0
+             and ref_infos["b"]["glossaire_retrouves"] == 0 and ref_infos["a"]["glossaire_retrouves"] == 1,
+             "taux d'erreur et termes du glossaire par rapport à la référence")
+    piege = c.construire_texte([{"d": 0, "f": 1, "t": "a&b <i>x</i> \"y\"", "m": []}])
+    page = c.rediger_page(base / "reunion.m4a", 0.0, piege, b,
+                          {**c.mesurer(piege, b, []), "duree": 7.0}, None, "", None, info, info)
+    verifier("<i>x</i>" not in page and "&lt;i&gt;" in page and "a&amp;b" in page,
+             "la page échappe le texte transcrit")
+    page3 = c.rediger_page(base / "reunion.m4a", 0.0, a, b, {**mesures, "duree": 7.0}, phrase, "",
+                           {"a": {**ref_infos["a"], "rangs": list(range(len(a.jetons)))},
+                            "b": {**ref_infos["b"], "rangs": list(range(len(b.jetons)))}}, info, info)
+    verifier(page3.count("<th>") == 3 and "octogone" in page3,
+             "avec une référence, la page montre trois colonnes")
+    verifier(c.caler_sur_pauses(__import__("numpy").zeros(16000 * 10, dtype="float32"), False, False)
+             == (0, 16000 * 10), "un extrait court n'est pas recadré")
+    verifier(c.options_reconnues(["--comparer", "x.m4a"]) and c.lire_duree("00:05:00") == 300.0
+             and c.lire_duree("600") == 600.0 and c.lire_duree("1:30") == 90.0,
+             "options de la ligne de commande et durées « 00:05:00 », « 600 », « 1:30 »")
+
+
 def principal() -> int:
     print(f"Vérification des fonctions périphériques de Scribouille\n{'=' * 54}")
     with tempfile.TemporaryDirectory(prefix="scribouille-verif-") as brut:
@@ -1769,6 +1915,7 @@ def principal() -> int:
         essai_reglage_machine(base)
         essai_banc()
         essai_extension_openvino()
+        essai_comparaison(base)
 
     print(f"\n{'=' * 54}")
     if _echecs:
