@@ -167,6 +167,14 @@ def nom_peripherique(peripherique: str) -> str:
     return langues.t(f"ov.peripherique.{(peripherique or 'CPU').lower()}")
 
 
+def _passes_encodeur(resultat) -> int:
+    """Nombre de passages de l'encodeur pour une fenêtre (1 en temps normal)."""
+    try:
+        return len(resultat.perf_metrics.whisper_raw_metrics.encode_inference_durations)
+    except Exception:
+        return 1
+
+
 def _taux_compression(texte: str) -> float:
     octets = texte.encode("utf-8")
     if not octets:
@@ -382,6 +390,7 @@ class MoteurOpenVINO:
 
         segments: list[Segment] = []
         langue_detectee = langue_fixee or ""
+        plafond = 0
         for fenetre in fenetres:
             if arret():
                 journal.attention("Transcription interrompue à la demande de l'utilisateur")
@@ -394,6 +403,11 @@ class MoteurOpenVINO:
                 journal.attention("Transcription interrompue à la demande de l'utilisateur")
                 raise Interruption()
             texte = (resultat.texts[0] if resultat.texts else "") or ""
+            if _passes_encodeur(resultat) > 1:
+                # OpenVINO a repris le décodage au dernier horodatage complet,
+                # sans l'amorce du glossaire : plafond de jetons atteint, ou
+                # dernière phrase annoncée comme continuant au-delà de la fenêtre.
+                plafond += 1
             if faisceau == 1 and _taux_compression(texte) > SEUIL_COMPRESSION:
                 journal.attention("Fenêtre répétitive (taux %.2f), refaite avec un faisceau de 5",
                                   _taux_compression(texte))
@@ -406,7 +420,11 @@ class MoteurOpenVINO:
                 # Langue détectée sur la première fenêtre, puis gardée : une
                 # réunion ne change pas de langue d'une fenêtre à l'autre, et
                 # Whisper hésite sur les fenêtres courtes.
-                langue_fixee = (getattr(resultat, "language", "") or "").strip("<|>") or None
+                # Les résultats d'OpenVINO GenAI 2026 portent une liste
+                # « languages » (une par texte) ; « language » n'existe pas.
+                detectees = list(getattr(resultat, "languages", None) or [])
+                brute = detectees[0] if detectees else getattr(resultat, "language", "")
+                langue_fixee = str(brute or "").strip("<|>") or None
                 langue_detectee = langue_fixee or ""
             for segment in self._segments(resultat, correspondance, decalage):
                 segments.append(segment)
@@ -426,6 +444,7 @@ class MoteurOpenVINO:
             "peripherique": self.peripherique,
             "type_calcul": self.type_calcul,
             "moteur": "openvino",
+            "fenetres_plafond": plafond,
         }
         journal.info("Transcription OpenVINO terminée : %s segments", len(segments))
         return segments, details
