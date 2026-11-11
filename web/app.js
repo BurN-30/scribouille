@@ -522,6 +522,12 @@ function majVitesse() {
   if (v.conseil && Object.keys(v.conseil).length && !banc) {
     $('#banc-resultat').style.display = 'block';
     $('#banc-conseil').textContent = t('ui.banc.conseil', { reglage: v.resume_conseil || '--' });
+    // Conseil deja en service : rien a appliquer de plus.
+    const r = v.reglage || {};
+    const c = v.conseil || {};
+    const pareil = (k) => (r[k] === undefined ? null : r[k]) === (c[k] === undefined ? null : c[k]);
+    $('#btn-appliquer-banc').disabled = !!Object.keys(r).length
+      && ['moteur', 'peripherique', 'fils', 'lot'].every(pareil);
   }
 }
 

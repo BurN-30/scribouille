@@ -217,6 +217,13 @@ imports_caches += collect_submodules("webview.platforms")
 # bibliotheque que s'il compte s'en servir.
 exclusions = [
     "hf_xet",
+    # Le moteur OpenVINO s'installe à la demande, comme la séparation des
+    # locuteurs (app/extensions.py) : 260 Mo que tout le monde n'utilise pas.
+    # Exclu explicitement, sans quoi un environnement de construction qui
+    # l'aurait l'embarquerait, l'analyse lisant les imports des fonctions.
+    "openvino",
+    "openvino_genai",
+    "openvino_tokenizers",
     "torch",
     "torchaudio",
     "pyannote",
