@@ -76,8 +76,18 @@ class Materiel:
 
     @property
     def fils_calcul(self) -> int:
-        """Laisse deux coeurs au systeme pour que la machine reste utilisable."""
+        """
+        Un fil de calcul par coeur PHYSIQUE quand le processeur double ses coeurs.
+
+        CTranslate2 le recommande dans son guide de performance : ne pas depasser
+        le nombre de coeurs physiques. Mesure sur un 8 coeurs / 16 fils occupe
+        par d'autres programmes : 8 fils transcrivent aussi vite que 14, voire
+        plus, en laissant la moitie du processeur au reste de la machine. Sans
+        hyperthreading, on laisse deux coeurs au systeme, comme avant.
+        """
         total = self.coeurs_logiques or os.cpu_count() or 4
+        if 0 < self.coeurs_physiques < total:
+            return self.coeurs_physiques
         return max(1, total - 2)
 
     def en_dict(self) -> dict:

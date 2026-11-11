@@ -1,7 +1,7 @@
 """
 Vérification en ligne de commande des fonctions périphériques.
 
-Quinze sujets, tous vérifiables sans ouvrir de fenêtre, sans transcrire quoi que
+Seize sujets, tous vérifiables sans ouvrir de fenêtre, sans transcrire quoi que
 ce soit et **sans le moindre appel réseau** :
 
   1. la scrutation du dossier surveillé, avec de vrais fichiers déposés dans un
@@ -46,7 +46,8 @@ ce soit et **sans le moindre appel réseau** :
   14. la détection des cartes graphiques : écrans virtuels écartés, carte la
      mieux dotée en tête, mémoire réelle lue au lieu du plafond de WMI ;
   15. la sortie de pyannote.audio 4, un objet et non plus une annotation,
-     dont les tours de parole se lisent bien.
+     dont les tours de parole se lisent bien ;
+  16. le nombre de fils de calcul, un par cœur physique.
 
 Rien de ce que fait ce script ne touche à l'installation : tout se passe dans
 un dossier temporaire, effacé à la fin.
@@ -1351,6 +1352,20 @@ def essai_sortie_pyannote() -> None:
         diarisation.indisponibilite, diarisation.jeton, diarisation._charger_pipeline = originaux
 
 
+def essai_fils_calcul() -> None:
+    """Un fil de calcul par cœur physique, comme le recommande CTranslate2."""
+    titre("Fils de calcul")
+    cas = {(8, 16): 8, (4, 8): 4, (6, 6): 4, (0, 12): 10, (2, 2): 1}
+    for (physiques, logiques), attendu in cas.items():
+        obtenu = materiel.Materiel(coeurs_physiques=physiques,
+                                   coeurs_logiques=logiques).fils_calcul
+        verifier(obtenu == attendu,
+                 f"{physiques} cœurs / {logiques} fils : {attendu} fils de calcul", str(obtenu))
+    repere = materiel.Materiel(coeurs_physiques=6, coeurs_logiques=12, ram_go=32.0)
+    verifier(presets._coefficient_machine(repere) == 1.0,
+             "l'estimation de repli se cale toujours sur les fils logiques de la machine repère")
+
+
 def essai_cartes_graphiques() -> None:
     """
     Les écrans virtuels ne passent pas pour des cartes, la vraie mémoire est lue.
@@ -1418,6 +1433,7 @@ def principal() -> int:
         essai_bornes_fenetres()
         essai_reprise_locuteurs(base)
         essai_sortie_pyannote()
+        essai_fils_calcul()
         essai_cartes_graphiques()
 
     print(f"\n{'=' * 54}")

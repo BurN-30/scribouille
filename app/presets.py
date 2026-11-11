@@ -179,7 +179,9 @@ def _coefficient_machine(mat: Materiel) -> float:
     L'accélération n'est pas linéaire avec le nombre de cœurs : on applique un
     exposant 0,6 et on borne le résultat pour rester honnête dans les deux sens.
     """
-    fils = max(2, mat.fils_calcul + 2)
+    # Les facteurs de référence sont donnés par nombre de fils LOGIQUES de la
+    # machine repère, quel que soit le nombre de fils de calcul retenu.
+    fils = max(2, mat.coeurs_logiques or (mat.fils_calcul + 2))
     coefficient = (FILS_REFERENCE / fils) ** 0.6
     return min(2.5, max(0.35, coefficient))
 
