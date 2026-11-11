@@ -106,6 +106,71 @@ def termes(contenu: str | None = None) -> list[str]:
     return resultat
 
 
+#: Termes que le glossaire livré par les versions 1.x à 2.3 contenait ACTIFS, à
+#: titre d'exemple (noms fictifs, outils pris au hasard). Le fichier est recopié
+#: une fois chez l'utilisateur et jamais écrasé : une installation ancienne les
+#: a gardés, et ils partent en amorce dans chaque transcription. La 2.4.0 les a
+#: mis en commentaire pour les nouvelles installations seulement.
+EXEMPLES_ANCIENS = (
+    "Jean Dupont", "Marie Lefèvre", "Karim Benali", "MonEntreprise",
+    "Direction des systèmes d'information", "GitLab", "Kubernetes", "Active Directory",
+    "PostgreSQL", "RGPD", "API", "SSO",
+)
+#: Règles actives du `corrections.txt` livré par les mêmes versions.
+CORRECTIONS_ANCIENNES = (
+    ("jean dupont", "Jean Dupont"), ("mon entreprise", "MonEntreprise"),
+    ("guitte lab", "GitLab"), ("guite lab", "GitLab"), ("cubernetes", "Kubernetes"),
+    ("poste grès", "PostgreSQL"), ("er gé pé dé", "RGPD"), ("a pé i", "API"),
+)
+
+
+def nombre_exemples_anciens(liste: list[str]) -> int:
+    """Combien des termes donnés sont des exemples livrés actifs par les anciennes versions."""
+    anciens = {t.lower() for t in EXEMPLES_ANCIENS}
+    return sum(1 for terme in liste if terme.lower() in anciens)
+
+
+def glossaire_exemple_intact(contenu: str) -> bool:
+    """Le glossaire est-il exactement celui des anciennes versions, jamais retouché ?"""
+    return [t.lower() for t in termes(contenu)] == [t.lower() for t in EXEMPLES_ANCIENS]
+
+
+def corrections_exemple_intactes(contenu: str) -> bool:
+    regles, erreurs = analyser_corrections(contenu)
+    return not erreurs and [(r.source.lower(), r.cible) for r in regles] == list(CORRECTIONS_ANCIENNES)
+
+
+def retirer_exemples_anciens() -> list[str]:
+    """
+    Remplace le glossaire et la table de corrections d'une installation ancienne
+    restés EXACTEMENT tels que livrés, exemples actifs compris, par les modèles
+    actuels (mêmes exemples, en commentaire). Une copie de l'ancien fichier est
+    gardée à côté. Un fichier retouché, ne serait-ce que d'un terme, n'est pas
+    touché. Renvoie les noms des fichiers remplacés.
+
+    Constaté sur un poste : les douze exemples fictifs partaient en amorce de
+    chaque transcription, et la règle « mon entreprise => MonEntreprise »
+    réécrivait une tournure française courante.
+    """
+    remplaces = []
+    for cible, intact in ((chemins.FICHIER_VOCABULAIRE, glossaire_exemple_intact),
+                          (chemins.FICHIER_CORRECTIONS, corrections_exemple_intactes)):
+        source = chemins.MODELES_FICHIERS_EXEMPLE.get(cible)
+        if source is None or cible == source or not cible.is_file() or not source.is_file():
+            continue
+        try:
+            contenu = cible.read_text(encoding="utf-8-sig")
+            if not intact(contenu):
+                continue
+            cible.with_name(cible.stem + "-exemples-anciens.txt").write_text(contenu, encoding="utf-8")
+            cible.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+            remplaces.append(cible.name)
+            journal.info("%s : exemples livrés actifs remplacés par le modèle actuel", cible.name)
+        except OSError as exc:
+            journal.attention("Exemples anciens non retirés de %s : %s", cible.name, exc)
+    return remplaces
+
+
 def _compter_jetons(texte: str, tokeniseur=None) -> int:
     if tokeniseur is not None:
         try:

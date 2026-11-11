@@ -288,6 +288,11 @@ class Passerelle:
     def __init__(self):
         self._fenetre = None
         self.config = config_module.charger()
+        # Glossaire et corrections d'une installation ancienne restés tels que
+        # livrés, exemples fictifs actifs : remplacés par les modèles actuels.
+        # Seulement à l'ouverture de la fenêtre, jamais depuis la ligne de
+        # commande (banc, comparaison, campagne ne modifient rien).
+        vocabulaire.retirer_exemples_anciens()
         self.materiel = materiel.detecter()
         # Réglage de vitesse mesuré par le banc d'essai et accepté sur ce poste.
         self._effet_reglage = reglage_machine.appliquer_au_materiel(self.config, self.materiel)
