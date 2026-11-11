@@ -514,6 +514,7 @@ function majVitesse() {
   $('#ligne-banc-npu').style.display =
     (v.npu && (ov.peripheriques || []).indexOf('NPU') >= 0) ? '' : 'none';
 
+  majComparaison();
   const banc = !!v.banc_en_cours || !!etat.bancEnCours;
   $('#banc-en-cours').style.display = banc ? 'block' : 'none';
   $('#btn-lancer-banc').style.display = banc ? 'none' : '';
@@ -614,6 +615,71 @@ function onFinBanc(bilan) {
     t(bilan.annule ? 'ui.banc.arrete' : 'ui.banc.fini'));
   majVitesse();
   majBoutons();
+}
+
+/* Comparaison des deux moteurs sur un enregistrement de l'utilisateur.
+   Visible seulement quand OpenVINO est installe. La page cote a cote reste
+   sur le poste ; le rapport de chiffres peut etre copie. */
+
+const comparaison = { fichier: '', reference: '', page: '', enCours: false };
+
+function majComparaison() {
+  const ov = (etat.vitesse || {}).openvino || {};
+  $('#comp-bloc').style.display = ov.installee ? 'block' : 'none';
+  $('#comp-en-cours').style.display = comparaison.enCours ? 'block' : 'none';
+  $('#btn-comp-lancer').style.display = comparaison.enCours ? 'none' : '';
+  $('#btn-comp-lancer').disabled = !comparaison.fichier || etat.enCours || etat.bancEnCours;
+}
+
+function onFichierComparaison(choix) {
+  if (choix.nature === 'reference') {
+    comparaison.reference = choix.chemin;
+    $('#comp-reference-nom').textContent = choix.nom;
+  } else {
+    comparaison.fichier = choix.chemin;
+    $('#comp-fichier-nom').textContent = choix.nom;
+  }
+  majComparaison();
+}
+
+async function lancerComparaison() {
+  $('#comp-retour').innerHTML = '';
+  $('#comp-message').textContent = t('ui.comp.demarrage');
+  $('#comp-barre').style.width = '0%';
+  $('#comp-resultat').style.display = 'none';
+  comparaison.enCours = true;
+  majComparaison();
+  const r = await pywebview.api.lancer_comparaison(
+    comparaison.fichier, comparaison.reference, $('#comp-debut').value,
+    parseFloat($('#comp-duree').value) || 10);
+  if (!r || !r.ok) {
+    comparaison.enCours = false;
+    majComparaison();
+    $('#comp-retour').innerHTML = encartAttention((r && r.message) || t('ui.ext.echec_lancement'));
+  }
+}
+
+function onComparaison(etape) {
+  $('#comp-message').textContent = etape.message || '';
+  $('#comp-barre').style.width = Math.max(0, Math.min(100, etape.pct || 0)) + '%';
+}
+
+function onFinComparaison(bilan) {
+  comparaison.enCours = false;
+  majComparaison();
+  if (bilan.message && !bilan.rapport) {
+    $('#comp-retour').innerHTML = encartAttention(bilan.message);
+    journaliser('erreur', bilan.message);
+    return;
+  }
+  comparaison.page = bilan.page || '';
+  $('#comp-rapport').value = bilan.rapport || '';
+  $('#comp-resultat').style.display = 'block';
+  $('#btn-comp-ouvrir').disabled = !comparaison.page;
+  if (bilan.fichier) {
+    $('#comp-retour').innerHTML = encartInfo(t('ui.comp.fichiers', { fichier: bilan.fichier }));
+  }
+  journaliser(bilan.annule ? 'attention' : 'ok', t(bilan.annule ? 'ui.comp.arrete' : 'ui.comp.fini'));
 }
 
 async function appliquerBanc() {
@@ -2018,6 +2084,17 @@ document.addEventListener('DOMContentLoaded', () => {
     journaliser('ok', t('ui.banc.copie'));
   });
   $('#btn-reglage-auto').addEventListener('click', revenirReglageAuto);
+  $('#btn-comp-fichier').addEventListener('click', () => pywebview.api.choisir_fichier_comparaison('audio'));
+  $('#btn-comp-reference').addEventListener('click', () => pywebview.api.choisir_fichier_comparaison('reference'));
+  $('#btn-comp-lancer').addEventListener('click', lancerComparaison);
+  $('#btn-comp-arreter').addEventListener('click', () => pywebview.api.arreter_comparaison());
+  $('#btn-comp-ouvrir').addEventListener('click', () => {
+    if (comparaison.page) pywebview.api.ouvrir(comparaison.page);
+  });
+  $('#btn-comp-copier').addEventListener('click', () => {
+    pywebview.api.copier($('#comp-rapport').value || '');
+    journaliser('ok', t('ui.banc.copie'));
+  });
 
   // Jeton Hugging Face
   $('#btn-jeton').addEventListener('click', ouvrirModaleJeton);

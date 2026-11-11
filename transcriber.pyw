@@ -20,6 +20,10 @@ relançant dans un processus de fond : voir `app/extensions.py`.
     transcriber.pyw --installer-locuteurs [--cible DOSSIER] [--cpu|--cuda]
     transcriber.pyw --verifier-locuteurs  [--cible DOSSIER]
     transcriber.pyw --retirer-locuteurs   [--cible DOSSIER]
+
+Comparaison des deux moteurs sur un vrai enregistrement (voir `app/comparaison.py`) :
+
+    transcriber.pyw --comparer FICHIER [--debut 00:05:00] [--duree 600] [--reference FICHIER]
 """
 
 from __future__ import annotations
@@ -62,6 +66,17 @@ if "--banc" in sys.argv[1:] or "--banc-essai" in sys.argv[1:]:
     if "--banc" in sys.argv[1:]:
         journal.demarrer()
     sys.exit(_banc.principal_cli(sys.argv[1:]))
+
+# Comparaison des deux moteurs sur un vrai fichier, en ligne de commande, même
+# organisation que le banc : « --comparer-essai » est le processus d'un moteur.
+# Version installée : « scribouille-verifier.exe --comparer FICHIER ».
+if "--comparer" in sys.argv[1:] or "--comparer-essai" in sys.argv[1:]:
+    from app import comparaison as _comparaison
+
+    if "--comparer" in sys.argv[1:]:
+        journal.demarrer()
+    journal.silence_bibliotheques()
+    sys.exit(_comparaison.principal_cli(sys.argv[1:]))
 
 journal.demarrer()
 journal.purger()
@@ -294,6 +309,8 @@ class Passerelle:
         #: Banc d'essai en cours (un fil), et sa demande d'arrêt.
         self._banc = None
         self._arret_banc = threading.Event()
+        self._comparaison = None
+        self._arret_comparaison = threading.Event()
         #: Dossier surveillé. Le fil ne démarre que si l'option est active.
         self.surveillant = surveillance.Surveillant(
             sur_nouveaux=self._sur_fichiers_surveilles,
@@ -988,7 +1005,7 @@ class Passerelle:
             "vitesse": self.etat_vitesse()}
 
     def lancer_banc(self, telecharger: bool = False, npu: bool = False) -> dict:
-        if self._banc is not None:
+        if self._banc is not None or self._comparaison is not None:
             return {"ok": False, "message": langues.t("app.banc.en_cours")}
         if self.file.occupee:
             return {"ok": False, "message": langues.t("app.banc.file_occupee")}
@@ -1016,6 +1033,74 @@ class Passerelle:
 
     def arreter_banc(self) -> dict:
         self._arret_banc.set()
+        return {"ok": True}
+
+    # -- comparaison des deux moteurs sur un enregistrement -----------------
+    #
+    # Même organisation que le banc : un fil, chaque moteur dans son processus.
+    # La page côte à côte contient le texte et reste sur le poste ; le rapport
+    # de chiffres, lui, peut être transmis.
+
+    def choisir_fichier_comparaison(self, nature: str = "audio") -> None:
+        self._fond(lambda: self._dialogue_comparaison(nature))
+
+    def _dialogue_comparaison(self, nature: str) -> None:
+        if nature == "reference":
+            types = (langues.t("app.comp.dialogue_reference"), langues.t("arch.tous_fichiers"))
+        else:
+            extensions = ";".join(f"*{e}" for e in sorted(audio_module.EXTENSIONS_AUDIO))
+            types = (langues.t("app.dialogue.audio", extensions=extensions),
+                     langues.t("arch.tous_fichiers"))
+        try:
+            resultat = self._fenetre.create_file_dialog(
+                webview.OPEN_DIALOG, directory=self._dossier_de_depart(), file_types=types)
+        except Exception as exc:
+            journal.exception("Ouverture du sélecteur de fichiers impossible", exc)
+            return
+        if not resultat:
+            return
+        chemin = resultat[0] if isinstance(resultat, (list, tuple)) else resultat
+        charge = {"nature": nature, "chemin": str(chemin), "nom": Path(str(chemin)).name}
+        self._js(f"onFichierComparaison({_json(charge)})")
+
+    def lancer_comparaison(self, fichier: str, reference: str = "", debut: str = "",
+                           duree_minutes: float = 10) -> dict:
+        from app import comparaison
+
+        if self._banc is not None or self._comparaison is not None:
+            return {"ok": False, "message": langues.t("app.banc.en_cours")}
+        if self.file.occupee:
+            return {"ok": False, "message": langues.t("app.banc.file_occupee")}
+        if not fichier or not Path(fichier).is_file():
+            return {"ok": False, "message": langues.t("app.comp.fichier_absent")}
+        try:
+            debut_s = comparaison.lire_duree(debut or "0")
+            duree_s = max(0.0, float(duree_minutes or 0) * 60)
+        except ValueError:
+            return {"ok": False, "message": langues.t("app.comp.debut_illisible")}
+        self._arret_comparaison.clear()
+
+        def travail() -> None:
+            try:
+                resultat = comparaison.executer(
+                    fichier, debut=debut_s, duree=duree_s, reference=reference or "",
+                    rappel=lambda etape: self._js(f"onComparaison({_json(etape)})"),
+                    interrompu=self._arret_comparaison.is_set)
+                charge = {"ok": resultat["ok"], "rapport": resultat["rapport"],
+                          "page": resultat["page"], "fichier": resultat["rapport_fichier"],
+                          "annule": self._arret_comparaison.is_set()}
+            except Exception as exc:
+                incident = journal.formater_incident(exc, "comparaison des moteurs")
+                charge = {"ok": False, "message": incident["titre"]}
+            self._comparaison = None
+            self._js(f"onFinComparaison({_json(charge)})")
+
+        self._comparaison = threading.Thread(target=travail, daemon=True)
+        self._comparaison.start()
+        return {"ok": True}
+
+    def arreter_comparaison(self) -> dict:
+        self._arret_comparaison.set()
         return {"ok": True}
 
     def appliquer_conseil_banc(self) -> dict:
@@ -1360,7 +1445,7 @@ class Passerelle:
     def demarrer(self) -> dict:
         if self.file.occupee:
             return {"ok": False, "message": langues.t("app.demarrer.en_cours")}
-        if self._banc is not None:
+        if self._banc is not None or self._comparaison is not None:
             return {"ok": False, "message": langues.t("app.banc.en_cours")}
         self._effet_reglage = reglage_machine.appliquer_au_materiel(self.config, self.materiel)
         if not audio_module.ffmpeg_present():

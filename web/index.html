@@ -443,6 +443,53 @@
         <span class="aide" data-i18n="ui.banc.aide"></span>
         <div id="banc-retour" style="margin-top:8px"></div>
       </div>
+
+      <div class="etape-extension" id="comp-bloc" style="margin-top:12px;display:none">
+        <span class="libelle" data-i18n="ui.comp.titre"></span>
+        <button class="bouton" id="btn-comp-fichier" style="width:100%;margin-top:8px">
+          <svg class="icone-s icone"><use href="#i-import"></use></svg>
+          <span data-i18n="ui.comp.fichier"></span>
+        </button>
+        <div class="sous-libelle" id="comp-fichier-nom" data-i18n="ui.comp.aucun"></div>
+        <button class="bouton bouton-discret" id="btn-comp-reference" style="width:100%;margin-top:6px">
+          <svg class="icone-s icone"><use href="#i-import"></use></svg>
+          <span data-i18n="ui.comp.reference"></span>
+        </button>
+        <div class="sous-libelle" id="comp-reference-nom" data-i18n="ui.comp.aucun"></div>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <label style="flex:1"><span class="sous-libelle" data-i18n="ui.comp.debut"></span>
+            <input type="text" id="comp-debut" value="00:05:00" style="width:100%"></label>
+          <label style="flex:1"><span class="sous-libelle" data-i18n="ui.comp.duree"></span>
+            <input type="number" id="comp-duree" value="10" min="1" max="240" style="width:100%"></label>
+        </div>
+        <button class="bouton bouton-accent" id="btn-comp-lancer" style="width:100%;margin-top:8px">
+          <svg class="icone-s icone"><use href="#i-horloge"></use></svg>
+          <span data-i18n="ui.comp.lancer"></span>
+        </button>
+        <div id="comp-en-cours" class="etape-extension" style="display:none;margin-top:8px">
+          <div class="sous-libelle" id="comp-message">--</div>
+          <div class="barre"><span id="comp-barre" style="width:0%"></span></div>
+          <button class="bouton" id="btn-comp-arreter" style="width:100%;margin-top:8px">
+            <svg class="icone-s icone"><use href="#i-arret"></use></svg>
+            <span data-i18n="ui.comp.arreter"></span>
+          </button>
+        </div>
+        <div id="comp-resultat" class="etape-extension" style="display:none;margin-top:8px">
+          <textarea id="comp-rapport" readonly spellcheck="false" rows="9"
+                    style="width:100%;font-size:11px"></textarea>
+          <div style="display:flex;gap:8px;margin-top:6px">
+            <button class="bouton bouton-accent" id="btn-comp-ouvrir" style="flex:1">
+              <svg class="icone-s icone"><use href="#i-coche"></use></svg>
+              <span data-i18n="ui.comp.ouvrir"></span>
+            </button>
+            <button class="bouton" id="btn-comp-copier" data-i18n-title="ui.comp.copier">
+              <svg class="icone-s icone"><use href="#i-copie"></use></svg>
+            </button>
+          </div>
+        </div>
+        <span class="aide" data-i18n="ui.comp.aide"></span>
+        <div id="comp-retour" style="margin-top:8px"></div>
+      </div>
     </div>
 
     <div class="bloc-reglage">

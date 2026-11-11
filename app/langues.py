@@ -363,6 +363,131 @@ _FR: dict[str, str] = {
         "ou relancer avec --appliquer."
     ),
 
+    # -- comparaison des moteurs (app/comparaison.py) ---------------------
+    "comp.moteur.ct2": "CTranslate2 (moteur actuel)",
+    "comp.moteur.openvino": "OpenVINO ({peripherique})",
+    "comp.oui": "oui",
+    "comp.non": "non",
+    "comp.un_a_un": "un à un",
+    "comp.openvino_absent.titre": "OpenVINO n'est pas installé",
+    "comp.openvino_absent.msg": (
+        "La comparaison a besoin des deux moteurs. Installez OpenVINO depuis les "
+        "réglages (Vitesse de cette machine) ou avec --installer-openvino, puis relancez."
+    ),
+    "comp.etape.telechargement": "Téléchargement du modèle {modele} ({taille})...",
+    "comp.etape.decodage": "Lecture de l'extrait...",
+    "comp.etape.moteur": "Transcription par {moteur} ({duree} d'audio)...",
+    "comp.etape.analyse": "Comparaison des deux textes...",
+    "comp.etape.fini": "Comparaison terminée.",
+    "comp.cli.usage": (
+        "Usage : --comparer FICHIER [--debut 00:05:00] [--duree 600] [--reference TRANSCRIPTION] "
+        "[--sortie DOSSIER] [--peripherique GPU|CPU|NPU] [--preset qualite|rapide] "
+        "[--faisceau-openvino N] [--faisceau-ctranslate2 N] [--glossaire FICHIER] [--sans-glossaire] "
+        "[--sans-corrections] "
+        "[--ouvrir]"
+    ),
+    "comp.cli.fichiers": (
+        "Rapport de chiffres (transmissible) : {rapport}\n"
+        "Page côte à côte (contient le texte, reste sur ce poste) : {page}"
+    ),
+    "comp.page.titre": "Comparaison des moteurs",
+    "comp.page.reference": "Référence relue",
+    "comp.page.confidentiel": "contient la transcription : ce fichier reste sur ce poste.",
+    "comp.page.seulement": "Seulement les lignes qui diffèrent",
+    "comp.page.legende": (
+        "Surligné : les deux moteurs divergent. Pointillé : mot incertain pour CTranslate2 "
+        "(survoler pour la probabilité). Cliquer sur une heure réécoute le passage."
+    ),
+    "comp.page.legende_ref": "Ondulé rouge : mot d'un moteur qui diffère de la référence ; dans la colonne de référence, mot manqué par les deux moteurs.",
+    "comp.rapport.titre": "Comparaison des moteurs, {nom} {version}, {date}",
+    "comp.rapport.section.extrait": "Extrait",
+    "comp.rapport.extrait": "{duree} min d'audio, à partir de {debut} (bords ramenés sur des pauses)",
+    "comp.rapport.reglages": (
+        "langue {langue}, preset {preset}, glossaire {glossaire}, corrections {corrections}"
+    ),
+    "comp.rapport.machine": "{processeur}, {memoire} Go, {alimentation}",
+    "comp.rapport.section.vitesse": "Vitesse",
+    "comp.rapport.echec": "{moteur} : échec ({etat}) {detail}",
+    "comp.rapport.vitesse": (
+        "{moteur}, {modele} : {calcul} s de calcul (facteur {facteur}), chargement {chargement} s, "
+        "mémoire {memoire} Go"
+    ),
+    "comp.rapport.detail_ct2": "faisceau {faisceau}, lots {lots}, {fils} fils, calcul {type_calcul}",
+    "comp.rapport.detail_ov": (
+        "faisceau {faisceau}, calcul {type_calcul}, fenêtres de 30 s décodées en deux passes (la seconde sans glossaire) : {plafond}"
+    ),
+    "comp.rapport.amorce": (
+        "glossaire : {termes} termes dans l'amorce ({jetons} jetons), {remplacements} corrections appliquées"
+    ),
+    "comp.rapport.rapport_vitesse": "OpenVINO calcule {rapport} fois plus vite que CTranslate2 sur cet extrait",
+    "comp.rapport.section.accord": "Accord entre les deux moteurs",
+    "comp.rapport.mots": "mots (après normalisation) : CTranslate2 {a}, OpenVINO {b}",
+    "comp.rapport.desaccord": (
+        "désaccord : {a} % rapporté au texte de CTranslate2, {b} % rapporté à celui d'OpenVINO "
+        "({sub} mots remplacés, {sup} absents chez OpenVINO, {ins} en plus chez OpenVINO)"
+    ),
+    "comp.rapport.passages": "{n} passages où les textes diffèrent",
+    "comp.rapport.repartition": (
+        "un seul mot : {un} ; plusieurs mots : {plusieurs} ; passage d'au moins {mots} mots "
+        "présent seulement chez CTranslate2 : {seul_a}, seulement chez OpenVINO : {seul_b}"
+    ),
+    "comp.rapport.horodatage": (
+        "horodatage : {n} mots identiques sur {egaux} placés à plus de {seuil} s l'un de l'autre, "
+        "en {zones} zones"
+    ),
+    "comp.rapport.segments": (
+        "segments (base de la séparation des locuteurs) : CTranslate2 {na}, médiane {ma} s, "
+        "le plus long {xa} s ; OpenVINO {nb}, médiane {mb} s, le plus long {xb} s"
+    ),
+    "comp.rapport.glossaire": (
+        "glossaire ({total} termes) : CTranslate2 en retrouve {ta} ({oa} occurrences), "
+        "OpenVINO {tb} ({ob} occurrences)"
+    ),
+    "comp.rapport.anglais": (
+        "mots anglais courants écrits en anglais (liste de {liste} mots) : CTranslate2 {a}, OpenVINO {b}"
+    ),
+    "comp.rapport.incertains": (
+        "CTranslate2 signale {n} mots incertains (probabilité sous {seuil}) ; {div} tombent dans un "
+        "passage où les moteurs divergent, soit {pct} %, contre {base} % de l'ensemble de ses mots"
+    ),
+    "comp.rapport.confiance_ov": "OpenVINO ne donne pas la probabilité des mots : pas de décompte de son côté.",
+    "comp.rapport.section.reference": "Référence relue",
+    "comp.rapport.sans_reference": (
+        "aucune : les chiffres ci-dessus disent où les moteurs divergent, pas lequel a raison."
+    ),
+    "comp.rapport.ref_fenetre": (
+        "{couvert} min de référence sur {duree} min d'extrait, {mots} mots (format {format})"
+    ),
+    "comp.rapport.ref_wer": (
+        "{moteur} : taux d'erreur {wer} % ({sub} remplacés, {sup} manquants, {ins} en trop)"
+    ),
+    "comp.rapport.ref_glossaire": "termes du glossaire de la référence retrouvés : {retrouves} sur {attendus}",
+    "comp.rapport.ref_anglais": "mots anglais courants : {n} (référence : {ref})",
+    "comp.rapport.ref_biais": (
+        "Attention : une référence produite par Scribouille (moteur CTranslate2) puis peu corrigée "
+        "favorise CTranslate2, dont elle garde les tournures et les erreurs non relues."
+    ),
+    "comp.ref.vide": "référence vide ou illisible : pas de taux d'erreur.",
+    "comp.ref.illisible": "référence illisible : pas de taux d'erreur.",
+    "comp.ref.sans_horodatage": (
+        "la référence n'a pas d'horodatage : on ne peut pas savoir quelle partie correspond à "
+        "l'extrait. Comparaison à la référence possible seulement sur le fichier entier "
+        "(sans --debut ni --duree)."
+    ),
+    "comp.ref.hors_extrait": (
+        "aucune réplique de la référence ne tombe entièrement dans l'extrait : vérifier "
+        "--debut et --duree, ou les horodatages de la référence."
+    ),
+    "comp.rapport.lecture": (
+        "Lecture : le désaccord n'est pas une erreur de l'un ou de l'autre, il montre où "
+        "réécouter. Normalisation : minuscules, sans ponctuation, nombres en lettres, élisions "
+        "séparées, hésitations retirées."
+    ),
+    "comp.rapport.remarque": (
+        "Ce rapport ne contient aucun mot de la transcription, ni nom d'utilisateur, ni nom "
+        "de machine, ni chemin."
+    ),
+
     "moteur.hors_ligne": (
         "Sans accès à Hugging Face (réseau filtré), une voie hors ligne existe : sur "
         "un poste où Scribouille a déjà téléchargé ce modèle, copiez le dossier "
@@ -445,7 +570,7 @@ _FR: dict[str, str] = {
         "Le dossier d'OpenVINO n'a pas pu être effacé, sans doute parce qu'il sert encore. "
         "Fermez Scribouille, rouvrez-le, puis recommencez."
     ),
-    "app.banc.en_cours": "Le banc d'essai tourne : attendez sa fin ou arrêtez-le.",
+    "app.banc.en_cours": "Un banc d'essai ou une comparaison des moteurs tourne : attendez sa fin ou arrêtez-le.",
     "app.banc.file_occupee": "Une transcription est en cours : le banc attendra qu'elle soit finie.",
     "vitesse.automatique": "réglage automatique ({fils} fils de calcul, moteur habituel)",
     "vitesse.reglage_ov": "moteur OpenVINO sur {peripherique}",
@@ -819,6 +944,9 @@ _FR: dict[str, str] = {
     ),
     "app.export.fenetre": "La fenêtre d'enregistrement n'a pas pu s'ouvrir.",
     "app.dialogue.audio": "Fichiers audio et vidéo ({extensions})",
+    "app.comp.dialogue_reference": "Transcriptions (*.txt;*.srt;*.vtt;*.json)",
+    "app.comp.fichier_absent": "Choisissez d'abord l'enregistrement à comparer.",
+    "app.comp.debut_illisible": "Début illisible : écrivez-le sous la forme 00:05:00.",
     "app.depot.dossier": "Dossier « {nom} » : {retenus} fichier(s) audio retenu(s)",
     "app.depot.ignores": ", {n} entrée(s) ignorée(s)",
     "app.depot.sous_dossiers": ". Les sous-dossiers ne sont pas parcourus.",
@@ -1256,6 +1384,131 @@ _EN: dict[str, str] = {
         "again with --appliquer."
     ),
 
+    # -- engine comparison (app/comparaison.py) ---------------------------
+    "comp.moteur.ct2": "CTranslate2 (current engine)",
+    "comp.moteur.openvino": "OpenVINO ({peripherique})",
+    "comp.oui": "yes",
+    "comp.non": "no",
+    "comp.un_a_un": "one by one",
+    "comp.openvino_absent.titre": "OpenVINO is not installed",
+    "comp.openvino_absent.msg": (
+        "The comparison needs both engines. Install OpenVINO from the settings (Speed of "
+        "this computer) or with --installer-openvino, then run it again."
+    ),
+    "comp.etape.telechargement": "Downloading the {modele} model ({taille})...",
+    "comp.etape.decodage": "Reading the excerpt...",
+    "comp.etape.moteur": "Transcribing with {moteur} ({duree} of audio)...",
+    "comp.etape.analyse": "Comparing both texts...",
+    "comp.etape.fini": "Comparison finished.",
+    "comp.cli.usage": (
+        "Usage: --comparer FILE [--debut 00:05:00] [--duree 600] [--reference TRANSCRIPT] "
+        "[--sortie FOLDER] [--peripherique GPU|CPU|NPU] [--preset qualite|rapide] "
+        "[--faisceau-openvino N] [--faisceau-ctranslate2 N] [--glossaire FILE] [--sans-glossaire] "
+        "[--sans-corrections] "
+        "[--ouvrir]"
+    ),
+    "comp.cli.fichiers": (
+        "Figures report (shareable): {rapport}\n"
+        "Side-by-side page (contains the text, stays on this computer): {page}"
+    ),
+    "comp.page.titre": "Engine comparison",
+    "comp.page.reference": "Reviewed reference",
+    "comp.page.confidentiel": "contains the transcript: this file stays on this computer.",
+    "comp.page.seulement": "Only lines that differ",
+    "comp.page.legende": (
+        "Highlighted: the engines disagree. Dotted: word CTranslate2 is unsure of (hover for "
+        "the probability). Clicking a time plays the passage again."
+    ),
+    "comp.page.legende_ref": "Red wavy line: an engine word that differs from the reference; in the reference column, a word both engines missed.",
+    "comp.rapport.titre": "Engine comparison, {nom} {version}, {date}",
+    "comp.rapport.section.extrait": "Excerpt",
+    "comp.rapport.extrait": "{duree} min of audio, starting at {debut} (edges moved to pauses)",
+    "comp.rapport.reglages": (
+        "language {langue}, preset {preset}, glossary {glossaire}, corrections {corrections}"
+    ),
+    "comp.rapport.machine": "{processeur}, {memoire} GB, {alimentation}",
+    "comp.rapport.section.vitesse": "Speed",
+    "comp.rapport.echec": "{moteur}: failed ({etat}) {detail}",
+    "comp.rapport.vitesse": (
+        "{moteur}, {modele}: {calcul} s of computing (factor {facteur}), loading {chargement} s, "
+        "memory {memoire} GB"
+    ),
+    "comp.rapport.detail_ct2": "beam {faisceau}, batches {lots}, {fils} threads, compute {type_calcul}",
+    "comp.rapport.detail_ov": (
+        "beam {faisceau}, compute {type_calcul}, 30 s windows decoded in two passes (the second without glossary): {plafond}"
+    ),
+    "comp.rapport.amorce": (
+        "glossary: {termes} terms in the prompt ({jetons} tokens), {remplacements} corrections applied"
+    ),
+    "comp.rapport.rapport_vitesse": "OpenVINO computes {rapport} times faster than CTranslate2 on this excerpt",
+    "comp.rapport.section.accord": "Agreement between the engines",
+    "comp.rapport.mots": "words (after normalisation): CTranslate2 {a}, OpenVINO {b}",
+    "comp.rapport.desaccord": (
+        "disagreement: {a} % relative to the CTranslate2 text, {b} % relative to the OpenVINO "
+        "text ({sub} words replaced, {sup} missing in OpenVINO, {ins} extra in OpenVINO)"
+    ),
+    "comp.rapport.passages": "{n} passages where the texts differ",
+    "comp.rapport.repartition": (
+        "single word: {un}; several words: {plusieurs}; passage of at least {mots} words "
+        "only in CTranslate2: {seul_a}, only in OpenVINO: {seul_b}"
+    ),
+    "comp.rapport.horodatage": (
+        "timing: {n} identical words out of {egaux} placed more than {seuil} s apart, "
+        "in {zones} areas"
+    ),
+    "comp.rapport.segments": (
+        "segments (basis of speaker separation): CTranslate2 {na}, median {ma} s, longest {xa} s; "
+        "OpenVINO {nb}, median {mb} s, longest {xb} s"
+    ),
+    "comp.rapport.glossaire": (
+        "glossary ({total} terms): CTranslate2 finds {ta} ({oa} occurrences), "
+        "OpenVINO {tb} ({ob} occurrences)"
+    ),
+    "comp.rapport.anglais": (
+        "common English words written in English (list of {liste} words): CTranslate2 {a}, OpenVINO {b}"
+    ),
+    "comp.rapport.incertains": (
+        "CTranslate2 flags {n} uncertain words (probability below {seuil}); {div} fall in a "
+        "passage where the engines disagree, that is {pct} %, against {base} % of all its words"
+    ),
+    "comp.rapport.confiance_ov": "OpenVINO gives no word probability: no count on its side.",
+    "comp.rapport.section.reference": "Reviewed reference",
+    "comp.rapport.sans_reference": (
+        "none: the figures above show where the engines disagree, not which one is right."
+    ),
+    "comp.rapport.ref_fenetre": (
+        "{couvert} min of reference out of {duree} min of excerpt, {mots} words (format {format})"
+    ),
+    "comp.rapport.ref_wer": (
+        "{moteur}: error rate {wer} % ({sub} replaced, {sup} missing, {ins} extra)"
+    ),
+    "comp.rapport.ref_glossaire": "glossary terms of the reference found: {retrouves} out of {attendus}",
+    "comp.rapport.ref_anglais": "common English words: {n} (reference: {ref})",
+    "comp.rapport.ref_biais": (
+        "Caution: a reference produced by Scribouille (CTranslate2 engine) and lightly corrected "
+        "favours CTranslate2, whose wording and unreviewed errors it keeps."
+    ),
+    "comp.ref.vide": "empty or unreadable reference: no error rate.",
+    "comp.ref.illisible": "unreadable reference: no error rate.",
+    "comp.ref.sans_horodatage": (
+        "the reference has no timestamps: there is no way to tell which part matches the "
+        "excerpt. Comparing with the reference is only possible on the whole file "
+        "(without --debut or --duree)."
+    ),
+    "comp.ref.hors_extrait": (
+        "no line of the reference falls entirely within the excerpt: check --debut and "
+        "--duree, or the timestamps of the reference."
+    ),
+    "comp.rapport.lecture": (
+        "Reading: a disagreement is not an error of one engine or the other, it shows where "
+        "to listen again. Normalisation: lower case, no punctuation, numbers in words, split "
+        "elisions, hesitations removed."
+    ),
+    "comp.rapport.remarque": (
+        "This report contains no word of the transcript, no user name, no computer name and "
+        "no path."
+    ),
+
     "moteur.hors_ligne": (
         "Without access to Hugging Face (filtered network), there is an offline route: "
         "on a computer where Scribouille has already downloaded this model, copy the "
@@ -1333,7 +1586,7 @@ _EN: dict[str, str] = {
         "The OpenVINO folder could not be deleted, probably because it is still in use. "
         "Close Scribouille, open it again, then retry."
     ),
-    "app.banc.en_cours": "The benchmark is running: wait for it to finish or stop it.",
+    "app.banc.en_cours": "A benchmark or an engine comparison is running: wait for it to finish or stop it.",
     "app.banc.file_occupee": "A transcription is running: the benchmark will wait until it is done.",
     "vitesse.automatique": "automatic setting ({fils} compute threads, usual engine)",
     "vitesse.reglage_ov": "OpenVINO engine on {peripherique}",
@@ -1692,6 +1945,9 @@ _EN: dict[str, str] = {
     ),
     "app.export.fenetre": "The save dialog could not be opened.",
     "app.dialogue.audio": "Audio and video files ({extensions})",
+    "app.comp.dialogue_reference": "Transcripts (*.txt;*.srt;*.vtt;*.json)",
+    "app.comp.fichier_absent": "First choose the recording to compare.",
+    "app.comp.debut_illisible": "Unreadable start: write it as 00:05:00.",
     "app.depot.dossier": "Folder \"{nom}\": {retenus} audio file(s) kept",
     "app.depot.ignores": ", {n} item(s) ignored",
     "app.depot.sous_dossiers": ". Subfolders are not scanned.",

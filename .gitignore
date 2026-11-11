@@ -29,6 +29,8 @@ extensions-openvino/
 cache-openvino/
 paquets-hors-ligne/
 rapports-banc/
+# Comparaisons des moteurs : contiennent des transcriptions, jamais dans le dépôt.
+comparaisons/
 maj-etat.json
 surveillance-vus.json
 calibration.json
