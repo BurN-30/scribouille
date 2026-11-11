@@ -1086,6 +1086,14 @@ def principal_cli(arguments: list[str]) -> int:
         return principal_essai(_valeur(arguments, "--campagne-essai"))
     from .comparaison import lire_duree
 
+    # Sortie redirigée vers un fichier (lancement en tâche de fond) : un
+    # caractère hors de la page de code ne doit pas arrêter la campagne.
+    for flux in (sys.stdout, sys.stderr):
+        try:
+            flux.reconfigure(errors="replace")  # type: ignore[union-attr]
+        except Exception:
+            pass
+
     def afficher(message: str) -> None:
         print("  " + message, flush=True)
 
