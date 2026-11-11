@@ -1,0 +1,586 @@
+"""
+Moteur OpenVINO (Intel), en option : processeur, puce graphique, NPU.
+
+Pourquoi un second moteur
+-------------------------
+CTranslate2 ne calcule que sur processeur et sur carte NVIDIA. Sur un portable
+Intel sans carte dédiée, la puce graphique intégrée et le NPU restent inertes
+pendant que le processeur, bridé à 15 W, met parfois plus longtemps à
+transcrire que la réunion n'a duré. OpenVINO GenAI (Intel, licence Apache-2.0)
+fait tourner Whisper sur ces trois circuits, avec des modèles déjà convertis et
+compressés en int8 par Intel (organisation « OpenVINO » de Hugging Face).
+
+Mesures publiées, aucune sur la machine de développement (processeur AMD) :
+large-v3-turbo à 0,12 fois la durée de l'audio sur la puce graphique d'un Core
+Ultra 7 265U, contre 1,04 sur son processeur avec faster-whisper, texte
+identique mot pour mot sur l'extrait comparé ; le NPU de la même machine a
+bloqué avec turbo (ticket TalkTrack n° 131, octobre 2026). Sur processeur,
+mesuré ici : 1,4 à 1,8 fois plus rapide que CTranslate2 par lots, à justesse
+comparable (voir le CHANGELOG de la 2.5.0).
+
+Ce que l'application garde, et comment
+--------------------------------------
+Le pipeline d'OpenVINO n'a pas de détection d'activité vocale, et Whisper
+invente du texte sur le silence. On reprend donc le découpage de faster-whisper
+(Silero VAD, livré avec lui) : les passages de parole sont réunis en fenêtres
+de 30 s au plus, sans les silences, et chaque fenêtre est transcrite à part.
+Cela donne tout le reste :
+
+  - **segments horodatés** : les horodatages rendus par OpenVINO dans la
+    fenêtre sont ramenés au temps de l'enregistrement d'origine ;
+  - **horodatage des mots**, demandé au pipeline (`word_timestamps`), pour la
+    séparation des locuteurs et la vue de relecture. OpenVINO ne donne pas la
+    probabilité de chaque mot : la confiance est marquée inconnue (-1), et la
+    vue de relecture n'en souligne aucun ;
+  - **glossaire** : l'amorce est passée à chaque fenêtre (`initial_prompt`),
+    comme le fait le traitement par lots de faster-whisper ;
+  - **sauvegarde progressive et reprise** : chaque segment part dès la fin de
+    sa fenêtre, le décalage de reprise s'applique comme avec l'autre moteur ;
+  - **annulation** : vérifiée entre deux fenêtres, et pendant une fenêtre par
+    le rappel de flux d'OpenVINO, qui interrompt la génération.
+
+Décodage glouton par défaut : le faisceau de 5 coûtait 1,7 fois plus cher sans
+gagner un mot sur les extraits de test (large-v3 : 8,03 % de WER en glouton,
+8,27 % avec faisceau). Garde-fou des boucles de répétition, à la manière de
+faster-whisper : une fenêtre dont le texte se compresse trop (taux > 2,4) est
+refaite avec un faisceau de 5.
+
+Le compilé pour la puce graphique ou le NPU est mis en cache sous les données
+de l'utilisateur (`cache-openvino`) : la première ouverture coûte de quelques
+dizaines de secondes à deux minutes, les suivantes quelques secondes.
+"""
+
+from __future__ import annotations
+
+import gc
+import importlib.util
+import zlib
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Callable
+
+import numpy as np
+
+from . import chemins, journal, langues, moteur, presets
+from .journal import ErreurLisible
+from .materiel import Materiel
+from .moteur import Interruption, Mot, Segment
+
+FREQUENCE = 16000
+
+#: Durée maximale d'une fenêtre, celle que Whisper sait lire d'un trait.
+FENETRE_S = 30.0
+
+#: Réglages du découpage, ceux de l'application en traitement par lots.
+SILENCE_MIN_MS = 500
+
+#: Taux de compression au-delà duquel une fenêtre est tenue pour une boucle de
+#: répétition, comme `compression_ratio_threshold` dans faster-whisper.
+SEUIL_COMPRESSION = 2.4
+
+#: Jetons générés au plus par fenêtre : borne les boucles qui survivraient.
+JETONS_MAX = 224
+
+PERIPHERIQUES = ("GPU", "NPU", "CPU")
+
+#: Témoin posé pendant l'ouverture d'un modèle sur la puce graphique ou le NPU,
+#: effacé dès qu'elle a réussi ou échoué proprement. Une compilation qui échoue
+#: peut faire tomber tout le processus au lieu de lever une exception (constaté :
+#: violation d'accès dans le greffon GPU quand un cache de compilation est
+#: demandé et que la compilation échoue). Un témoin resté en place au
+#: démarrage suivant dit que c'est arrivé : le réglage OpenVINO est alors
+#: suspendu (voir `reglage_machine`), au lieu de refaire tomber l'application.
+TEMOIN_CHARGEMENT = chemins.RACINE / "openvino-chargement-en-cours.txt"
+
+
+def chargement_interrompu() -> str:
+    """Périphérique dont la dernière ouverture a fait tomber l'application, sinon vide."""
+    try:
+        return TEMOIN_CHARGEMENT.read_text(encoding="utf-8").strip() or "?"
+    except OSError:
+        return ""
+
+
+def effacer_temoin() -> None:
+    try:
+        TEMOIN_CHARGEMENT.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+_peripheriques_vus: list[str] | None = None
+
+
+def installe() -> bool:
+    """Les paquets d'OpenVINO sont-ils importables ? Test léger, sans import."""
+    return importlib.util.find_spec("openvino_genai") is not None
+
+
+def version() -> str:
+    try:
+        import openvino_genai as ov_genai  # type: ignore
+
+        return str(ov_genai.__version__).split("-")[0]
+    except Exception:
+        return ""
+
+
+def peripheriques_disponibles(forcer: bool = False) -> list[str]:
+    """
+    Périphériques qu'OpenVINO voit sur ce poste : « CPU », « GPU », « NPU ».
+
+    Liste vide si OpenVINO n'est pas installé. Le résultat est gardé : la
+    question coûte une seconde ou deux à la première ouverture des pilotes.
+    """
+    global _peripheriques_vus
+    if _peripheriques_vus is not None and not forcer:
+        return list(_peripheriques_vus)
+    trouves: list[str] = []
+    if installe():
+        try:
+            import openvino as ov  # type: ignore
+
+            coeur = ov.Core()
+            for nom in coeur.available_devices:
+                famille = str(nom).split(".")[0].upper()
+                if famille not in PERIPHERIQUES or famille in trouves:
+                    continue
+                if famille == "GPU":
+                    # Le greffon GPU énumère tous les circuits OpenCL, y compris
+                    # ceux d'AMD, sur lesquels ses noyaux ne compilent pas
+                    # (CL_BUILD_PROGRAM_FAILURE, constaté sur une Radeon) : on ne
+                    # garde que les puces Intel, les seules qu'il prenne en charge.
+                    try:
+                        description = str(coeur.get_property(nom, "FULL_DEVICE_NAME"))
+                    except Exception:
+                        description = ""
+                    if "intel" not in description.lower():
+                        continue
+                trouves.append(famille)
+        except Exception as exc:
+            journal.attention("OpenVINO ne liste aucun périphérique : %s", exc)
+    _peripheriques_vus = trouves
+    return list(trouves)
+
+
+def nom_peripherique(peripherique: str) -> str:
+    """Nom lisible du périphérique, dans la langue de l'interface."""
+    return langues.t(f"ov.peripherique.{(peripherique or 'CPU').lower()}")
+
+
+def _taux_compression(texte: str) -> float:
+    octets = texte.encode("utf-8")
+    if not octets:
+        return 0.0
+    return len(octets) / len(zlib.compress(octets))
+
+
+# ---------------------------------------------------------------------------
+# Découpage en fenêtres
+# ---------------------------------------------------------------------------
+
+def decouper(signal: np.ndarray) -> list[list[dict]]:
+    """
+    Passages de parole regroupés en fenêtres de 30 s au plus.
+
+    Chaque fenêtre est une liste de passages {"start", "end"} en échantillons,
+    dans le temps du signal reçu. Un signal sans parole donne une liste vide.
+    """
+    from faster_whisper.vad import VadOptions, get_speech_timestamps
+
+    passages = get_speech_timestamps(
+        signal, VadOptions(max_speech_duration_s=FENETRE_S,
+                           min_silence_duration_ms=SILENCE_MIN_MS),
+        sampling_rate=FREQUENCE)
+    fenetres: list[list[dict]] = []
+    courante: list[dict] = []
+    duree = 0
+    limite = int(FENETRE_S * FREQUENCE)
+    for passage in passages:
+        longueur = passage["end"] - passage["start"]
+        if courante and duree + longueur > limite:
+            fenetres.append(courante)
+            courante, duree = [], 0
+        courante.append(passage)
+        duree += longueur
+    if courante:
+        fenetres.append(courante)
+    return fenetres
+
+
+class Correspondance:
+    """Ramène un temps de la fenêtre (silences retirés) au temps du signal."""
+
+    def __init__(self, passages: list[dict]):
+        self.debuts: list[float] = []
+        self.cumuls: list[float] = []
+        self.longueurs: list[float] = []
+        cumul = 0.0
+        for passage in passages:
+            longueur = (passage["end"] - passage["start"]) / FREQUENCE
+            self.debuts.append(passage["start"] / FREQUENCE)
+            self.cumuls.append(cumul)
+            self.longueurs.append(longueur)
+            cumul += longueur
+        self.duree = cumul
+
+    def index(self, temps: float) -> int:
+        for rang in range(len(self.cumuls) - 1, -1, -1):
+            if temps >= self.cumuls[rang]:
+                return rang
+        return 0
+
+    def origine(self, temps: float, rang: int | None = None) -> float:
+        if not self.debuts:
+            return 0.0
+        temps = min(max(0.0, temps), self.duree)
+        if rang is None:
+            rang = self.index(temps)
+        local = min(max(0.0, temps - self.cumuls[rang]), self.longueurs[rang])
+        return self.debuts[rang] + local
+
+
+# ---------------------------------------------------------------------------
+# Le moteur
+# ---------------------------------------------------------------------------
+
+class MoteurOpenVINO:
+    """Même contrat que `moteur.MoteurTranscription`, sur OpenVINO GenAI."""
+
+    def __init__(self, mat: Materiel, peripherique: str = "GPU"):
+        self.materiel = mat
+        self.peripherique_ov = (peripherique or "CPU").upper()
+        self._pipeline = None
+        self._tokeniseur = None
+        self._nom_modele = ""
+        self._mots = True
+        #: Témoin d'ouverture : posé par l'application, pas par le banc d'essai,
+        #: dont chaque essai tourne déjà dans un processus à part.
+        self.temoin = False
+
+    @property
+    def peripherique(self) -> str:
+        return "openvino-" + self.peripherique_ov.lower()
+
+    cle_calcul = peripherique
+
+    @property
+    def type_calcul(self) -> str:
+        return "int8"
+
+    @property
+    def tokeniseur(self):
+        return self._tokeniseur
+
+    def charger(self, modele: str, signaler: Callable[[str, str], None] | None = None) -> None:
+        if self._pipeline is not None and self._nom_modele == modele:
+            return
+        self.liberer()
+        depot = presets.depot_openvino(modele) or (modele if moteur.est_modele_openvino(modele) else "")
+        if not depot:
+            raise ErreurLisible(langues.t("ov.modele_absent.titre"),
+                                langues.t("ov.modele_absent.msg", modele=moteur.nom_court(modele)))
+        chemins.assurer_dossiers()
+        etat = moteur.assurer_modele_telecharge(depot, moteur.etat_modele(depot), signaler)
+        dossier = etat.get("snapshot") or etat.get("dossier")
+
+        import openvino_genai as ov_genai  # type: ignore
+
+        cache = chemins.RACINE / "cache-openvino"
+        try:
+            cache.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
+        if signaler:
+            signaler("info", langues.t(
+                "ov.chargement", modele=moteur.nom_court(modele),
+                peripherique=nom_peripherique(self.peripherique_ov)))
+        journal.info("Chargement OpenVINO %s sur %s (%s)", depot, self.peripherique_ov, dossier)
+        proprietes = {"CACHE_DIR": str(cache)}
+        temoin = self.temoin and self.peripherique_ov != "CPU"
+        if temoin:
+            try:
+                TEMOIN_CHARGEMENT.write_text(self.peripherique_ov, encoding="utf-8")
+            except OSError:
+                temoin = False
+        try:
+            try:
+                self._pipeline = ov_genai.WhisperPipeline(
+                    str(dossier), self.peripherique_ov, word_timestamps=True, **proprietes)
+                self._mots = True
+            except Exception as exc:
+                # Les horodatages de mots demandent une décomposition de
+                # l'attention que certains périphériques refusent : on retente
+                # sans, plutôt que de renoncer au périphérique.
+                journal.attention("OpenVINO sans horodatage des mots sur %s : %s",
+                                  self.peripherique_ov, exc)
+                self._pipeline = ov_genai.WhisperPipeline(
+                    str(dossier), self.peripherique_ov, **proprietes)
+                self._mots = False
+        finally:
+            if temoin:
+                effacer_temoin()
+        try:
+            from tokenizers import Tokenizer
+
+            self._tokeniseur = Tokenizer.from_file(str(Path(dossier) / "tokenizer.json"))
+        except Exception as exc:
+            journal.debug("Tokeniseur du glossaire indisponible : %s", exc)
+            self._tokeniseur = None
+        self._nom_modele = modele
+
+    def liberer(self) -> None:
+        if self._pipeline is None:
+            return
+        journal.info("Libération du modèle OpenVINO %s", self._nom_modele)
+        self._pipeline = None
+        self._tokeniseur = None
+        self._nom_modele = ""
+        gc.collect()
+
+    def _config(self, langue: str | None, faisceau: int, amorce: str):
+        config = self._pipeline.get_generation_config()
+        config.task = "transcribe"
+        config.language = f"<|{langue}|>" if langue else None
+        config.return_timestamps = True
+        config.word_timestamps = self._mots
+        config.num_beams = max(1, int(faisceau))
+        config.max_new_tokens = JETONS_MAX
+        if amorce:
+            config.initial_prompt = amorce
+        return config
+
+    def transcrire(
+        self,
+        signal: np.ndarray,
+        duree_totale: float,
+        langue: str,
+        reglages: dict,
+        amorce: str = "",
+        progression: Callable[[float], None] | None = None,
+        interrompu: Callable[[], bool] | None = None,
+        decalage: float = 0.0,
+        sur_segment: Callable[[Segment], None] | None = None,
+    ) -> tuple[list[Segment], dict]:
+        if self._pipeline is None:
+            raise ErreurLisible(langues.t("moteur.non_charge.titre"),
+                                langues.t("moteur.non_charge.msg"))
+        import openvino_genai as ov_genai  # type: ignore
+
+        signal = np.ascontiguousarray(signal, dtype=np.float32)
+        faisceau = int(reglages.get("faisceau_openvino") or 1)
+        langue_fixee = None if (not langue or langue == "auto") else langue
+        fenetres = decouper(signal) if signal.size else []
+        journal.info(
+            "Transcription OpenVINO : %s, langue=%s, faisceau=%s, %s fenêtre(s), amorce=%s caractères",
+            self.peripherique_ov, langue or "auto", faisceau, len(fenetres), len(amorce))
+
+        def arret() -> bool:
+            return bool(interrompu is not None and interrompu())
+
+        def flux(_morceau) -> "ov_genai.StreamingStatus":
+            return ov_genai.StreamingStatus.CANCEL if arret() else ov_genai.StreamingStatus.RUNNING
+
+        segments: list[Segment] = []
+        langue_detectee = langue_fixee or ""
+        for fenetre in fenetres:
+            if arret():
+                journal.attention("Transcription interrompue à la demande de l'utilisateur")
+                raise Interruption()
+            correspondance = Correspondance(fenetre)
+            morceau = np.concatenate([signal[p["start"]:p["end"]] for p in fenetre])
+            resultat = self._pipeline.generate(
+                morceau, self._config(langue_fixee, faisceau, amorce), streamer=flux)
+            if arret():
+                journal.attention("Transcription interrompue à la demande de l'utilisateur")
+                raise Interruption()
+            texte = (resultat.texts[0] if resultat.texts else "") or ""
+            if faisceau == 1 and _taux_compression(texte) > SEUIL_COMPRESSION:
+                journal.attention("Fenêtre répétitive (taux %.2f), refaite avec un faisceau de 5",
+                                  _taux_compression(texte))
+                second = self._pipeline.generate(
+                    morceau, self._config(langue_fixee, 5, amorce), streamer=flux)
+                texte_second = (second.texts[0] if second.texts else "") or ""
+                if _taux_compression(texte_second) < _taux_compression(texte):
+                    resultat = second
+            if not langue_fixee:
+                # Langue détectée sur la première fenêtre, puis gardée : une
+                # réunion ne change pas de langue d'une fenêtre à l'autre, et
+                # Whisper hésite sur les fenêtres courtes.
+                langue_fixee = (getattr(resultat, "language", "") or "").strip("<|>") or None
+                langue_detectee = langue_fixee or ""
+            for segment in self._segments(resultat, correspondance, decalage):
+                segments.append(segment)
+                if sur_segment is not None:
+                    sur_segment(segment)
+            if progression and duree_totale > 0:
+                fin_fenetre = fenetre[-1]["end"] / FREQUENCE + decalage
+                progression(min(0.99, fin_fenetre / duree_totale))
+
+        if progression:
+            progression(1.0)
+        details = {
+            "langue": langue_detectee or langue,
+            "probabilite_langue": 0.0,
+            "duree": float(duree_totale),
+            "modele": self._nom_modele,
+            "peripherique": self.peripherique,
+            "type_calcul": self.type_calcul,
+            "moteur": "openvino",
+        }
+        journal.info("Transcription OpenVINO terminée : %s segments", len(segments))
+        return segments, details
+
+    def _segments(self, resultat, correspondance: Correspondance,
+                  decalage: float) -> list[Segment]:
+        """Segments de la fenêtre, horodatages ramenés au temps d'origine."""
+        morceaux = list(getattr(resultat, "chunks", None) or [])
+        mots_bruts = list(getattr(resultat, "words", None) or []) if self._mots else []
+        if not morceaux:
+            texte = (resultat.texts[0] if resultat.texts else "").strip()
+            if not texte:
+                return []
+            morceaux = [SimpleNamespace(start_ts=0.0, end_ts=correspondance.duree, text=texte)]
+
+        mots: list[tuple[float, Mot]] = []
+        for brut in mots_bruts:
+            texte = (getattr(brut, "word", "") or "").strip()
+            if not texte:
+                continue
+            debut, fin = float(brut.start_ts), float(brut.end_ts)
+            rang = correspondance.index((debut + fin) / 2)
+            mots.append(((debut + fin) / 2, Mot(
+                texte=texte,
+                debut=correspondance.origine(debut, rang) + decalage,
+                fin=correspondance.origine(fin, rang) + decalage,
+                probabilite=-1.0,
+            )))
+
+        segments: list[Segment] = []
+        for numero, morceau in enumerate(morceaux):
+            texte = (morceau.text or "").strip()
+            if not texte:
+                continue
+            debut = float(morceau.start_ts)
+            fin = float(morceau.end_ts)
+            if fin < 0 or fin < debut:
+                fin = correspondance.duree
+            # Les mots d'un segment : ceux dont le milieu tombe dans ses bornes.
+            # Le dernier segment ramasse ce qui dépasse.
+            dernier = numero == len(morceaux) - 1
+            propres = [m for milieu, m in mots
+                       if debut - 0.05 <= milieu < fin + 0.05 or (dernier and milieu >= debut)]
+            pris = {id(m) for m in propres}
+            mots = [(milieu, m) for milieu, m in mots if id(m) not in pris]
+            if propres:
+                origine_debut, origine_fin = propres[0].debut, propres[-1].fin
+            else:
+                origine_debut = correspondance.origine(debut) + decalage
+                origine_fin = correspondance.origine(fin, correspondance.index(max(debut, fin - 0.01))) + decalage
+            segments.append(Segment(
+                debut=origine_debut, fin=max(origine_debut, origine_fin),
+                texte=texte, mots=propres))
+        return segments
+
+
+# ---------------------------------------------------------------------------
+# Repli sur CTranslate2
+# ---------------------------------------------------------------------------
+
+class MoteurAvecRepli:
+    """
+    OpenVINO d'abord, CTranslate2 si OpenVINO lâche. Même contrat que les deux.
+
+    Un pilote graphique trop ancien, un NPU qui ne compile pas le modèle, un
+    dépôt OpenVINO que le pare-feu bloque, un périphérique perdu en cours de
+    route : aucune de ces pannes ne doit coûter une transcription. Au
+    chargement, on bascule sur CTranslate2 et on le dit. En cours de
+    transcription, les segments déjà sortis sont gardés et CTranslate2 reprend
+    à la fin du dernier, comme après une coupure.
+    """
+
+    def __init__(self, mat: Materiel, peripherique: str):
+        self.materiel = mat
+        self._ov = MoteurOpenVINO(mat, peripherique)
+        self._ov.temoin = True
+        self._ct2 = moteur.MoteurTranscription(mat)
+        self._actif = self._ov
+        self._modele = ""
+        self._signaler: Callable[[str, str], None] | None = None
+
+    @property
+    def peripherique(self) -> str:
+        return self._actif.peripherique
+
+    @property
+    def cle_calcul(self) -> str:
+        return self._actif.peripherique
+
+    @property
+    def type_calcul(self) -> str:
+        return self._actif.type_calcul
+
+    @property
+    def tokeniseur(self):
+        return self._actif.tokeniseur
+
+    @property
+    def sur_openvino(self) -> bool:
+        return self._actif is self._ov
+
+    def _basculer(self, cause: BaseException) -> None:
+        journal.attention("Repli sur CTranslate2 : %s: %s", type(cause).__name__, cause)
+        if self._signaler:
+            self._signaler("attention", langues.t(
+                "ov.repli", peripherique=nom_peripherique(self._ov.peripherique_ov)))
+        self._ov.liberer()
+        self._actif = self._ct2
+        self._ct2.charger(self._modele, self._signaler)
+
+    def charger(self, modele: str, signaler: Callable[[str, str], None] | None = None) -> None:
+        self._modele = modele
+        self._signaler = signaler
+        if self._actif is self._ct2:
+            self._ct2.charger(modele, signaler)
+            return
+
+        def adouci(niveau: str, texte: str) -> None:
+            # Une panne d'OpenVINO n'est pas une erreur du fichier : le repli
+            # prend le relais juste après.
+            if signaler:
+                signaler("attention" if niveau == "erreur" else niveau, texte)
+
+        try:
+            self._ov.charger(modele, adouci)
+        except Exception as exc:
+            self._basculer(exc)
+
+    def liberer(self) -> None:
+        self._ov.liberer()
+        self._ct2.liberer()
+
+    def transcrire(self, signal, duree_totale, langue, reglages, amorce="",
+                   progression=None, interrompu=None, decalage=0.0, sur_segment=None):
+        if self._actif is self._ct2:
+            return self._ct2.transcrire(signal, duree_totale, langue, reglages, amorce,
+                                        progression, interrompu, decalage, sur_segment)
+        recus: list[Segment] = []
+
+        def relais(segment: Segment) -> None:
+            recus.append(segment)
+            if sur_segment is not None:
+                sur_segment(segment)
+
+        try:
+            return self._ov.transcrire(signal, duree_totale, langue, reglages, amorce,
+                                       progression, interrompu, decalage, relais)
+        except Interruption:
+            raise
+        except Exception as exc:
+            journal.exception("OpenVINO a échoué en cours de transcription", exc)
+            self._basculer(exc)
+            reprise = recus[-1].fin if recus else decalage
+            debut = max(0, int(round((reprise - decalage) * FREQUENCE)))
+            suite, details = self._ct2.transcrire(
+                signal[debut:], duree_totale, langue, reglages, amorce,
+                progression, interrompu, reprise, sur_segment)
+            return recus + suite, details

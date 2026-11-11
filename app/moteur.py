@@ -124,6 +124,31 @@ FICHIERS_ATTENDUS = ("config.json",)
 #: aucune raison de passer au-dessus par hasard.
 TAILLE_MINIMALE_POIDS = 8 * 1024 * 1024
 
+#: Modèles convertis au format d'OpenVINO (moteur Intel, en option). Leurs poids
+#: sont répartis entre un encodeur, un décodeur et deux tokeniseurs compilés :
+#: c'est la présence de ces fichiers, de taille plausible, qui dit le modèle
+#: complet. Les dépôts viennent tous de l'organisation « OpenVINO » de Hugging
+#: Face, qui les publie convertis et compressés en int8.
+POIDS_OPENVINO = ("openvino_encoder_model.bin", "openvino_decoder_model.bin")
+FICHIERS_OPENVINO = (
+    "openvino_encoder_model.xml", "openvino_decoder_model.xml",
+    "openvino_tokenizer.xml", "openvino_tokenizer.bin",
+    "openvino_detokenizer.xml", "openvino_detokenizer.bin",
+    "generation_config.json", "config.json", "preprocessor_config.json",
+    "tokenizer.json",
+)
+MOTIFS_OPENVINO = ("*.json", "*.xml", "*.bin", "*.txt")
+
+
+def est_modele_openvino(modele: str) -> bool:
+    """Le modèle désigne-t-il un dépôt ou un dossier au format d'OpenVINO ?"""
+    texte = str(modele or "")
+    if texte.startswith("OpenVINO/"):
+        return True
+    dossier = Path(texte)
+    return dossier.is_dir() and (dossier / "openvino_encoder_model.xml").is_file()
+
+
 #: Préfixe des dossiers de cache de huggingface_hub. Sert aussi de garde-fou :
 #: rien qui ne porte ce préfixe ne sera jamais supprimé.
 PREFIXE_CACHE = "models--"
@@ -179,8 +204,19 @@ def _fichiers_en_cours(dossier: Path) -> int:
         return 0
 
 
-def _analyser_snapshot(snapshot: Path) -> tuple[str, str]:
+def _analyser_snapshot(snapshot: Path, openvino: bool = False) -> tuple[str, str]:
     """(« complet » ou « incomplet », motif) pour un dossier contenant les poids."""
+    if openvino:
+        for nom in POIDS_OPENVINO:
+            taille = _taille_reelle(snapshot / nom)
+            if taille is None:
+                return "incomplet", f"{nom} absent de « {snapshot.name} »"
+            if taille < TAILLE_MINIMALE_POIDS:
+                return "incomplet", f"{nom} tronqué, {taille} octets"
+        manquants = [nom for nom in FICHIERS_OPENVINO if _taille_reelle(snapshot / nom) is None]
+        if manquants:
+            return "incomplet", "fichier(s) manquant(s) : " + ", ".join(manquants)
+        return "complet", ""
     poids = snapshot / NOM_POIDS
     taille = _taille_reelle(poids)
     if taille is None:
@@ -193,7 +229,7 @@ def _analyser_snapshot(snapshot: Path) -> tuple[str, str]:
     return "complet", ""
 
 
-def _analyser_cache(dossier: Path) -> tuple[str, str, Path | None, bool]:
+def _analyser_cache(dossier: Path, openvino: bool = False) -> tuple[str, str, Path | None, bool]:
     """
     (état, motif, instantané complet, réception en cours) pour un dossier de cache.
 
@@ -216,7 +252,7 @@ def _analyser_cache(dossier: Path) -> tuple[str, str, Path | None, bool]:
 
     motifs: list[str] = []
     for snapshot in candidats:
-        etat, motif = _analyser_snapshot(snapshot)
+        etat, motif = _analyser_snapshot(snapshot, openvino)
         if etat == "complet":
             return "complet", "", snapshot, False
         motifs.append(motif)
@@ -270,9 +306,10 @@ def etat_modele(modele: str, racine: str | Path | None = None) -> dict:
     un dossier de modèle désigné à la main par l'utilisateur, uniquement un
     dossier de cache qu'elle a elle-même créé sous le dossier des modèles.
     """
+    openvino = est_modele_openvino(modele)
     fourni = Path(str(modele or ""))
     if fourni.is_dir():
-        etat, motif = _analyser_snapshot(fourni)
+        etat, motif = _analyser_snapshot(fourni, openvino)
         return {
             "etat": etat, "dossier": str(fourni), "motif": motif, "reparable": False,
             "snapshot": str(fourni) if etat == "complet" else "", "reception_en_cours": False,
@@ -280,7 +317,7 @@ def etat_modele(modele: str, racine: str | Path | None = None) -> dict:
 
     dossier = dossier_cache_modele(modele, racine)
     if dossier.is_dir():
-        etat, motif, snapshot, en_cours = _analyser_cache(dossier)
+        etat, motif, snapshot, en_cours = _analyser_cache(dossier, openvino)
         return {
             "etat": etat,
             "dossier": str(dossier),
@@ -294,7 +331,7 @@ def etat_modele(modele: str, racine: str | Path | None = None) -> dict:
     # à l'absence, on laisse faster-whisper résoudre le cache à sa façon. Un
     # modèle bien présent ne doit jamais être annoncé comme à télécharger, un
     # poste hors ligne s'en trouverait bloqué pour rien.
-    resolu = _snapshot_resolu(modele) if racine is None else None
+    resolu = _snapshot_resolu(modele) if racine is None and not openvino else None
     if resolu is not None and resolu.is_dir():
         etat, motif = _analyser_snapshot(resolu)
         return {
@@ -424,6 +461,8 @@ class EchecTelechargement(ErreurLisible):
 
 def poids_attendu_octets(modele: str) -> int:
     """Poids annoncé du modèle, en octets. Sert à juger l'espace disque libre."""
+    if modele in presets.POIDS_OPENVINO:
+        return int(presets.POIDS_OPENVINO[modele])
     for avance in presets.MODELES_AVANCES:
         if modele in (avance["cle"], avance["nom"]):
             return int(avance["octets"])
@@ -488,7 +527,8 @@ def _telecharger(modele: str) -> str:
         return snapshot_download(
             depot,
             cache_dir=str(chemins.DOSSIER_MODELES),
-            allow_patterns=list(MOTIFS_FICHIERS),
+            allow_patterns=list(MOTIFS_OPENVINO if est_modele_openvino(modele)
+                                else MOTIFS_FICHIERS),
             local_files_only=False,
         )
 
@@ -546,7 +586,8 @@ def assurer_modele_telecharge(modele: str, etat: dict | None = None,
     if not connexion_disponible():
         _echouer(signaler, langues.t("err.reseau.titre"), langues.t(
             "moteur.reseau_indisponible",
-            modele=nom_court(modele), taille=taille_annoncee(modele)))
+            modele=nom_court(modele), taille=taille_annoncee(modele))
+            + " " + voie_hors_ligne(modele))
 
     try:
         _telecharger(modele)
@@ -561,7 +602,7 @@ def assurer_modele_telecharge(modele: str, etat: dict | None = None,
         _echouer(signaler, langues.t("moteur.telechargement_echoue.titre"), langues.t(
             "moteur.telechargement_echoue.msg",
             modele=nom_court(modele), taille=taille_annoncee(modele),
-            requis=langues.octets(requis)), exc)
+            requis=langues.octets(requis)) + " " + voie_hors_ligne(modele), exc)
 
     # Le hub a rendu la main sans se plaindre : cela ne prouve rien. Tant que
     # « model.bin » n'est pas là et de taille plausible, on n'instancie pas.
@@ -573,9 +614,26 @@ def assurer_modele_telecharge(modele: str, etat: dict | None = None,
         _echouer(signaler, langues.t("moteur.telechargement_echoue.titre"), langues.t(
             "moteur.telechargement_echoue.msg",
             modele=nom_court(modele), taille=taille_annoncee(modele),
-            requis=langues.octets(requis)))
+            requis=langues.octets(requis)) + " " + voie_hors_ligne(modele))
     journal.info("Modèle %s complet : %s", nom_court(modele), apres.get("snapshot"))
     return apres
+
+
+def voie_hors_ligne(modele: str) -> str:
+    """
+    Phrase qui explique comment poser le modèle sans réseau.
+
+    Un poste d'entreprise peut filtrer Hugging Face pour de bon. Le dossier de
+    cache d'un modèle est autonome : recopié tel quel depuis un poste qui l'a
+    déjà téléchargé, il est reconnu sans le moindre appel réseau (voir
+    `chemin_instanciation`).
+    """
+    return langues.t(
+        "moteur.hors_ligne",
+        dossier_cache=dossier_cache_modele(modele).name,
+        dossier=str(chemins.DOSSIER_MODELES),
+        depot=identifiant_depot(modele),
+    )
 
 
 def chemin_instanciation(modele: str) -> str:
@@ -620,6 +678,11 @@ class MoteurTranscription:
     @property
     def type_calcul(self) -> str:
         return "float16" if self.peripherique == "cuda" else "int8"
+
+    @property
+    def cle_calcul(self) -> str:
+        """Situation de calcul pour les mesures de durée : « cpu » ou « cuda »."""
+        return self.peripherique
 
     def charger(self, modele: str, signaler: Callable[[str, str], None] | None = None) -> None:
         if self._modele is not None and self._nom_modele == modele:
@@ -835,6 +898,8 @@ def nom_court(modele: str) -> str:
     """« deepdml/faster-whisper-large-v3-turbo-ct2 » devient « large-v3-turbo »."""
     if "/" in modele:
         nom = modele.rsplit("/", 1)[1]
+        if modele.startswith("OpenVINO/"):
+            return nom.replace("whisper-", "").replace("-int8-ov", "") + " (OpenVINO)"
         return nom.replace("faster-whisper-", "").replace("-ct2", "")
     return modele
 
@@ -861,6 +926,8 @@ def connexion_disponible(delai: float = 4.0) -> bool:
 
 
 def taille_annoncee(modele: str) -> str:
+    if modele in presets.POIDS_OPENVINO:
+        return langues.octets(presets.POIDS_OPENVINO[modele])
     taille = presets.taille_modele_avance(modele)
     if taille:
         return taille

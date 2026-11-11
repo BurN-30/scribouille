@@ -23,6 +23,12 @@ reprises/
 # téléchargement. Plusieurs gigaoctets de bibliothèques, jamais versionnés.
 extensions/
 cache-pip/
+# Moteur OpenVINO installé depuis l'application, ses compilés mis en cache,
+# roues déposées pour une installation hors ligne, rapports du banc d'essai.
+extensions-openvino/
+cache-openvino/
+paquets-hors-ligne/
+rapports-banc/
 maj-etat.json
 surveillance-vus.json
 calibration.json

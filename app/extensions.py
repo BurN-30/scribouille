@@ -156,6 +156,37 @@ TAILLE_ATTENDUE_GO = {"cpu": 3.6, "cuda": 9.0}
 #: téléchargé se voit, mais ne s'importe pas.
 MODULES_ATTENDUS = ("torch", "pyannote.audio")
 
+# ---------------------------------------------------------------------------
+# Seconde extension : le moteur OpenVINO (Intel)
+#
+# Même mécanique que la séparation des locuteurs, dossier à part : les deux se
+# posent et se retirent indépendamment. Trois roues, sans leurs dépendances
+# (« --no-deps ») : numpy est déjà là, et « openvino-telemetry », que la roue
+# d'OpenVINO déclare, ne sert qu'à l'outil de conversion de modèles, jamais à
+# l'exécution (vérifié : rien ne l'importe pendant une transcription). On évite
+# ainsi d'embarquer un module de télémétrie dans une application qui promet de
+# n'en avoir aucune.
+#
+# Mesuré : 90 Mo de roues, 262 Mo une fois posées (Python 3.12, Windows).
+# ---------------------------------------------------------------------------
+
+DOSSIER_OPENVINO = chemins.RACINE / "extensions-openvino"
+NOM_MARQUEUR_OPENVINO = "openvino.txt"
+PAQUETS_OPENVINO = [
+    "openvino==2026.4.1",
+    "openvino-tokenizers==2026.4.1.0",
+    "openvino-genai==2026.4.1.0",
+]
+TELECHARGEMENT_OPENVINO_GO = 0.09
+ESPACE_REQUIS_OPENVINO_GO = 0.6
+TAILLE_ATTENDUE_OPENVINO_GO = 0.27
+MODULES_OPENVINO = ("openvino", "openvino_genai")
+
+#: Voie hors ligne, pour un poste dont le réseau bloque PyPI : les roues
+#: téléchargées ailleurs (« pip download ») et déposées ici sont installées sans
+#: aucun accès au réseau (« --no-index --find-links »).
+DOSSIER_HORS_LIGNE = chemins.RACINE / "paquets-hors-ligne"
+
 _active = False
 
 
@@ -173,6 +204,13 @@ def activer(dossier: str | Path | None = None) -> bool:
     eu besoin de la séparation des locuteurs.
     """
     global _active
+    if dossier is None and DOSSIER_OPENVINO.is_dir():
+        # Les paquets d'OpenVINO déclarent eux-mêmes leurs dossiers de DLL à
+        # l'import : seul le chemin d'import est à poser.
+        texte_ov = str(DOSSIER_OPENVINO)
+        if texte_ov not in sys.path:
+            sys.path.insert(0, texte_ov)
+            importlib.invalidate_caches()
     cible = Path(str(dossier)) if dossier else DOSSIER
     if not cible.is_dir():
         return False
@@ -435,8 +473,17 @@ def lots(variante: str, paquets: list[str] | None = None,
     ]
 
 
+def roues_hors_ligne() -> list[Path]:
+    """Roues déposées à la main pour une installation sans réseau."""
+    try:
+        return sorted(DOSSIER_HORS_LIGNE.glob("*.whl"))
+    except OSError:
+        return []
+
+
 def arguments_pip(paquets: list[str], index: str, extra: str,
-                  cible: Path | None) -> list[str]:
+                  cible: Path | None, sans_dependances: bool = False,
+                  hors_ligne: Path | None = None) -> list[str]:
     """
     Arguments d'un « pip install », identiques dans les deux modes à la cible près.
 
@@ -459,10 +506,15 @@ def arguments_pip(paquets: list[str], index: str, extra: str,
         # « only-if-needed » évite en même temps de tout remonter de version
         # à chaque passage.
         arguments += ["--target", str(cible), "--upgrade", "--upgrade-strategy", "only-if-needed"]
-    if index:
-        arguments += ["--index-url", index]
-    if extra:
-        arguments += ["--extra-index-url", extra]
+    if sans_dependances:
+        arguments += ["--no-deps"]
+    if hors_ligne is not None:
+        arguments += ["--no-index", "--find-links", str(hors_ligne)]
+    else:
+        if index:
+            arguments += ["--index-url", index]
+        if extra:
+            arguments += ["--extra-index-url", extra]
     return arguments + list(paquets)
 
 
@@ -707,6 +759,107 @@ def _verifier(cible: Path | None) -> int:
     return 0 if reussi else 1
 
 
+# ---------------------------------------------------------------------------
+# Extension OpenVINO : état, installation, vérification
+# ---------------------------------------------------------------------------
+
+def presente_openvino(dossier: str | Path | None = None) -> bool:
+    """Test rapide, sans import : OpenVINO a-t-il l'air posé ?"""
+    if not chemins.EST_GELE and dossier is None:
+        if importlib.util.find_spec("openvino_genai") is not None:
+            return True
+    cible = Path(str(dossier)) if dossier else DOSSIER_OPENVINO
+    return (cible / "openvino_genai").is_dir() and (cible / "openvino").is_dir()
+
+
+def etat_openvino() -> dict:
+    """État de l'extension OpenVINO, tel que l'interface l'affiche."""
+    installee = presente_openvino()
+    marqueur = {}
+    try:
+        for ligne in (DOSSIER_OPENVINO / NOM_MARQUEUR_OPENVINO).read_text(
+                encoding="utf-8").splitlines():
+            cle, _, valeur = ligne.partition("=")
+            marqueur[cle.strip()] = valeur.strip()
+    except OSError:
+        pass
+    return {
+        "installee": installee,
+        "mode_installe": chemins.EST_GELE,
+        "dossier": str(DOSSIER_OPENVINO),
+        "paquets": marqueur.get("paquets", ""),
+        "telechargement_go": TELECHARGEMENT_OPENVINO_GO,
+        "espace_requis_go": ESPACE_REQUIS_OPENVINO_GO,
+        "taille_attendue_go": TAILLE_ATTENDUE_OPENVINO_GO,
+        "espace_libre_go": round(chemins.espace_libre_go(chemins.RACINE), 1),
+        "hors_ligne": len(roues_hors_ligne()),
+        "dossier_hors_ligne": str(DOSSIER_HORS_LIGNE),
+    }
+
+
+def modules_openvino_importables() -> tuple[bool, str]:
+    """Import réel d'OpenVINO, et les périphériques qu'il voit."""
+    activer()
+    for module in MODULES_OPENVINO:
+        try:
+            __import__(module)
+        except Exception as exc:
+            return False, f"{module} : {type(exc).__name__}: {exc}"
+    try:
+        import openvino as ov  # type: ignore
+
+        return True, f"openvino {ov.__version__.split('-')[0]}, " + ", ".join(
+            ov.Core().available_devices)
+    except Exception as exc:
+        return False, f"openvino : {type(exc).__name__}: {exc}"
+
+
+def _installer_openvino(cible: Path | None) -> int:
+    hors_ligne = DOSSIER_HORS_LIGNE if roues_hors_ligne() else None
+    _emettre("debut", "1|openvino")
+    _emettre("lot", "1|1|openvino")
+
+    def sur_ligne(ligne: str) -> None:
+        evenement = analyser_ligne(ligne)
+        if evenement is None:
+            return
+        if evenement["type"] == "paquet":
+            sur_ligne.paquet = evenement["nom"]  # type: ignore[attr-defined]
+            _emettre("paquet", evenement["nom"])
+        elif evenement["type"] == "octets":
+            total = evenement["total"] or 0
+            pct = int(evenement["recu"] * 100 / total) if total else 0
+            _emettre("octets", f"{getattr(sur_ligne, 'paquet', '')}|{pct}|{evenement['recu']}|{total}")
+        elif evenement["type"] == "pose":
+            _emettre("pose", "")
+        elif evenement["type"] == "erreur":
+            _emettre("detail", evenement["texte"][:400])
+
+    code = executer_pip(arguments_pip(PAQUETS_OPENVINO, "", "", cible, sans_dependances=True,
+                                      hors_ligne=hors_ligne), sur_ligne)
+    if code != 0:
+        _emettre("echec", f"openvino|{code}")
+        return code
+    if cible is not None:
+        try:
+            cible.mkdir(parents=True, exist_ok=True)
+            (cible / NOM_MARQUEUR_OPENVINO).write_text(
+                "paquets=" + " ".join(PAQUETS_OPENVINO) + "\n"
+                + f"taille_go={chemins.taille_dossier_go(cible):.2f}\n", encoding="utf-8")
+        except OSError:
+            pass
+    _emettre("succes", "")
+    return 0
+
+
+def _verifier_openvino() -> int:
+    reussi, detail = modules_openvino_importables()
+    _emettre("verification", f"{'ok' if reussi else 'ko'}|{detail}")
+    print(("  OK    " if reussi else "  ECHEC ") + "moteur OpenVINO : "
+          + ("installé" if reussi else "non installé") + (f" ({detail})" if detail else ""))
+    return 0 if reussi else 1
+
+
 def retirer(dossier: str | Path | None = None, vider_cache: bool = True) -> dict:
     """
     Efface le dossier d'extensions, et par défaut le cache de téléchargement.
@@ -746,6 +899,9 @@ def principal_cli(arguments: list[str]) -> int:
     analyseur.add_argument("--installer-locuteurs", dest="installer", action="store_true")
     analyseur.add_argument("--verifier-locuteurs", dest="verifier", action="store_true")
     analyseur.add_argument("--retirer-locuteurs", dest="retirer", action="store_true")
+    analyseur.add_argument("--installer-openvino", dest="installer_ov", action="store_true")
+    analyseur.add_argument("--verifier-openvino", dest="verifier_ov", action="store_true")
+    analyseur.add_argument("--retirer-openvino", dest="retirer_ov", action="store_true")
     analyseur.add_argument("--cible", default="")
     analyseur.add_argument("--paquets", default="")
     analyseur.add_argument("--index-url", dest="index", default="")
@@ -760,6 +916,25 @@ def principal_cli(arguments: list[str]) -> int:
         cible = DOSSIER
     else:
         cible = None  # mode source : on installe dans le « .venv »
+
+    if options.retirer_ov:
+        resultat = retirer(DOSSIER_OPENVINO, vider_cache=False)
+        print(f"  {'OK   ' if resultat['ok'] else 'ECHEC'}  retrait d'OpenVINO, "
+              f"{resultat['libere_go']:.2f} Go libérés {resultat['message_technique']}")
+        return 0 if resultat["ok"] else 1
+    if options.verifier_ov:
+        return _verifier_openvino()
+    if options.installer_ov:
+        cible_ov = (Path(options.cible).expanduser() if options.cible
+                    else (DOSSIER_OPENVINO if chemins.EST_GELE else None))
+        if cible_ov is not None:
+            try:
+                cible_ov.mkdir(parents=True, exist_ok=True)
+                DOSSIER_CACHE.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                _emettre("echec", f"dossier|{exc}")
+                return 2
+        return _installer_openvino(cible_ov)
 
     variante = "cuda" if options.cuda else ("cpu" if options.cpu else variante_materielle())
     paquets = [p.strip() for p in options.paquets.split(",") if p.strip()]
@@ -811,7 +986,8 @@ def commande_travailleur(options: list[str]) -> tuple[list[str], str]:
 
 def options_reconnues(arguments: list[str]) -> bool:
     return any(
-        argument in ("--installer-locuteurs", "--verifier-locuteurs", "--retirer-locuteurs")
+        argument in ("--installer-locuteurs", "--verifier-locuteurs", "--retirer-locuteurs",
+                     "--installer-openvino", "--verifier-openvino", "--retirer-openvino")
         for argument in arguments
     )
 

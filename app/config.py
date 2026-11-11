@@ -38,6 +38,7 @@ DEFAUTS: dict = {
     "beam_size": 0,                 # 0 = valeur du preset
     "condition_on_previous_text": True,
     "forcer_processeur": False,
+    "reglage_machine": {},          # réglage mesuré par le banc d'essai, voir app/reglage_machine.py
     "theme": "auto",                # auto | clair | sombre
     "zoom": 1.0,
     "journal_ouvert": False,

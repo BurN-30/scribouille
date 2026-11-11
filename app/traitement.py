@@ -23,8 +23,8 @@ from typing import Callable
 from . import audio as audio_module
 from . import calibration
 from . import config as config_module
-from . import diarisation, journal, langues, moteur, presets, reprise as reprise_module
-from . import sorties, vocabulaire
+from . import diarisation, energie, journal, langues, moteur, presets, reprise as reprise_module
+from . import reglage_machine, sorties, vocabulaire
 from .journal import ErreurLisible
 from .materiel import Materiel
 
@@ -64,6 +64,19 @@ class Rappels:
     termine: Callable[[str, dict], None] = lambda i, d: None
     journal_ui: Callable[[str, str], None] = lambda n, t: None
     file_terminee: Callable[[dict], None] = lambda d: None
+
+
+def fabriquer_moteur(mat: Materiel, reglages: dict):
+    """
+    Moteur de la file : OpenVINO si le réglage du poste le demande, sinon
+    CTranslate2. « Forcer le processeur » (mode avancé) ramène toujours au
+    chemin historique, CTranslate2 sur processeur.
+    """
+    if mat.moteur == "openvino" and not reglages.get("forcer_processeur"):
+        from . import moteur_openvino
+
+        return moteur_openvino.MoteurAvecRepli(mat, mat.peripherique_openvino or "CPU")
+    return moteur.MoteurTranscription(mat, forcer_processeur=bool(reglages.get("forcer_processeur")))
 
 
 class FileTraitement:
@@ -185,16 +198,25 @@ class FileTraitement:
 
     def _boucle(self, config: dict, rappels: Rappels) -> None:
         reglages = config_module.reglages_effectifs(config)
+        # Réglage mesuré sur ce poste par le banc d'essai, s'il a été accepté :
+        # moteur, périphérique, fils. Relu à chaque file, il suit les boutons
+        # « Appliquer » et « Revenir à l'automatique » sans redémarrage.
+        reglage_machine.appliquer_au_materiel(config, self.materiel)
         # Traitement par lots selon la mémoire de CE poste : la configuration
         # ne connaît pas le matériel, la file si.
         reglages["lot"] = presets.taille_lot(reglages["preset"], self.materiel)
+        impose = reglage_machine.lot_impose(config, self.materiel)
+        if impose is not None and reglages["lot"]:
+            # Le banc a mesuré mieux sur ce poste ; la garde mémoire, elle,
+            # reste prioritaire (un lot de 0 venu d'elle n'est jamais relevé).
+            reglages["lot"] = impose
         moteur.limiter_parallelisme(self.materiel.fils_calcul)
 
-        instance = moteur.MoteurTranscription(
-            self.materiel, forcer_processeur=reglages["forcer_processeur"]
-        )
+        instance = fabriquer_moteur(self.materiel, reglages)
 
         reussis, echoues, annules = 0, 0, 0
+        pleine_vitesse = energie.pleine_vitesse()
+        pleine_vitesse.__enter__()
         try:
             for element in list(self.elements):
                 if element.etat != "attente":
@@ -228,6 +250,7 @@ class FileTraitement:
         finally:
             instance.liberer()
             gc.collect()
+            pleine_vitesse.__exit__(None, None, None)
             self._en_cours = False
             rappels.file_terminee({
                 "total": reussis + echoues + annules,
@@ -366,10 +389,13 @@ class FileTraitement:
         # dehors. Une reprise après coupure ne compte pas : son temps de calcul
         # est réparti sur deux exécutions.
         if not deja_transcrits:
+            cle_calcul = getattr(instance, "cle_calcul", self.materiel.cle_calcul)
+            sur_openvino = cle_calcul.startswith("openvino")
             calibration.enregistrer(
-                reglages["modele"], self.materiel.peripherique,
-                int(reglages["beam_size"] or 0), duree_audio, temps_transcription,
-                self.materiel, lot=int(reglages.get("lot") or 0),
+                reglages["modele"], cle_calcul,
+                1 if sur_openvino else int(reglages["beam_size"] or 0),
+                duree_audio, temps_transcription, self.materiel,
+                lot=0 if sur_openvino else int(reglages.get("lot") or 0),
             )
 
         # 3. Libération AVANT la diarisation : c'est ce qui tient les 16 Go.
