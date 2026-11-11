@@ -751,7 +751,11 @@ _FR: dict[str, str] = {
         "Le modèle présent est incomplet, un téléchargement précédent a été interrompu. "
         "Il va être renouvelé automatiquement, environ {taille} vers « {dossier} »."
     ),
-    "app.arret": "Arrêt demandé, la transcription en cours va s'interrompre.",
+    "app.arret": (
+        "Arrêt demandé : la transcription s'interrompt à la fin du lot de passages en "
+        "cours, ce qui peut prendre plus d'une minute sur processeur. Avec la "
+        "sauvegarde progressive, le texte déjà produit est conservé."
+    ),
     "app.fichier_disparu": "Ce fichier n'existe plus.",
     "app.copie_ia": (
         "Instructions et transcription copiées, {n} caractères. Collez-les dans "
@@ -1494,7 +1498,11 @@ _EN: dict[str, str] = {
         "The model on this machine is incomplete, an earlier download was interrupted. "
         "It will be renewed automatically, about {taille} into \"{dossier}\"."
     ),
-    "app.arret": "Stop requested, the running transcription will be interrupted.",
+    "app.arret": (
+        "Stop requested: the transcription stops at the end of the current batch of "
+        "passages, which can take more than a minute on a CPU. With progressive "
+        "saving, text already produced is kept."
+    ),
     "app.fichier_disparu": "This file no longer exists.",
     "app.copie_ia": (
         "Instructions and transcript copied, {n} characters. Paste them into the "
