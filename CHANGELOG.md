@@ -96,6 +96,75 @@ défile.
 - La taille est reprise à chaque changement de grossissement et à chaque
   redimensionnement de la fenêtre.
 
+La transcription va deux fois et demie plus vite, à qualité égale.
+
+Les passages de parole repérés par la détection de voix sont maintenant décodés
+par lots de huit au lieu d'un par un, avec un fil de calcul par cœur physique.
+Mesuré coup sur coup sur les mêmes extraits (3 min 06 en français, 2 min 06 en
+anglais), sur un Ryzen 7 7800X3D occupé par d'autres programmes :
+
+| Réglage | Français : calcul, WER | Anglais : calcul, WER |
+|---|---|---|
+| Qualité maximale avant : large-v3, faisceau 8, un à un, 14 fils | 181 s, 7,5 % | 107 s, 9,2 % |
+| Qualité maximale 2.4.0 : large-v3, faisceau 5, par lots, 8 fils | 69 s, 7,3 % | 38 s, 8,9 % |
+| Rapide avant : turbo, un à un, 14 fils | 49 s, 10,2 % | 29 s, 11,4 % |
+| Rapide 2.4.0 : turbo, par lots, 8 fils | 27 s, 8,3 % | 18 s, 12,9 % |
+
+- **Le faisceau de la « Qualité maximale » passe de 8 à 5.** Par lots, la
+  largeur 8 alourdissait le calcul de 40 à 90 % sans changer un seul mot du
+  texte.
+- **Un fil de calcul par cœur physique**, comme le recommande CTranslate2 :
+  14 fils sur un 8 cœurs / 16 fils allaient moins vite que 8, et laissaient la
+  machine sans souffle.
+- **Il en coûte environ 2,5 Go de mémoire** au pic (5,8 Go avec large-v3).
+  Sous 12 Go de mémoire vive, l'application garde le traitement un à un.
+- **Chaque passage est transcrit sans le texte du précédent.** Les boucles de
+  répétition, qui se propageaient d'une fenêtre à l'autre sur les longues
+  réunions, n'ont plus de chemin pour le faire. L'option « Garder le contexte »
+  du mode avancé ne joue plus que sans lots.
+- **Un arrêt demandé attend la fin du lot en cours**, plus d'une minute
+  parfois sur processeur avec large-v3 : le message le dit.
+- **Point de vigilance relevé à la mesure** : en anglais, le preset « Rapide »
+  par lots a sauté une fin de phrase de huit mots que le traitement un à un
+  rendait. Rien de tel en français, ni avec large-v3.
+- Les mesures de recalibration du traitement par lots sont suivies à part :
+  celles déjà prises restent valables pour le traitement un à un.
+- **CTranslate2 passe de 4.7.1 à 4.9.0**, à vitesse et texte identiques sur
+  les extraits mesurés. La 4.8.1 corrige une division par zéro qui pouvait tuer
+  le processus pendant le calcul des horodatages de mots, que l'application
+  demande toujours.
+
+La séparation des locuteurs fonctionne avec pyannote.audio 4.
+
+La version 4 de pyannote.audio rend un objet là où la 3 rendait directement les
+tours de parole. L'application ne savait pas le lire : l'incident était
+rattrapé comme non bloquant, et toute transcription sortait sans locuteurs.
+C'est désormais la version « exclusive » des tours, sans chevauchement, qui est
+retenue : celle que pyannote destine au rapprochement avec une transcription.
+
+- **Et sans télémétrie.** pyannote.audio 4 envoie par défaut à son éditeur le
+  nom du pipeline, la durée de chaque fichier traité et le nombre de locuteurs
+  demandé. L'application coupe cet envoi avant de charger la bibliothèque,
+  comme elle le promet dans « Vie privée ».
+- **Une transcription reprise après une coupure** passait à la séparation des
+  locuteurs le seul morceau retranscrit : les étiquettes étaient décalées de la
+  position de reprise. Elle reçoit maintenant l'enregistrement entier.
+
+Le glossaire et les corrections d'exemple ne s'appliquent plus d'office.
+
+À la première installation, « Jean Dupont, MonEntreprise, Kubernetes... »
+partait en amorce dans chaque transcription, et la règle d'exemple
+« mon entreprise => MonEntreprise » réécrivait une tournure française courante.
+Les exemples restent visibles dans les deux fichiers, en commentaire. Les
+fichiers déjà en place chez un utilisateur ne sont pas touchés.
+
+La carte graphique affichée est la bonne.
+
+Les écrans virtuels des logiciels de bureau à distance (Parsec et consorts)
+passaient avant la vraie carte, et la mémoire des cartes de plus de 4 Go était
+annoncée à 4 Go, plafond de l'interface Windows interrogée. La carte dédiée la
+mieux dotée passe en tête, avec sa vraie mémoire, lue chez le pilote.
+
 ---
 
 ## 2.3.3
