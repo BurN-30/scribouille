@@ -40,3 +40,8 @@ _ffmpeg/
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Campagne de mesure : transcriptions du corpus et des réunions, corpus préparé.
+campagnes/
+corpus-campagne/
+corpus-campagne-v*.zip
