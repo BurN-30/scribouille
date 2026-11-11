@@ -1,10 +1,21 @@
 """
-Detection du materiel et recommandation.
+Détection du matériel et recommandation.
 
-Objectif : afficher honnetement ce que la machine sait faire, et rien de plus.
-CTranslate2 (le moteur de faster-whisper) n'accelere que sur NVIDIA. Les cartes
-AMD et Intel sont donc detectees et affichees, mais annoncees comme non
-accelerees en v1.
+Objectif : afficher honnêtement ce que la machine sait faire, et rien de plus.
+CTranslate2 (le moteur de faster-whisper) n'accélère que sur NVIDIA. Les puces
+graphiques et les NPU d'Intel peuvent servir par le moteur OpenVINO, en option
+(voir `app/moteur_openvino.py`) ; les cartes AMD restent affichées sans être
+exploitées.
+
+Processeurs hybrides
+--------------------
+Depuis la 12e génération, les processeurs Intel mêlent des cœurs performants et
+des cœurs efficaces, et les puces mobiles récentes (Core Ultra série U) ajoutent
+des cœurs « basse consommation » placés hors du cache L3 commun. Windows décrit
+tout cela par `GetLogicalProcessorInformationEx` : la classe d'efficacité de
+chaque cœur et les processeurs logiques que partage chaque cache. On en tire le
+décompte des trois familles (`Topologie`), qui sert au nombre de fils de calcul
+et au banc d'essai.
 
 Aucune dependance obligatoire : psutil est utilise s'il est present, sinon on
 retombe sur la bibliotheque standard et sur l'API Windows via ctypes.
@@ -16,6 +27,7 @@ import os
 import platform
 import re
 import shutil
+import struct
 import subprocess
 import sys
 from dataclasses import dataclass, field, asdict
@@ -39,6 +51,8 @@ class Gpu:
     vendeur: str  # "nvidia" | "amd" | "intel" | "autre"
     memoire_mo: int = 0
     accelere: bool = False
+    #: Version du pilote, telle que Windows la déclare (« 32.0.101.8801 »).
+    pilote: str = ""
     #: Cle de traduction de la note, resolue a l'affichage. Le materiel est
     #: detecte une fois pour toutes, la langue peut changer ensuite.
     note_cle: str = ""
@@ -46,7 +60,7 @@ class Gpu:
 
 @dataclass
 class Accelerateur:
-    """Circuit d'accélération detecte mais non exploite en v1 (NPU par exemple)."""
+    """Circuit d'accélération détecté (NPU), exploitable seulement par OpenVINO."""
 
     nom: str
     genre: str = "npu"
@@ -54,10 +68,48 @@ class Accelerateur:
 
 
 @dataclass
+class Topologie:
+    """
+    Décompte des cœurs par famille, tel que Windows le décrit.
+
+    `performants` : cœurs de la classe d'efficacité la plus haute (P-cores).
+    `efficaces` : autres cœurs qui partagent le cache L3 (E-cores).
+    `basse_consommation` : cœurs hors de tout cache L3 (LP E-cores des Core Ultra
+    série U), nettement plus lents. Sur un processeur homogène, tout est compté
+    en `performants` et `hybride` reste faux.
+    """
+
+    performants: int = 0
+    efficaces: int = 0
+    basse_consommation: int = 0
+    hybride: bool = False
+    #: Processeurs logiques des cœurs performants et efficaces : de quoi borner
+    #: l'affinité du calcul pour écarter les cœurs basse consommation.
+    logiques_principaux: list[int] = field(default_factory=list)
+
+    @property
+    def coeurs_principaux(self) -> int:
+        return self.performants + self.efficaces
+
+
+@dataclass
 class Materiel:
     cpu_nom: str = ""
     coeurs_physiques: int = 0
     coeurs_logiques: int = 0
+    topologie: Topologie = field(default_factory=Topologie)
+    #: Processeur mobile basse consommation (suffixe U ou V), 15 W environ.
+    basse_consommation: bool = False
+    #: Portable : une batterie est présente.
+    portable: bool = False
+    #: Nombre de fils imposé par un réglage mesuré sur ce poste (banc d'essai),
+    #: 0 pour le choix automatique.
+    fils_imposes: int = 0
+    #: Moteur retenu pour ce poste : « ctranslate2 » (défaut) ou « openvino »,
+    #: et périphérique d'OpenVINO (« CPU », « GPU », « NPU »). Posés par le
+    #: réglage machine (`app/reglage_machine.py`), jamais devinés.
+    moteur: str = "ctranslate2"
+    peripherique_openvino: str = ""
     ram_go: float = 0.0
     ram_libre_go: float = 0.0
     gpus: list[Gpu] = field(default_factory=list)
@@ -75,6 +127,18 @@ class Materiel:
         return "float16" if self.cuda_disponible else "int8"
 
     @property
+    def cle_calcul(self) -> str:
+        """
+        Situation de calcul, telle que les mesures de durée la rangent.
+
+        « cpu » ou « cuda » avec CTranslate2, « openvino-gpu » et consorts avec
+        OpenVINO : les vitesses n'ont rien de commun d'un moteur à l'autre.
+        """
+        if self.moteur == "openvino" and self.peripherique_openvino:
+            return "openvino-" + self.peripherique_openvino.lower()
+        return self.peripherique
+
+    @property
     def fils_calcul(self) -> int:
         """
         Un fil de calcul par coeur PHYSIQUE quand le processeur double ses coeurs.
@@ -84,11 +148,33 @@ class Materiel:
         par d'autres programmes : 8 fils transcrivent aussi vite que 14, voire
         plus, en laissant la moitie du processeur au reste de la machine. Sans
         hyperthreading, on laisse deux coeurs au systeme, comme avant.
+
+        Processeur hybride à trois familles (Core Ultra série U : 2 performants,
+        8 efficaces, 2 basse consommation) : un fil par cœur performant ou
+        efficace, les cœurs basse consommation à part. Ils plafonnent à 2,4 GHz
+        et n'ont pas de cache L3 ; CTranslate2 partage le travail à parts égales
+        entre ses fils, et le plus lent fixe la cadence. C'est un choix par
+        défaut raisonné, pas une mesure : le banc d'essai (`app/banc.py`) le
+        vérifie sur la machine et peut en imposer un autre (`fils_imposes`).
         """
         total = self.coeurs_logiques or os.cpu_count() or 4
+        if self.fils_imposes > 0:
+            return max(1, min(self.fils_imposes, total))
+        topo = self.topologie
+        if topo.hybride and topo.basse_consommation and topo.coeurs_principaux:
+            return max(1, min(total, topo.coeurs_principaux))
         if 0 < self.coeurs_physiques < total:
             return self.coeurs_physiques
         return max(1, total - 2)
+
+    @property
+    def fils_automatiques(self) -> int:
+        """Nombre de fils hors de tout réglage imposé."""
+        impose, self.fils_imposes = self.fils_imposes, 0
+        try:
+            return self.fils_calcul
+        finally:
+            self.fils_imposes = impose
 
     def en_dict(self) -> dict:
         donnees = asdict(self)
@@ -99,6 +185,8 @@ class Materiel:
         for circuit in donnees.get("npus") or []:
             circuit["note"] = langues.t(circuit["note_cle"]) if circuit.get("note_cle") else ""
         donnees["peripherique"] = self.peripherique
+        donnees["cle_calcul"] = self.cle_calcul
+        donnees["fils_automatiques"] = self.fils_automatiques
         donnees["type_calcul"] = self.type_calcul
         donnees["fils_calcul"] = self.fils_calcul
         donnees["resume"] = self.resume()
@@ -118,7 +206,14 @@ class Materiel:
 
     def resume(self) -> str:
         morceaux = [self.cpu_nom or langues.t("mat.cpu_inconnu")]
-        if self.coeurs_logiques:
+        topo = self.topologie
+        if topo.hybride and self.coeurs_logiques:
+            cle = "mat.hybride_trois" if topo.basse_consommation else "mat.hybride_deux"
+            morceaux.append(langues.t(
+                cle, p=topo.performants, e=topo.efficaces, lp=topo.basse_consommation,
+                fils=self.coeurs_logiques,
+            ))
+        elif self.coeurs_logiques:
             if self.coeurs_physiques and self.coeurs_physiques != self.coeurs_logiques:
                 morceaux.append(langues.t(
                     "mat.coeurs_fils",
@@ -139,6 +234,10 @@ class Materiel:
         if self.npus:
             morceaux.append(langues.t("mat.npu_non_exploite", nom=self.npus[0].nom))
         return ", ".join(morceaux)
+
+    def a_graphique_intel(self) -> bool:
+        """Puce ou carte graphique Intel présente, cible du plugin GPU d'OpenVINO."""
+        return any(g.vendeur == "intel" for g in self.gpus)
 
 
 # ---------------------------------------------------------------------------
@@ -177,6 +276,132 @@ def _coeurs() -> tuple[int, int]:
     except Exception:
         pass
     return physiques, logiques
+
+
+# ---------------------------------------------------------------------------
+# Topologie du processeur (GetLogicalProcessorInformationEx)
+#
+# Disposition des structures, d'après la documentation de winnt.h :
+#   SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX : Relationship (DWORD), Size (DWORD),
+#     puis l'union, à l'octet 8.
+#   PROCESSOR_RELATIONSHIP : Flags (BYTE), EfficiencyClass (BYTE) à l'octet 9,
+#     RelativePerformance et RelativeEfficiency (WORD), Reserved[16],
+#     GroupCount (WORD) à l'octet 30, GroupMask[] à l'octet 32.
+#   CACHE_RELATIONSHIP : Level (BYTE) à l'octet 8, ..., GroupCount (WORD) à
+#     l'octet 38 (zéro sur les systèmes antérieurs, qui n'ont qu'un masque),
+#     GroupMask[] à l'octet 40.
+#   GROUP_AFFINITY : Mask (8 octets), Group (WORD), Reserved[3] : 16 octets.
+# ---------------------------------------------------------------------------
+
+_RELATION_COEUR = 0
+_RELATION_CACHE = 2
+_RELATION_TOUT = 0xFFFF
+
+
+def _masques(tampon: bytes, debut: int, fin: int, nombre: int) -> set[int]:
+    logiques: set[int] = set()
+    for rang in range(max(1, nombre)):
+        position = debut + 16 * rang
+        if position + 10 > fin:
+            break
+        masque, groupe = struct.unpack_from("<QH", tampon, position)
+        logiques |= {groupe * 64 + bit for bit in range(64) if masque >> bit & 1}
+    return logiques
+
+
+def analyser_topologie(tampon: bytes) -> Topologie:
+    """
+    Décompte des familles de cœurs à partir du tampon brut de Windows.
+
+    Fonction pure, sans appel système : la vérification la nourrit d'un tampon
+    fabriqué pour un Core Ultra 5 225U, qu'aucun poste de test n'a sous la main.
+    """
+    coeurs: list[tuple[int, set[int]]] = []
+    caches_l3: list[set[int]] = []
+    position = 0
+    while position + 8 <= len(tampon):
+        relation, taille = struct.unpack_from("<II", tampon, position)
+        if taille < 8 or position + taille > len(tampon):
+            break
+        fin = position + taille
+        if relation == _RELATION_COEUR and taille >= 48:
+            classe = tampon[position + 9]
+            nombre = struct.unpack_from("<H", tampon, position + 30)[0]
+            coeurs.append((classe, _masques(tampon, position + 32, fin, nombre)))
+        elif relation == _RELATION_CACHE and taille >= 56 and tampon[position + 8] == 3:
+            nombre = struct.unpack_from("<H", tampon, position + 38)[0]
+            caches_l3.append(_masques(tampon, position + 40, fin, nombre))
+        position = fin
+
+    topo = Topologie()
+    if not coeurs:
+        return topo
+    classes = {classe for classe, _ in coeurs}
+    haute = max(classes)
+    couverts = set().union(*caches_l3) if caches_l3 else set()
+    hybride = len(classes) > 1
+    principaux: list[int] = []
+    for classe, logiques in coeurs:
+        if hybride and classe != haute and couverts and not (logiques & couverts):
+            topo.basse_consommation += 1
+            continue
+        if hybride and classe != haute:
+            topo.efficaces += 1
+        else:
+            topo.performants += 1
+        principaux += sorted(logiques)
+    if hybride and topo.basse_consommation and not topo.efficaces:
+        # Deux familles seulement, dont l'une hors du L3 (Lunar Lake : ses cœurs
+        # efficaces ont leur propre cache). Ce ne sont pas des cœurs d'appoint :
+        # ils comptent comme efficaces.
+        topo.efficaces, topo.basse_consommation = topo.basse_consommation, 0
+        principaux = sorted(set().union(*(logiques for _, logiques in coeurs)))
+    topo.hybride = hybride
+    topo.logiques_principaux = sorted(principaux)
+    return topo
+
+
+def _topologie() -> Topologie:
+    if sys.platform != "win32":
+        return Topologie()
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        noyau = ctypes.WinDLL("kernel32", use_last_error=True)
+        fonction = noyau.GetLogicalProcessorInformationEx
+        fonction.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.POINTER(wintypes.DWORD)]
+        fonction.restype = wintypes.BOOL
+        taille = wintypes.DWORD(0)
+        fonction(_RELATION_TOUT, None, ctypes.byref(taille))
+        if not taille.value:
+            return Topologie()
+        tampon = ctypes.create_string_buffer(taille.value)
+        if not fonction(_RELATION_TOUT, tampon, ctypes.byref(taille)):
+            return Topologie()
+        return analyser_topologie(tampon.raw[: taille.value])
+    except Exception as exc:  # pragma: no cover - dépend du poste
+        journal.debug("Topologie du processeur illisible : %s", exc)
+        return Topologie()
+
+
+#: Processeurs mobiles basse consommation : suffixe U ou V (Intel « 1255U »,
+#: « 225U », « 258V » ; AMD « 7530U »). Autour de 15 W de puissance de base,
+#: contre 65 à 120 W pour un processeur de bureau.
+_BASSE_CONSOMMATION = re.compile(r"\b\d{3,5}[UV]\b")
+
+
+def est_basse_consommation(nom_cpu: str) -> bool:
+    return bool(_BASSE_CONSOMMATION.search(nom_cpu or ""))
+
+
+def _portable() -> bool:
+    try:
+        import psutil  # type: ignore
+
+        return psutil.sensors_battery() is not None
+    except Exception:
+        return False
 
 
 def _memoire() -> tuple[float, float]:
@@ -302,7 +527,8 @@ def _cartes_graphiques() -> list[Gpu]:
     commande = [
         "powershell", "-NoProfile", "-NonInteractive", "-Command",
         "Get-CimInstance Win32_VideoController | "
-        "Select-Object Name,AdapterCompatibility,AdapterRAM | ConvertTo-Json -Compress",
+        "Select-Object Name,AdapterCompatibility,AdapterRAM,DriverVersion | "
+        "ConvertTo-Json -Compress",
     ]
     try:
         resultat = subprocess.run(
@@ -336,7 +562,8 @@ def _cartes_graphiques() -> list[Gpu]:
                     # Valeur plafonnée par WMI : mieux vaut ne rien afficher
                     # qu'annoncer 4 Go pour une carte qui en a 20.
                     memoire_mo = 0
-                cartes.append(Gpu(nom=nom, vendeur=_vendeur(nom, fabricant), memoire_mo=memoire_mo))
+                cartes.append(Gpu(nom=nom, vendeur=_vendeur(nom, fabricant), memoire_mo=memoire_mo,
+                                  pilote=str(entree.get("DriverVersion") or "").strip()))
     except Exception as exc:  # pragma: no cover - depend du poste
         journal.debug("Detection GPU impossible : %s", exc)
 
@@ -346,10 +573,10 @@ def _cartes_graphiques() -> list[Gpu]:
 
 def _accelerateurs_neuronaux() -> list[Accelerateur]:
     """
-    Repere un NPU (Intel AI Boost sur Meteor Lake, AMD XDNA, Qualcomm Hexagon).
+    Repère un NPU (Intel AI Boost des Core Ultra, AMD XDNA, Qualcomm Hexagon).
 
-    Purement informatif : aucun de ces circuits n'est exploite en v1. On les
-    affiche pour que l'utilisateur sache ce que sa machine possede.
+    Seul celui d'Intel peut servir, par le moteur OpenVINO et à titre
+    expérimental. Les autres sont affichés pour information.
     """
     trouves: list[Accelerateur] = []
     if sys.platform != "win32":
@@ -371,7 +598,9 @@ def _accelerateurs_neuronaux() -> list[Accelerateur]:
             nom = ligne.strip()
             if not nom:
                 continue
-            trouves.append(Accelerateur(nom=nom, genre="npu", note_cle="npu.note"))
+            intel = "intel" in nom.lower() or "ai boost" in nom.lower()
+            trouves.append(Accelerateur(
+                nom=nom, genre="npu", note_cle="npu.note.intel" if intel else "npu.note"))
     except Exception as exc:  # pragma: no cover - depend du poste
         journal.debug("Detection NPU impossible : %s", exc)
 
@@ -407,6 +636,7 @@ def detecter(forcer: bool = False) -> Materiel:
         return _CACHE
 
     physiques, logiques = _coeurs()
+    topologie = _topologie()
     total, libre = _memoire()
     cartes = _cartes_graphiques()
     neuronaux = _accelerateurs_neuronaux()
@@ -424,10 +654,14 @@ def detecter(forcer: bool = False) -> Materiel:
         else:
             carte.note_cle = "gpu.note.autre"
 
+    nom_cpu = _nom_cpu()
     _CACHE = Materiel(
-        cpu_nom=_nom_cpu(),
+        cpu_nom=nom_cpu,
         coeurs_physiques=physiques,
         coeurs_logiques=logiques,
+        topologie=topologie,
+        basse_consommation=est_basse_consommation(nom_cpu),
+        portable=_portable(),
         ram_go=total,
         ram_libre_go=libre,
         gpus=cartes,
@@ -438,6 +672,10 @@ def detecter(forcer: bool = False) -> Materiel:
     )
 
     journal.info("Matériel : %s", _CACHE.resume())
+    if topologie.hybride:
+        journal.info(
+            "Processeur hybride : %s performants, %s efficaces, %s basse consommation",
+            topologie.performants, topologie.efficaces, topologie.basse_consommation)
     journal.info(
         "Profil retenu : périphérique=%s, type de calcul=%s, fils=%s",
         _CACHE.peripherique, _CACHE.type_calcul, _CACHE.fils_calcul,
