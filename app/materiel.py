@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -222,6 +223,67 @@ def _vendeur(nom: str, fabricant: str = "") -> str:
     return "autre"
 
 
+#: Adaptateurs d'affichage qui ne sont pas des cartes : écrans virtuels posés par
+#: les logiciels de bureau à distance ou de diffusion (Parsec, Sunshine et ses
+#: dérivés), pilote d'affichage de base de Windows. Les montrer comme « carte
+#: graphique » trompe l'utilisateur, et c'est le premier de la liste que le
+#: résumé du matériel affiche.
+_ADAPTATEURS_VIRTUELS = re.compile(
+    r"virtual|basic (display|render)|remote display|mirror|indirect display|dummy",
+    re.IGNORECASE,
+)
+
+#: AdapterRAM est un entier 32 bits côté WMI : toute carte de 4 Go ou plus y
+#: plafonne à 4095 Mo. La vraie valeur est dans le registre du pilote.
+_PLAFOND_ADAPTER_RAM_MO = 4095
+
+_CLE_CLASSE_AFFICHAGE = (
+    r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"
+)
+
+
+def _memoires_registre() -> dict[str, int]:
+    """Mémoire dédiée par nom de carte, en Mo, lue dans la clé du pilote."""
+    trouves: dict[str, int] = {}
+    if sys.platform != "win32":
+        return trouves
+    try:
+        import winreg
+
+        classe = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, _CLE_CLASSE_AFFICHAGE)
+    except OSError:
+        return trouves
+    try:
+        index = 0
+        while True:
+            try:
+                nom_sous_cle = winreg.EnumKey(classe, index)
+            except OSError:
+                break
+            index += 1
+            try:
+                with winreg.OpenKey(classe, nom_sous_cle) as cle:
+                    description, _ = winreg.QueryValueEx(cle, "DriverDesc")
+                    taille, _ = winreg.QueryValueEx(cle, "HardwareInformation.qwMemorySize")
+            except OSError:
+                continue
+            try:
+                if isinstance(taille, bytes):
+                    taille = int.from_bytes(taille[:8], "little")
+                trouves[str(description).strip()] = int(taille) // (1024 * 1024)
+            except (TypeError, ValueError):
+                continue
+    finally:
+        winreg.CloseKey(classe)
+    return trouves
+
+
+def _rang_carte(carte: Gpu) -> tuple:
+    """Ordre d'affichage : carte dédiée d'abord, la plus dotée en mémoire en tête."""
+    priorite = {"nvidia": 0, "amd": 1, "intel": 2}.get(carte.vendeur, 3)
+    return (priorite, -carte.memoire_mo)
+
+
 def _cartes_graphiques() -> list[Gpu]:
     cartes: list[Gpu] = []
     if sys.platform != "win32":
@@ -244,9 +306,13 @@ def _cartes_graphiques() -> list[Gpu]:
             donnees = json.loads(sortie)
             if isinstance(donnees, dict):
                 donnees = [donnees]
+            registre = _memoires_registre()
             for entree in donnees:
                 nom = (entree.get("Name") or "").strip()
                 if not nom:
+                    continue
+                if _ADAPTATEURS_VIRTUELS.search(nom):
+                    journal.debug("Adaptateur virtuel ignoré : %s", nom)
                     continue
                 fabricant = (entree.get("AdapterCompatibility") or "").strip()
                 ram = entree.get("AdapterRAM") or 0
@@ -254,10 +320,17 @@ def _cartes_graphiques() -> list[Gpu]:
                     memoire_mo = max(0, int(ram) // (1024 * 1024))
                 except (TypeError, ValueError):
                     memoire_mo = 0
+                if registre.get(nom):
+                    memoire_mo = registre[nom]
+                elif memoire_mo >= _PLAFOND_ADAPTER_RAM_MO:
+                    # Valeur plafonnée par WMI : mieux vaut ne rien afficher
+                    # qu'annoncer 4 Go pour une carte qui en a 20.
+                    memoire_mo = 0
                 cartes.append(Gpu(nom=nom, vendeur=_vendeur(nom, fabricant), memoire_mo=memoire_mo))
     except Exception as exc:  # pragma: no cover - depend du poste
         journal.debug("Detection GPU impossible : %s", exc)
 
+    cartes.sort(key=_rang_carte)
     return cartes
 
 
