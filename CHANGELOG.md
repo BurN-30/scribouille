@@ -10,6 +10,56 @@ version : la chaîne de publication en extrait la section correspondant au tag.
 
 *Non publiée.*
 
+Choisir le réglage sur des réunions transcrites à la main : la campagne.
+
+La comparaison dit où deux moteurs divergent, pas lequel a raison. La campagne
+de mesure tranche : `scribouille-verifier.exe --campagne` transcrit 22,8
+minutes de réunions publiques en français (vingt extraits du corpus SUMM-RE
+ASRU, trois ou quatre voix, transcription manuelle alignée au mot, licence
+CC BY-SA 4.0) sous sept réglages, à armes égales : CTranslate2 large-v3
+faisceaux 5 et 1, OpenVINO large-v3 faisceaux 1 et 5, OpenVINO large-v3-turbo
+faisceaux 1 et 5, CTranslate2 large-v3-turbo faisceau 5. Pour chacun : taux
+d'erreur de mots avec intervalle à 95 %, substitutions, omissions, insertions,
+mots perdus quand deux personnes parlent en même temps, insertions longues
+(indice d'invention), vitesse, mémoire, segments trop longs, et un témoin de
+parole lue.
+
+- **Verdict**, la fiabilité d'abord : tout réglage plus lent que la réunion est
+  écarté ; parmi ceux dont le taux d'erreur ne se distingue pas du meilleur
+  (moins d'un point, ou écart apparié non significatif et sous deux points),
+  le plus rapide. Le rapport dit pourquoi, et ce que le choix coûte. Rien n'est
+  appliqué sans `--appliquer`, qui écrit moteur, périphérique, faisceau et
+  preset dans le réglage du poste.
+- **Corpus non embarqué** : le dépôt ne contient que la liste des extraits et
+  leurs empreintes. Le programme prend un paquet préparé posé à côté de lui
+  (`corpus-campagne-v1.zip`, 35 Mo, même licence que sa source) ou télécharge
+  les seules secondes utiles depuis Hugging Face, puis ORTOLANG (476 Mo).
+- **Reprise** : chaque réglage terminé est enregistré ; une relance ne refait
+  que ce qui manque. Le rapport donne l'heure de début et de fin de chaque
+  réglage.
+- **Réunion réelle** (`--reunion FICHIER --debut --duree`) : les mêmes
+  réglages sur un extrait confidentiel, l'accord de chacun avec le réglage
+  retenu et les termes du glossaire retrouvés, sans un mot du texte.
+- **Mots douteux** : OpenVINO ne donne aucune probabilité (vérifié : scores à
+  1, `logprobs` ignoré, une seule séquence rendue). La campagne mesure ce que
+  vaudrait une seconde passe d'un autre modèle pour les signaler, et à quel
+  coût, à côté des probabilités de CTranslate2.
+
+Corrigé
+
+- **Veille du poste** : une comparaison lancée en fin de journée ne démarrait
+  qu'au réveil du portable. Comparaison et campagne demandent à Windows de ne
+  pas mettre le système en veille pendant le calcul (`SetThreadExecutionState`,
+  demande propre au processus, relâchée à la fin ; aucun réglage modifié).
+- **Glossaire d'une installation ancienne** : jusqu'à la 2.3, les exemples
+  (« Jean Dupont », « MonEntreprise »...) étaient livrés actifs et le fichier
+  n'est jamais réécrit : ils partaient en amorce de chaque transcription, et la
+  règle « mon entreprise => MonEntreprise » réécrivait une tournure courante.
+  Un glossaire ou une table de corrections resté EXACTEMENT tel que livré est
+  remplacé à l'ouverture de la fenêtre par le modèle actuel (exemples en
+  commentaire), avec une copie de l'ancien. Un fichier retouché n'est pas
+  touché. L'amorce elle-même agit : vérifié sur les trois chemins de calcul.
+
 Comparer les deux moteurs sur ses propres enregistrements.
 
 Le banc d'essai de la 2.4.0 dit quel moteur va le plus vite, sur 44 s de

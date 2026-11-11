@@ -96,6 +96,14 @@ scribouille-verifier.exe --comparer "D:\Réunions\point-hebdo.m4a" --debut 00:05
 
 Ce que l'on sait déjà, mesuré sur trois réunions publiques à trois ou quatre voix (corpus SUMM-RE) avec le processeur : OpenVINO n'y est pas moins juste que CTranslate2, à égalité sur la parole d'une seule voix, un peu meilleur là où les voix se chevauchent. Ce n'est pas une garantie pour vos réunions, ni pour la puce graphique, qui calcule autrement (fp16) : la comparaison sert à le vérifier.
 
+**Choisir le réglage sur des réunions transcrites à la main : la campagne.** La comparaison montre où deux moteurs divergent, sans dire lequel a raison. La campagne le mesure, sur 22,8 minutes de réunions publiques en français à trois ou quatre voix, transcrites à la main (corpus SUMM-RE ASRU, Laboratoire Parole et Langage et LINAGORA, licence CC BY-SA 4.0) :
+
+```
+scribouille-verifier.exe --campagne
+```
+
+Sept réglages passent l'un après l'autre (CTranslate2 et OpenVINO, large-v3 et turbo, faisceaux 1 et 5), glossaire et corrections éteints. Le rapport, sans un mot transcrit ni chemin, donne pour chacun le taux d'erreur de mots avec son intervalle de confiance, les mots perdus quand deux personnes parlent en même temps, les insertions longues, la vitesse, puis le verdict : parmi les réglages plus rapides que la réunion et aussi justes que le meilleur, le plus rapide. `--appliquer` l'enregistre comme réglage du poste ; sans lui, rien ne change. Le corpus est lu dans `corpus-campagne-v1.zip` posé à côté du programme, ou téléchargé (476 Mo, Hugging Face puis ORTOLANG). Une campagne interrompue reprend où elle s'est arrêtée ; le poste ne se met pas en veille pendant le calcul. Compter une heure et demie sur un portable Core Ultra avec la puce graphique. `--reunion FICHIER --debut 00:05:00 --duree 600` passe ensuite les mêmes réglages sur une de vos réunions et donne leur accord avec le réglage retenu, toujours sans un mot du texte. Autres options : `--reglages ov-v3-f1,ct2-v3-f5`, `--limite-extraits 3`, `--recommencer`, `--corpus PAQUET.zip`, `--telecharger`.
+
 **Réseau d'entreprise filtré.** Si PyPI ou Hugging Face sont bloqués, les messages d'erreur donnent la voie hors ligne : pour un modèle, recopier son dossier `models--...` depuis un poste qui l'a déjà téléchargé dans le dossier des modèles ; pour OpenVINO, déposer les trois fichiers `.whl` (obtenus ailleurs par `pip download`) dans `paquets-hors-ligne\` du dossier de données, puis relancer l'installation. Aucun droit d'administrateur n'est demandé : tout s'installe dans le dossier de l'utilisateur.
 
 <details>

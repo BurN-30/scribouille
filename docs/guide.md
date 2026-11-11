@@ -96,6 +96,14 @@ scribouille-verifier.exe --comparer "D:\Meetings\weekly.m4a" --debut 00:05:00 --
 
 What is already known, measured on three public meetings with three or four voices (SUMM-RE corpus) on the processor: OpenVINO is not less accurate than CTranslate2 there, equal on single-voice speech, slightly better where voices overlap. That is no guarantee for your meetings, nor for the integrated graphics, which computes differently (fp16): the comparison is there to check it.
 
+**Choosing the setting on hand-transcribed meetings: the campaign.** The comparison shows where two engines diverge, without saying which is right. The campaign measures it, on 22.8 minutes of public French meetings with three or four voices, transcribed by hand (SUMM-RE ASRU corpus, Laboratoire Parole et Langage and LINAGORA, CC BY-SA 4.0 licence):
+
+```
+scribouille-verifier.exe --campagne
+```
+
+Seven settings run one after the other (CTranslate2 and OpenVINO, large-v3 and turbo, beams 1 and 5), glossary and corrections off. The report, without a transcribed word or path, gives for each the word error rate with its confidence interval, the words lost when two people speak at once, long insertions, speed, then the verdict: among the settings faster than the meeting and as accurate as the best, the fastest. `--appliquer` saves it as this computer's setting; without it, nothing changes. The corpus is read from `corpus-campagne-v1.zip` placed next to the program, or downloaded (476 MB, Hugging Face then ORTOLANG). An interrupted campaign resumes where it stopped; the computer does not go to sleep while it computes. Allow an hour and a half on a Core Ultra laptop with the graphics chip. `--reunion FILE --debut 00:05:00 --duree 600` then runs the same settings on one of your meetings and gives their agreement with the chosen setting, still without a word of the text. Other options: `--reglages ov-v3-f1,ct2-v3-f5`, `--limite-extraits 3`, `--recommencer`, `--corpus PACK.zip`, `--telecharger`.
+
 **Filtered company network.** If PyPI or Hugging Face are blocked, the error messages give the offline route: for a model, copy its `models--...` folder from a computer that already downloaded it into the models folder; for OpenVINO, drop the three `.whl` files (obtained elsewhere with `pip download`) into `paquets-hors-ligne\` in the data folder, then start the installation again. No administrator rights are needed: everything installs in the user's folder.
 
 <details>
