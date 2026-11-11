@@ -17,6 +17,9 @@ const etat = {
   historique: [],
   diarisation: { disponible: false, jeton_present: false, guide: {}, extension: {} },
   extensionEnCours: false,   // installation de la separation des locuteurs en cours
+  vitesse: {},               // moteur OpenVINO, reglage de vitesse, banc d'essai
+  ovEnCours: false,          // installation d'OpenVINO en cours
+  bancEnCours: false,        // banc d'essai en cours
   modeles: { dossier: '', presets: [] },
   versionInstallee: false,
   enCours: false,
@@ -65,6 +68,7 @@ function initialiser(d, silencieux) {
   etat.reprises = d.reprises || [];
   etat.surveillance = d.surveillance || etat.surveillance;
   etat.versionInstallee = !!d.version_installee;
+  etat.vitesse = d.vitesse || etat.vitesse;
 
   // Python fait autorite sur la langue : il l'a detectee au premier lancement
   // et l'a rangee dans la configuration. La langue provisoire posee au
@@ -85,6 +89,7 @@ function initialiser(d, silencieux) {
   majGlossaire(d.glossaire ? d.glossaire.resume : null);
   majCorrections(d.corrections || {});
   majDiarisation();
+  majVitesse();
   majModeles();
   majSurveillance();
   majQualiteLangue();
@@ -465,6 +470,163 @@ function onFinExtensionLocuteurs(bilan) {
     ? encartInfo(bilan.message) : encartAttention(bilan.message);
   journaliser(bilan.etat === 'annulee' ? 'info' : 'erreur', bilan.message);
   majDiarisation();
+}
+
+/* ------------------------------------------- Vitesse de cette machine
+
+   Deux outils, aucun automatisme : le moteur OpenVINO (option, pour les puces
+   Intel) s'installe sur demande, et le banc d'essai mesure plusieurs facons
+   de transcrire sur ce poste. Son conseil ne s'applique que sur un clic. */
+
+function majVitesse() {
+  const v = etat.vitesse || {};
+  const ov = v.openvino || {};
+  $('#vitesse-reglage').textContent = t('ui.vitesse.actuel', { reglage: v.resume_reglage || '--' });
+  const effet = v.effet || {};
+  $('#vitesse-alerte').innerHTML = effet.plantage
+    ? encartAttention(t('ui.vitesse.plantage', { peripherique: effet.plantage }))
+    : (effet.indisponible ? encartAttention(t('ui.vitesse.indisponible')) : '');
+
+  $('#ov-bloc').style.display = (ov.utile || ov.installee) ? 'block' : 'none';
+  const enCours = !!etat.ovEnCours;
+  $('#ov-en-cours').style.display = enCours ? 'block' : 'none';
+  $('#btn-installer-openvino').style.display = (!ov.installee && !enCours) ? '' : 'none';
+  $('#btn-retirer-openvino').style.display = (ov.installee && ov.mode_installe && !enCours) ? '' : 'none';
+  $('#libelle-installer-openvino').textContent = t('ui.ov.installer', {
+    taille: nombreLocal((ov.telechargement_go || 0.09) * 1000, 0),
+  });
+  if (ov.installee) {
+    const noms = (ov.peripheriques || []).map((p) => t('ui.ov.peripherique.' + p.toLowerCase()));
+    $('#ov-etat').textContent = t('ui.ov.installe', {
+      version: ov.version || '?', peripheriques: noms.join(', ') || '--',
+    });
+  } else {
+    $('#ov-etat').textContent = ov.hors_ligne
+      ? t('ui.ov.absent_hors_ligne', { n: ov.hors_ligne })
+      : t('ui.ov.absent');
+  }
+
+  const manquants = v.manquants || [];
+  $('#banc-manquants').textContent = manquants.length
+    ? t('ui.banc.manquants', { liste: manquants.map((m) => `${m.modele} (${m.taille})`).join(', ') })
+    : t('ui.banc.rien_a_telecharger');
+  $('#opt-banc-telecharger').disabled = !manquants.length;
+  $('#ligne-banc-npu').style.display =
+    (v.npu && (ov.peripheriques || []).indexOf('NPU') >= 0) ? '' : 'none';
+
+  const banc = !!v.banc_en_cours || !!etat.bancEnCours;
+  $('#banc-en-cours').style.display = banc ? 'block' : 'none';
+  $('#btn-lancer-banc').style.display = banc ? 'none' : '';
+  $('#btn-reglage-auto').style.display =
+    (v.reglage && Object.keys(v.reglage).length) ? '' : 'none';
+  if (v.conseil && Object.keys(v.conseil).length && !banc) {
+    $('#banc-resultat').style.display = 'block';
+    $('#banc-conseil').textContent = t('ui.banc.conseil', { reglage: v.resume_conseil || '--' });
+  }
+}
+
+async function installerOpenvino() {
+  $('#ov-retour').innerHTML = '';
+  $('#ov-message').textContent = t('ui.ext.demarrage');
+  $('#ov-detail').textContent = '';
+  $('#ov-barre').style.width = '0%';
+  etat.ovEnCours = true;
+  majVitesse();
+  const r = await pywebview.api.installer_openvino();
+  if (!r || !r.ok) {
+    etat.ovEnCours = false;
+    majVitesse();
+    $('#ov-retour').innerHTML = encartAttention((r && r.message) || t('ui.ext.echec_lancement'));
+  }
+}
+
+function onExtensionOpenvino(evenement) {
+  if (!etat.ovEnCours) return;
+  if (evenement.phase === 'octets') {
+    $('#ov-barre').style.width = Math.max(0, Math.min(100, evenement.pct || 0)) + '%';
+    $('#ov-detail').textContent = evenement.message || '';
+  } else if (evenement.phase === 'paquet') {
+    $('#ov-detail').textContent = evenement.message || '';
+  } else if (evenement.phase === 'detail') {
+    if (evenement.message) journaliser('attention', evenement.message);
+  } else if (evenement.message) {
+    $('#ov-message').textContent = evenement.message;
+  }
+}
+
+function onFinExtensionOpenvino(bilan) {
+  etat.ovEnCours = false;
+  if (bilan.vitesse) etat.vitesse = bilan.vitesse;
+  const ok = bilan.etat === 'installee';
+  $('#ov-retour').innerHTML = ok ? encartSucces(bilan.message)
+    : (bilan.etat === 'annulee' ? encartInfo(bilan.message) : encartAttention(bilan.message));
+  journaliser(ok ? 'ok' : (bilan.etat === 'annulee' ? 'info' : 'erreur'), bilan.message);
+  majVitesse();
+}
+
+async function lancerBanc() {
+  $('#banc-retour').innerHTML = '';
+  $('#banc-message').textContent = t('ui.banc.demarrage');
+  $('#banc-barre').style.width = '0%';
+  $('#banc-resultat').style.display = 'none';
+  etat.bancEnCours = true;
+  majVitesse();
+  const r = await pywebview.api.lancer_banc(
+    $('#opt-banc-telecharger').checked, $('#opt-banc-npu').checked);
+  if (!r || !r.ok) {
+    etat.bancEnCours = false;
+    majVitesse();
+    $('#banc-retour').innerHTML = encartAttention((r && r.message) || t('ui.ext.echec_lancement'));
+    return;
+  }
+  majBoutons();
+}
+
+function onBanc(etape) {
+  $('#banc-message').textContent = etape.message || '';
+  $('#banc-barre').style.width = Math.max(0, Math.min(100, etape.pct || 0)) + '%';
+}
+
+function onFinBanc(bilan) {
+  etat.bancEnCours = false;
+  if (bilan.vitesse) etat.vitesse = bilan.vitesse;
+  if (!bilan.ok) {
+    $('#banc-retour').innerHTML = encartAttention(bilan.message || '');
+    journaliser('erreur', bilan.message || '');
+    majVitesse();
+    majBoutons();
+    return;
+  }
+  $('#banc-rapport').value = bilan.rapport || '';
+  $('#banc-resultat').style.display = 'block';
+  $('#btn-appliquer-banc').disabled = !(bilan.conseil && Object.keys(bilan.conseil).length);
+  if (bilan.fichier) {
+    $('#banc-retour').innerHTML = encartInfo(t('ui.banc.fichier', { fichier: bilan.fichier }));
+  }
+  journaliser(bilan.annule ? 'attention' : 'ok',
+    t(bilan.annule ? 'ui.banc.arrete' : 'ui.banc.fini'));
+  majVitesse();
+  majBoutons();
+}
+
+async function appliquerBanc() {
+  const r = await pywebview.api.appliquer_conseil_banc();
+  $('#banc-retour').innerHTML = r.ok ? encartSucces(r.message) : encartAttention(r.message);
+  journaliser(r.ok ? 'ok' : 'attention', r.message);
+  if (r.ok) {
+    // Les estimations, la recommandation et la fiche materiel en dependent :
+    // tout est redemande a Python, comme apres un changement de langue.
+    const d = await pywebview.api.etat_initial();
+    initialiser(d, true);
+  }
+}
+
+async function revenirReglageAuto() {
+  const r = await pywebview.api.revenir_reglage_automatique();
+  journaliser('info', r.message);
+  const d = await pywebview.api.etat_initial();
+  initialiser(d, true);
+  $('#banc-retour').innerHTML = encartInfo(r.message);
 }
 
 /* ------------------------------------------------------ Dossier des modeles */
@@ -1318,7 +1480,7 @@ function setEtat(texte, classe) {
 
 function majBoutons() {
   const enAttente = Array.from(etat.fichiers.values()).filter((f) => f.etat === 'attente').length;
-  $('#btn-lancer').disabled = etat.enCours || !enAttente || !etat.pret;
+  $('#btn-lancer').disabled = etat.enCours || etat.bancEnCours || !enAttente || !etat.pret;
   $('#btn-arreter').disabled = !etat.enCours;
   $('#btn-lancer').innerHTML = icone('i-lecture', 'icone-s') + ' '
     + ech(enAttente > 1 ? t('ui.bouton.lancer_n', { n: enAttente }) : t('ui.bouton.lancer'));
@@ -1827,6 +1989,28 @@ document.addEventListener('DOMContentLoaded', () => {
     journaliser(r.ok ? 'info' : 'erreur', r.message);
     majDiarisation();
   });
+
+  // Vitesse de cette machine : moteur OpenVINO et banc d'essai
+  $('#btn-installer-openvino').addEventListener('click', installerOpenvino);
+  $('#btn-annuler-openvino').addEventListener('click', () => pywebview.api.annuler_installation_openvino());
+  $('#btn-retirer-openvino').addEventListener('click', async () => {
+    const r = await pywebview.api.retirer_openvino();
+    if (r.vitesse) etat.vitesse = r.vitesse;
+    $('#ov-retour').innerHTML = r.ok ? encartInfo(r.message) : encartAttention(r.message);
+    journaliser(r.ok ? 'info' : 'erreur', r.message);
+    majVitesse();
+  });
+  $('#btn-lancer-banc').addEventListener('click', lancerBanc);
+  $('#btn-arreter-banc').addEventListener('click', () => {
+    $('#banc-message').textContent = t('ui.banc.arret_demande');
+    pywebview.api.arreter_banc();
+  });
+  $('#btn-appliquer-banc').addEventListener('click', appliquerBanc);
+  $('#btn-copier-banc').addEventListener('click', () => {
+    pywebview.api.copier($('#banc-rapport').value || '');
+    journaliser('ok', t('ui.banc.copie'));
+  });
+  $('#btn-reglage-auto').addEventListener('click', revenirReglageAuto);
 
   // Jeton Hugging Face
   $('#btn-jeton').addEventListener('click', ouvrirModaleJeton);

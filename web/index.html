@@ -363,6 +363,88 @@
       <div id="ext-retour" style="margin-top:8px"></div>
     </div>
 
+    <!-- Vitesse de cette machine : moteur OpenVINO (option) et banc d'essai.
+         Rien ne change sans un clic sur « Appliquer ». -->
+    <div class="bloc-reglage" id="bloc-vitesse">
+      <span class="titre-section" data-i18n="ui.section.vitesse"></span>
+      <div class="sous-libelle" id="vitesse-reglage">--</div>
+      <div id="vitesse-alerte"></div>
+
+      <div id="ov-bloc" class="etape-extension" style="margin-top:10px">
+        <div class="sous-libelle" id="ov-etat">--</div>
+        <button class="bouton" id="btn-installer-openvino" style="width:100%;margin-top:8px">
+          <svg class="icone-s icone"><use href="#i-import"></use></svg>
+          <span id="libelle-installer-openvino"></span>
+        </button>
+        <div id="ov-en-cours" class="etape-extension" style="display:none;margin-top:8px">
+          <div class="sous-libelle" id="ov-message">--</div>
+          <div class="barre"><span id="ov-barre" style="width:0%"></span></div>
+          <div class="sous-libelle ext-chiffres" id="ov-detail">--</div>
+          <button class="bouton" id="btn-annuler-openvino" style="width:100%;margin-top:8px">
+            <svg class="icone-s icone"><use href="#i-croix"></use></svg>
+            <span data-i18n="ui.ext.annuler"></span>
+          </button>
+        </div>
+        <button class="bouton bouton-discret" id="btn-retirer-openvino" style="width:100%;margin-top:8px;display:none">
+          <svg class="icone-s icone"><use href="#i-corbeille"></use></svg>
+          <span data-i18n="ui.ov.retirer"></span>
+        </button>
+        <span class="aide" data-i18n="ui.ov.aide"></span>
+        <div id="ov-retour" style="margin-top:8px"></div>
+      </div>
+
+      <div class="etape-extension" style="margin-top:12px">
+        <label class="bascule">
+          <input type="checkbox" id="opt-banc-telecharger">
+          <span class="piste"></span>
+          <span>
+            <span class="libelle" data-i18n="ui.banc.telecharger"></span><br>
+            <span class="sous-libelle" id="banc-manquants">--</span>
+          </span>
+        </label>
+        <label class="bascule" id="ligne-banc-npu" style="display:none">
+          <input type="checkbox" id="opt-banc-npu">
+          <span class="piste"></span>
+          <span>
+            <span class="libelle" data-i18n="ui.banc.npu"></span><br>
+            <span class="sous-libelle" data-i18n="ui.banc.npu_aide"></span>
+          </span>
+        </label>
+        <button class="bouton bouton-accent" id="btn-lancer-banc" style="width:100%;margin-top:8px">
+          <svg class="icone-s icone"><use href="#i-horloge"></use></svg>
+          <span data-i18n="ui.banc.lancer"></span>
+        </button>
+        <div id="banc-en-cours" class="etape-extension" style="display:none;margin-top:8px">
+          <div class="sous-libelle" id="banc-message">--</div>
+          <div class="barre"><span id="banc-barre" style="width:0%"></span></div>
+          <button class="bouton" id="btn-arreter-banc" style="width:100%;margin-top:8px">
+            <svg class="icone-s icone"><use href="#i-arret"></use></svg>
+            <span data-i18n="ui.banc.arreter"></span>
+          </button>
+        </div>
+        <div id="banc-resultat" class="etape-extension" style="display:none;margin-top:8px">
+          <div class="sous-libelle" id="banc-conseil">--</div>
+          <textarea id="banc-rapport" readonly spellcheck="false" rows="9"
+                    style="width:100%;margin-top:6px;font-size:11px"></textarea>
+          <div style="display:flex;gap:8px;margin-top:6px">
+            <button class="bouton bouton-accent" id="btn-appliquer-banc" style="flex:1">
+              <svg class="icone-s icone"><use href="#i-coche"></use></svg>
+              <span data-i18n="ui.banc.appliquer"></span>
+            </button>
+            <button class="bouton" id="btn-copier-banc" data-i18n-title="ui.banc.copier">
+              <svg class="icone-s icone"><use href="#i-copie"></use></svg>
+            </button>
+          </div>
+        </div>
+        <button class="bouton bouton-discret" id="btn-reglage-auto" style="width:100%;margin-top:8px;display:none">
+          <svg class="icone-s icone"><use href="#i-reprise"></use></svg>
+          <span data-i18n="ui.vitesse.auto"></span>
+        </button>
+        <span class="aide" data-i18n="ui.banc.aide"></span>
+        <div id="banc-retour" style="margin-top:8px"></div>
+      </div>
+    </div>
+
     <div class="bloc-reglage">
       <span class="titre-section" data-i18n="ui.section.modeles"></span>
       <div class="sous-libelle" id="etat-modeles">--</div>

@@ -154,6 +154,16 @@ _FR: dict[str, str] = {
         "Transcription sur processeur : le preset « Qualité maximale » est le bon choix "
         "pour les réunions, il suffit de le lancer et de laisser tourner."
     ),
+    "reco.processeur_lent": (
+        "Processeur peu puissant : une heure de réunion demanderait environ {qualite} "
+        "en « Qualité maximale », contre {rapide} en « Rapide ». Le banc d'essai "
+        "(réglages, section Vitesse de cette machine) mesure les vrais chiffres en "
+        "quelques minutes."
+    ),
+    "reco.openvino": (
+        "Puce Intel exploitée par OpenVINO : une heure de réunion demanderait environ "
+        "{qualite} en « Qualité maximale », {rapide} en « Rapide »."
+    ),
     "avert.memoire_tres_serree": (
         "Cette machine annonce {ram} Go de mémoire vive. Le modèle large-v3 risque de "
         "saturer : préférez le preset « Rapide »."
@@ -177,6 +187,10 @@ _FR: dict[str, str] = {
     "mat.cpu_inconnu": "Processeur inconnu",
     "mat.fils": "{n} fils",
     "mat.coeurs_fils": "{coeurs} cœurs / {fils} fils",
+    "mat.hybride_trois": (
+        "{p} cœurs performants, {e} efficaces et {lp} basse consommation / {fils} fils"
+    ),
+    "mat.hybride_deux": "{p} cœurs performants et {e} efficaces / {fils} fils",
     "mat.memoire": "{go} Go de mémoire",
     "mat.gpu_accelere": "{nom} (accéléré)",
     "mat.gpu_non_accelere": "{nom} (non exploitée)",
@@ -193,13 +207,18 @@ _FR: dict[str, str] = {
         "pas encore."
     ),
     "gpu.note.intel": (
-        "Circuit graphique intégré, détecté mais non exploité : la transcription "
-        "tourne sur le processeur."
+        "Circuit graphique intégré. Le moteur OpenVINO, à installer en option "
+        "(réglages, section Vitesse de cette machine), sait y transcrire ; sans lui, "
+        "le processeur travaille seul."
     ),
     "gpu.note.autre": "Non exploitée.",
     "npu.note": (
         "Détecté, non exploité. Un NPU vise surtout l'autonomie sur batterie, la "
         "transcription tourne sur le processeur."
+    ),
+    "npu.note.intel": (
+        "Exploitable à titre expérimental par le moteur OpenVINO (option). Rien n'est "
+        "promis : le banc d'essai dit s'il tient sur cette machine."
     ),
 
     # -- chemins et dossiers (app/chemins.py) ------------------------------
@@ -271,6 +290,86 @@ _FR: dict[str, str] = {
         "relancez le fichier. Une fois téléchargé, le modèle reste local et "
         "l'application n'a plus besoin du réseau."
     ),
+    # -- moteur OpenVINO (app/moteur_openvino.py) ---------------------------
+    "ov.peripherique.cpu": "processeur",
+    "ov.peripherique.gpu": "puce graphique Intel",
+    "ov.peripherique.npu": "NPU Intel",
+    "ov.modele_absent.titre": "Modèle sans version OpenVINO",
+    "ov.modele_absent.msg": (
+        "Le modèle {modele} n'existe pas au format d'OpenVINO. Choisissez un modèle du "
+        "catalogue, ou revenez au moteur habituel (réglages, Vitesse de cette machine)."
+    ),
+    "ov.chargement": "Chargement du modèle {modele} sur {peripherique} (OpenVINO)...",
+    "ov.repli": (
+        "OpenVINO n'a pas pu travailler sur {peripherique} : la transcription continue "
+        "avec le moteur habituel, sur le processeur. Le détail est dans le journal."
+    ),
+
+    # -- banc d'essai (app/banc.py) --------------------------------------
+    "banc.titre": "Banc d'essai {nom} {version}, {date}",
+    "banc.section.materiel": "Matériel",
+    "banc.processeur": "Processeur",
+    "banc.topologie": "{p} cœurs performants, {e} efficaces, {lp} basse consommation, {fils} fils",
+    "banc.coeurs": "{coeurs} cœurs, {fils} fils",
+    "banc.fils_auto": "Fils de calcul choisis d'office : {n}",
+    "banc.memoire": "Mémoire vive",
+    "banc.graphique": "Graphique",
+    "banc.pilote": "pilote",
+    "banc.alimentation": "Alimentation",
+    "banc.secteur": "sur secteur (batterie {pct} %)",
+    "banc.batterie": "SUR BATTERIE ({pct} %), chiffres moins représentatifs",
+    "banc.secteur_sans_batterie": "sur secteur",
+    "banc.mode_alimentation": "mode {mode}",
+    "banc.systeme": "Système",
+    "banc.non_installe": "non installé",
+    "banc.section.essais": "Essais (extrait de {duree} s, texte comparé à la référence)",
+    "banc.libelle_ct2": "CTranslate2, {modele}, {fils} fils, {lots}",
+    "banc.libelle_ov": "OpenVINO {peripherique}, {modele}",
+    "banc.lots": "lots de {n}",
+    "banc.un_a_un": "un à un",
+    "banc.affinite": "cœurs basse consommation écartés",
+    "banc.ligne": (
+        "{reglage} : {calcul} s de calcul, facteur {facteur}, WER {wer} %, "
+        "chargement {chargement} s, mémoire {memoire} Go"
+    ),
+    "banc.etat.erreur": "échec",
+    "banc.etat.annule": "annulé",
+    "banc.etat.delai": "abandonné, délai dépassé",
+    "banc.etat.modele_absent": "modèle absent, non téléchargé",
+    "banc.section.conseil": "Réglage conseillé",
+    "banc.aucun_conseil": "aucun essai n'a abouti, pas de conseil possible.",
+    "banc.conseil_openvino": "moteur OpenVINO sur {peripherique}",
+    "banc.conseil_ct2": "moteur CTranslate2, {fils} fils, lots de {lot} (0 = un à un)",
+    "banc.pour_une_heure": "{preset} : environ {duree} pour une heure d'audio (facteur {facteur})",
+    "banc.derive": "premier essai refait à la fin : écart de {ecart} % (chauffe ou charge de la machine)",
+    "banc.duree_totale": "Durée du banc : {duree}.",
+    "banc.remarque": (
+        "Ce rapport ne contient ni nom d'utilisateur, ni nom de machine, ni chemin. "
+        "Le facteur est la durée de calcul divisée par la durée de l'audio."
+    ),
+    "banc.extrait_absent.titre": "Extrait du banc introuvable",
+    "banc.extrait_absent.msg": (
+        "L'extrait audio du banc d'essai manque à l'installation. Réinstallez "
+        "l'application."
+    ),
+    "banc.etape.telechargement": "Téléchargement du modèle {modele} ({taille})...",
+    "banc.etape.telechargement_echoue": "Modèle {modele} non téléchargé : {detail}",
+    "banc.etape.essai": "Essai {numero} sur {total} environ : {reglage}",
+    "banc.etape.fini": "Banc terminé.",
+    "banc.cli.fichier": "Rapport enregistré : {fichier}",
+    "banc.cli.applique": "Réglage conseillé appliqué.",
+    "banc.cli.appliquer": (
+        "Pour appliquer le réglage conseillé : bouton « Appliquer » dans les réglages, "
+        "ou relancer avec --appliquer."
+    ),
+
+    "moteur.hors_ligne": (
+        "Sans accès à Hugging Face (réseau filtré), une voie hors ligne existe : sur "
+        "un poste où Scribouille a déjà téléchargé ce modèle, copiez le dossier "
+        "« {dossier_cache} » de son dossier des modèles, puis collez-le tel quel dans "
+        "{dossier}. Il sera reconnu sans aucun appel réseau. Dépôt d'origine : "
+        "https://huggingface.co/{depot}"
+    ),
     "moteur.chargement": "Chargement du modèle {modele}...",
     "moteur.taille_inconnue": "quelques centaines de Mo à 3 Go",
 
@@ -327,6 +426,31 @@ _FR: dict[str, str] = {
     ),
     "ext.lot.locuteurs": "PyTorch et pyannote.audio",
     "ext.lot.paquets": "composants",
+    "ext.lot.openvino": "le moteur OpenVINO",
+    "ov.installe": "Moteur OpenVINO installé. Lancez le banc d'essai pour savoir s'il va plus vite ici.",
+    "ov.installation_echec": (
+        "L'installation d'OpenVINO a échoué : le réseau bloque peut-être PyPI. Voie hors "
+        "ligne : sur un poste qui y a accès, lancez « pip download --no-deps "
+        "openvino==2026.4.1 openvino-tokenizers==2026.4.1.0 openvino-genai==2026.4.1.0 "
+        "--python-version 3.12 --only-binary=:all: --platform win_amd64 -d roues », puis "
+        "copiez les trois fichiers .whl dans {dossier} et relancez l'installation."
+    ),
+    "ov.retrait_sources": (
+        "Depuis les sources, OpenVINO vit dans l'environnement « .venv » : retirez-le avec "
+        "pip uninstall openvino-genai openvino-tokenizers openvino."
+    ),
+    "ov.retrait_echec": (
+        "Le dossier d'OpenVINO n'a pas pu être effacé, sans doute parce qu'il sert encore. "
+        "Fermez Scribouille, rouvrez-le, puis recommencez."
+    ),
+    "app.banc.en_cours": "Le banc d'essai tourne : attendez sa fin ou arrêtez-le.",
+    "app.banc.file_occupee": "Une transcription est en cours : le banc attendra qu'elle soit finie.",
+    "vitesse.automatique": "réglage automatique ({fils} fils de calcul, moteur habituel)",
+    "vitesse.reglage_ov": "moteur OpenVINO sur {peripherique}",
+    "vitesse.reglage_ct2": "moteur habituel, {fils} fils, {lots}",
+    "vitesse.aucun_conseil": "Aucun conseil à appliquer : lancez d'abord le banc d'essai.",
+    "vitesse.applique": "Réglage appliqué : {reglage}.",
+    "vitesse.retour_auto": "Retour au réglage automatique.",
     "ext.etape.preparation": "Préparation de l'installation...",
     "ext.etape.installation": "Installation de {nom}...",
     "ext.etape.lot": "Étape {numero} sur {total} : {nom}",
@@ -932,6 +1056,15 @@ _EN: dict[str, str] = {
         "Transcription on the CPU: the \"Highest quality\" preset is the right choice for "
         "meetings, just start it and let it run."
     ),
+    "reco.processeur_lent": (
+        "Low-power processor: one hour of meeting would take about {qualite} with "
+        "\"Highest quality\", against {rapide} with \"Fast\". The benchmark (settings, "
+        "Speed of this machine section) measures the real figures in a few minutes."
+    ),
+    "reco.openvino": (
+        "Intel chip used through OpenVINO: one hour of meeting would take about "
+        "{qualite} with \"Highest quality\", {rapide} with \"Fast\"."
+    ),
     "avert.memoire_tres_serree": (
         "This machine reports {ram} GB of RAM. The large-v3 model is likely to run out of "
         "memory: use the \"Fast\" preset instead."
@@ -952,6 +1085,10 @@ _EN: dict[str, str] = {
     "mat.cpu_inconnu": "Unknown processor",
     "mat.fils": "{n} threads",
     "mat.coeurs_fils": "{coeurs} cores / {fils} threads",
+    "mat.hybride_trois": (
+        "{p} performance, {e} efficient and {lp} low-power cores / {fils} threads"
+    ),
+    "mat.hybride_deux": "{p} performance and {e} efficient cores / {fils} threads",
     "mat.memoire": "{go} GB of memory",
     "mat.gpu_accelere": "{nom} (accelerated)",
     "mat.gpu_non_accelere": "{nom} (not used)",
@@ -967,12 +1104,17 @@ _EN: dict[str, str] = {
         "cards (ROCm), but the application does not ship it yet."
     ),
     "gpu.note.intel": (
-        "Integrated graphics, detected but not used: transcription runs on the CPU."
+        "Integrated graphics. The OpenVINO engine, an optional install (settings, Speed "
+        "of this machine section), can transcribe on it; without it, the CPU works alone."
     ),
     "gpu.note.autre": "Not used.",
     "npu.note": (
         "Detected, not used. An NPU mainly targets battery life; transcription runs "
         "on the CPU."
+    ),
+    "npu.note.intel": (
+        "Usable on an experimental basis by the OpenVINO engine (option). Nothing is "
+        "promised: the benchmark tells whether it holds up on this machine."
     ),
 
     "chemin.dossier_non_cree": "This folder could not be created ({erreur}).",
@@ -1039,6 +1181,86 @@ _EN: dict[str, str] = {
         "file again. Once downloaded, the model stays local and the application no "
         "longer needs the network."
     ),
+    # -- OpenVINO engine (app/moteur_openvino.py) ---------------------------
+    "ov.peripherique.cpu": "CPU",
+    "ov.peripherique.gpu": "Intel graphics",
+    "ov.peripherique.npu": "Intel NPU",
+    "ov.modele_absent.titre": "Model without an OpenVINO version",
+    "ov.modele_absent.msg": (
+        "Model {modele} does not exist in OpenVINO format. Pick a model from the "
+        "catalogue, or go back to the usual engine (settings, Speed of this machine)."
+    ),
+    "ov.chargement": "Loading model {modele} on {peripherique} (OpenVINO)...",
+    "ov.repli": (
+        "OpenVINO could not run on {peripherique}: transcription carries on with the "
+        "usual engine, on the CPU. Details are in the log."
+    ),
+
+    # -- benchmark (app/banc.py) -------------------------------------------
+    "banc.titre": "{nom} {version} benchmark, {date}",
+    "banc.section.materiel": "Hardware",
+    "banc.processeur": "Processor",
+    "banc.topologie": "{p} performance, {e} efficient, {lp} low-power cores, {fils} threads",
+    "banc.coeurs": "{coeurs} cores, {fils} threads",
+    "banc.fils_auto": "Compute threads chosen by default: {n}",
+    "banc.memoire": "Memory",
+    "banc.graphique": "Graphics",
+    "banc.pilote": "driver",
+    "banc.alimentation": "Power",
+    "banc.secteur": "plugged in (battery {pct}%)",
+    "banc.batterie": "ON BATTERY ({pct}%), figures less representative",
+    "banc.secteur_sans_batterie": "plugged in",
+    "banc.mode_alimentation": "{mode} plan",
+    "banc.systeme": "System",
+    "banc.non_installe": "not installed",
+    "banc.section.essais": "Runs ({duree} s clip, text compared with the reference)",
+    "banc.libelle_ct2": "CTranslate2, {modele}, {fils} threads, {lots}",
+    "banc.libelle_ov": "OpenVINO {peripherique}, {modele}",
+    "banc.lots": "batches of {n}",
+    "banc.un_a_un": "one by one",
+    "banc.affinite": "low-power cores left out",
+    "banc.ligne": (
+        "{reglage}: {calcul} s of compute, factor {facteur}, WER {wer}%, "
+        "loading {chargement} s, memory {memoire} GB"
+    ),
+    "banc.etat.erreur": "failed",
+    "banc.etat.annule": "cancelled",
+    "banc.etat.delai": "given up, time limit exceeded",
+    "banc.etat.modele_absent": "model missing, not downloaded",
+    "banc.section.conseil": "Recommended setting",
+    "banc.aucun_conseil": "no run succeeded, no recommendation possible.",
+    "banc.conseil_openvino": "OpenVINO engine on {peripherique}",
+    "banc.conseil_ct2": "CTranslate2 engine, {fils} threads, batches of {lot} (0 = one by one)",
+    "banc.pour_une_heure": "{preset}: about {duree} for one hour of audio (factor {facteur})",
+    "banc.derive": "first run repeated at the end: {ecart}% difference (heat or machine load)",
+    "banc.duree_totale": "Benchmark duration: {duree}.",
+    "banc.remarque": (
+        "This report contains no user name, machine name or path. The factor is the "
+        "compute time divided by the audio duration."
+    ),
+    "banc.extrait_absent.titre": "Benchmark clip not found",
+    "banc.extrait_absent.msg": (
+        "The benchmark audio clip is missing from the installation. Reinstall the "
+        "application."
+    ),
+    "banc.etape.telechargement": "Downloading model {modele} ({taille})...",
+    "banc.etape.telechargement_echoue": "Model {modele} not downloaded: {detail}",
+    "banc.etape.essai": "Run {numero} of about {total}: {reglage}",
+    "banc.etape.fini": "Benchmark finished.",
+    "banc.cli.fichier": "Report saved: {fichier}",
+    "banc.cli.applique": "Recommended setting applied.",
+    "banc.cli.appliquer": (
+        "To apply the recommended setting: \"Apply\" button in the settings, or run "
+        "again with --appliquer."
+    ),
+
+    "moteur.hors_ligne": (
+        "Without access to Hugging Face (filtered network), there is an offline route: "
+        "on a computer where Scribouille has already downloaded this model, copy the "
+        "“{dossier_cache}” folder from its models folder, then paste it as is into "
+        "{dossier}. It will be recognised without any network call. Original "
+        "repository: https://huggingface.co/{depot}"
+    ),
     "moteur.chargement": "Loading model {modele}...",
     "moteur.taille_inconnue": "a few hundred MB up to 3 GB",
 
@@ -1090,6 +1312,31 @@ _EN: dict[str, str] = {
     ),
     "ext.lot.locuteurs": "PyTorch and pyannote.audio",
     "ext.lot.paquets": "components",
+    "ext.lot.openvino": "the OpenVINO engine",
+    "ov.installe": "OpenVINO engine installed. Run the benchmark to find out whether it is faster here.",
+    "ov.installation_echec": (
+        "OpenVINO installation failed: the network may be blocking PyPI. Offline route: "
+        "on a computer with access, run \"pip download --no-deps openvino==2026.4.1 "
+        "openvino-tokenizers==2026.4.1.0 openvino-genai==2026.4.1.0 --python-version 3.12 "
+        "--only-binary=:all: --platform win_amd64 -d wheels\", then copy the three .whl "
+        "files into {dossier} and start the installation again."
+    ),
+    "ov.retrait_sources": (
+        "From source, OpenVINO lives in the \".venv\" environment: remove it with "
+        "pip uninstall openvino-genai openvino-tokenizers openvino."
+    ),
+    "ov.retrait_echec": (
+        "The OpenVINO folder could not be deleted, probably because it is still in use. "
+        "Close Scribouille, open it again, then retry."
+    ),
+    "app.banc.en_cours": "The benchmark is running: wait for it to finish or stop it.",
+    "app.banc.file_occupee": "A transcription is running: the benchmark will wait until it is done.",
+    "vitesse.automatique": "automatic setting ({fils} compute threads, usual engine)",
+    "vitesse.reglage_ov": "OpenVINO engine on {peripherique}",
+    "vitesse.reglage_ct2": "usual engine, {fils} threads, {lots}",
+    "vitesse.aucun_conseil": "No recommendation to apply: run the benchmark first.",
+    "vitesse.applique": "Setting applied: {reglage}.",
+    "vitesse.retour_auto": "Back to the automatic setting.",
     "ext.etape.preparation": "Preparing the installation...",
     "ext.etape.installation": "Installing {nom}...",
     "ext.etape.lot": "Step {numero} of {total}: {nom}",

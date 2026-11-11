@@ -373,6 +373,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* La largeur suit la progression au rythme du reste de l'interface. */
 #ext-barre { transition: width var(--vitesse) ease; }
 #ext-en-cours .barre { margin-top: 9px; }
+#ov-barre, #banc-barre { transition: width var(--vitesse) ease; }
+#ov-en-cours .barre, #banc-en-cours .barre { margin-top: 9px; }
+#banc-rapport { min-height: 150px; resize: vertical; }
 .chemin-modeles {
   font-size: 11.5px; color: var(--texte-doux); margin-top: 4px;
   background: var(--carte-creuse); border: 1px solid var(--bordure);
