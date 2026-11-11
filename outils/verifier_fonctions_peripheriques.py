@@ -1,7 +1,7 @@
 """
 Vérification en ligne de commande des fonctions périphériques.
 
-Douze sujets, tous vérifiables sans ouvrir de fenêtre, sans transcrire quoi que
+Quatorze sujets, tous vérifiables sans ouvrir de fenêtre, sans transcrire quoi que
 ce soit et **sans le moindre appel réseau** :
 
   1. la scrutation du dossier surveillé, avec de vrais fichiers déposés dans un
@@ -41,6 +41,10 @@ ce soit et **sans le moindre appel réseau** :
   12. les bornes de hauteur des fenêtres, qui ne s'expriment plus en unités
      `vh` : le grossissement de l'interface les multipliait, et le panneau
      d'aide sortait de l'écran.
+  13. la reprise après coupure : le moteur ne repasse que la fin du signal,
+     mais la séparation des locuteurs reçoit l'enregistrement entier ;
+  14. la détection des cartes graphiques : écrans virtuels écartés, carte la
+     mieux dotée en tête, mémoire réelle lue au lieu du plafond de WMI.
 
 Rien de ce que fait ce script ne touche à l'installation : tout se passe dans
 un dossier temporaire, effacé à la fin.
@@ -1193,6 +1197,137 @@ def essai_bornes_fenetres() -> None:
              "et la remesure quand la fenêtre change de taille")
 
 
+def essai_reprise_locuteurs(base: Path) -> None:
+    """
+    Une transcription reprise après coupure sépare les locuteurs sur TOUT l'audio.
+
+    Le moteur ne reçoit que la fin du signal, à partir du dernier segment
+    sauvegardé. La séparation des locuteurs, elle, doit recevoir le signal
+    complet : ses tours de parole partent de zéro, comme les horodatages des
+    segments auxquels ils sont attribués. Avant la correction, elle recevait le
+    signal tronqué, et toutes les étiquettes étaient décalées de la position de
+    reprise. Moteur, décodage et séparation sont simulés : rien n'est transcrit.
+    """
+    titre("Reprise après coupure et séparation des locuteurs")
+
+    import numpy as np
+
+    from app import diarisation, moteur, reprise, sorties, traitement
+    from app import audio as audio_module
+
+    frequence = audio_module.FREQUENCE
+    duree, position = 20.0, 8.0
+    vus: dict[str, float] = {}
+
+    class MoteurSimule:
+        tokeniseur = None
+
+        def charger(self, modele, signaler=None):
+            pass
+
+        def liberer(self):
+            pass
+
+        def transcrire(self, signal, duree_totale, langue, reglages, amorce="",
+                       progression=None, interrompu=None, decalage=0.0, sur_segment=None):
+            vus["moteur"] = signal.size / frequence
+            vus["decalage"] = decalage
+            return [moteur.Segment(debut=decalage + 1.0, fin=decalage + 3.0, texte="suite")], {}
+
+    def diariser_simule(signal, frequence_recue, **_options):
+        vus["locuteurs"] = signal.size / frequence_recue
+        return [{"debut": 0.0, "fin": duree, "locuteur": "Locuteur 1"}]
+
+    originaux = {
+        (audio_module, "decoder"): audio_module.decoder,
+        (reprise, "lire_etat"): reprise.lire_etat,
+        (reprise, "lire_segments"): reprise.lire_segments,
+        (diarisation, "diariser"): diarisation.diariser,
+        (sorties, "ecrire_tout"): sorties.ecrire_tout,
+        (traitement.calibration, "enregistrer"): traitement.calibration.enregistrer,
+    }
+    audio_module.decoder = lambda chemin, filtres_salle=False: np.zeros(
+        int(duree * frequence), dtype=np.float32)
+    reprise.lire_etat = lambda cle: {"ecoule": 5.0}
+    reprise.lire_segments = lambda cle: [
+        moteur.Segment(debut=0.0, fin=position, texte="début")]
+    diarisation.diariser = diariser_simule
+    sorties.ecrire_tout = lambda *a, **k: []
+    traitement.calibration.enregistrer = lambda *a, **k: None
+    try:
+        source = base / "reprise-locuteurs.wav"
+        source.write_bytes(b"\0")
+        element = traitement.Element(identifiant="r1", chemin=str(source),
+                                     nom=source.name, reprise="cle-simulee")
+        file = traitement.FileTraitement(materiel.Materiel(coeurs_logiques=4))
+        config = {"diarisation": True, "sauvegarde_progressive": False,
+                  "utiliser_glossaire": False, "appliquer_corrections": False,
+                  "dossier_sortie": str(base), "langue": "fr"}
+        reglages = {"filtres_salle": False, "modele": "tiny", "preset": "rapide",
+                    "beam_size": 5, "preset_nom": "Rapide"}
+        file._traiter(element, config, reglages, MoteurSimule(), traitement.Rappels())
+    finally:
+        for (module, nom), valeur in originaux.items():
+            setattr(module, nom, valeur)
+
+    verifier(abs(vus.get("moteur", 0) - (duree - position)) < 0.01,
+             "le moteur ne reçoit que la fin du signal", str(vus.get("moteur")))
+    verifier(vus.get("decalage") == position,
+             "les horodatages repris sont décalés de la position atteinte")
+    verifier(abs(vus.get("locuteurs", 0) - duree) < 0.01,
+             "la séparation des locuteurs reçoit l'enregistrement entier",
+             str(vus.get("locuteurs")))
+    verifier(element.etat == "termine", "le fichier repris va jusqu'au bout")
+
+
+def essai_cartes_graphiques() -> None:
+    """
+    Les écrans virtuels ne passent pas pour des cartes, la vraie mémoire est lue.
+
+    Sur un poste équipé d'un logiciel de bureau à distance, Windows déclare des
+    adaptateurs virtuels AVANT la vraie carte, et le résumé du matériel affichait
+    le premier. WMI plafonne en outre la mémoire à 4 Go. La réponse de
+    PowerShell est simulée, le registre aussi : rien ne dépend du poste.
+    """
+    titre("Détection des cartes graphiques")
+
+    reponse = json.dumps([
+        {"Name": "Parsec Virtual Display Adapter", "AdapterCompatibility": "Parsec",
+         "AdapterRAM": 0},
+        {"Name": "AMD Radeon(TM) Graphics", "AdapterCompatibility": "Advanced Micro Devices",
+         "AdapterRAM": 512 * 1024 * 1024},
+        {"Name": "AMD Radeon RX 7900 XT", "AdapterCompatibility": "Advanced Micro Devices",
+         "AdapterRAM": 4095 * 1024 * 1024},
+        {"Name": "Microsoft Basic Display Adapter", "AdapterCompatibility": "Microsoft",
+         "AdapterRAM": 0},
+    ])
+
+    class Resultat:
+        stdout = reponse
+
+    executer, registre = materiel.subprocess.run, materiel._memoires_registre
+    plateforme = materiel.sys.platform
+    try:
+        materiel.subprocess.run = lambda *a, **k: Resultat()
+        materiel.sys.platform = "win32"
+        materiel._memoires_registre = lambda: {}
+        sans_registre = materiel._cartes_graphiques()
+        materiel._memoires_registre = lambda: {"AMD Radeon RX 7900 XT": 20464}
+        avec_registre = materiel._cartes_graphiques()
+    finally:
+        materiel.subprocess.run, materiel._memoires_registre = executer, registre
+        materiel.sys.platform = plateforme
+
+    noms = [c.nom for c in avec_registre]
+    verifier(noms == ["AMD Radeon RX 7900 XT", "AMD Radeon(TM) Graphics"],
+             "adaptateurs virtuels écartés, carte la mieux dotée en tête", str(noms))
+    verifier(avec_registre[0].memoire_mo == 20464,
+             "la mémoire réelle vient du registre du pilote")
+    plafonnee = next(c for c in sans_registre if c.nom == "AMD Radeon RX 7900 XT")
+    verifier(plafonnee.memoire_mo == 0,
+             "sans registre, la valeur plafonnée de WMI n'est pas affichée")
+
+
 def principal() -> int:
     print(f"Vérification des fonctions périphériques de Scribouille\n{'=' * 54}")
     with tempfile.TemporaryDirectory(prefix="scribouille-verif-") as brut:
@@ -1210,6 +1345,8 @@ def principal() -> int:
         essai_transfert_xet()
         essai_calibration(base)
         essai_bornes_fenetres()
+        essai_reprise_locuteurs(base)
+        essai_cartes_graphiques()
 
     print(f"\n{'=' * 54}")
     if _echecs:
