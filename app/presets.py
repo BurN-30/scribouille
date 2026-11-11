@@ -11,8 +11,8 @@ Deux presets sont exposés en façade :
       environ quatre fois plus rapide, qualité légèrement en retrait.
 
 Le faisceau de 8 de la « Qualité maximale » est revenu à 5 en 2.4.0 : mesuré
-sur le même extrait, il doublait le temps de calcul par lots sans changer un
-seul mot du texte produit (voir le CHANGELOG).
+sur le même extrait, il alourdissait le calcul par lots de 40 à 90 % sans
+changer un seul mot du texte produit (voir le CHANGELOG).
 
 Les autres modèles restent atteignables par le mode avancé.
 
