@@ -57,10 +57,10 @@ Le facteur ci-dessous est le rapport durée de calcul sur durée de l'audio. En 
 
 | Matériel | Qualité maximale | Rapide | Une heure d'audio, en qualité |
 |---|---|---|---|
-| Processeur de bureau, 8 cœurs / 16 fils (Ryzen 7 7800X3D), **mesuré** | 0,7 x | 0,17 x | environ 42 min |
+| Processeur de bureau, 8 cœurs / 16 fils (Ryzen 7 7800X3D), **mesuré** | 0,4 x | 0,15 x | environ 23 min |
 | Carte NVIDIA (CUDA, float16), estimation non mesurée | environ 0,1 x | environ 0,05 x | environ 6 min |
 
-La ligne mesurée l'a été en novembre 2026 sur un extrait français de trois minutes, machine occupée par d'autres programmes : sur une machine au repos, c'est un peu plus rapide. Un processeur plus modeste demande davantage. Depuis la 2.4.0, les passages de parole sont décodés **par lots**, ce qui divise le temps de calcul par deux à deux et demi à qualité égale, au prix d'environ 2,5 Go de mémoire de plus. Sous 12 Go de mémoire vive, l'application s'en passe et le calcul est environ deux fois plus long.
+La ligne mesurée l'a été en novembre 2026 sur un extrait français de trois minutes, machine occupée par d'autres programmes : sur une machine au repos, c'est un peu plus rapide. Un processeur plus modeste demande davantage. Depuis la 2.4.0, les passages de parole sont décodés **par lots**, ce qui, avec un fil de calcul par cœur physique, divise le temps de calcul par deux et demi à trois à qualité égale, au prix d'environ 2,5 Go de mémoire de plus. Sous 12 Go de mémoire vive, l'application s'en passe et le calcul est environ deux fois plus long.
 
 **Avant la première transcription, l'application annonce une estimation de départ, pas une garantie.** Elle est calée sur des mesures publiques et ajustée au nombre de cœurs de votre machine. L'application affiche le **temps réellement mesuré** après chaque transcription, et l'écrit dans l'en-tête du fichier produit. La séparation des locuteurs ajoute à peu près 0,2 x sur processeur.
 

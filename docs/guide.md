@@ -57,10 +57,10 @@ The factor below is compute time divided by audio duration. Under 1 is faster th
 
 | Hardware | Highest quality | Fast | One hour of audio, in quality |
 |---|---|---|---|
-| Desktop processor, 8 cores / 16 threads (Ryzen 7 7800X3D), **measured** | 0.7 x | 0.17 x | about 42 min |
+| Desktop processor, 8 cores / 16 threads (Ryzen 7 7800X3D), **measured** | 0.4 x | 0.15 x | about 23 min |
 | NVIDIA card (CUDA, float16), estimate, not measured | about 0.1 x | about 0.05 x | about 6 min |
 
-The measured row was taken in November 2026 on a three-minute French excerpt, with other programs busy on the machine: an idle machine is a little faster. A more modest processor takes longer. Since 2.4.0, speech passages are decoded **in batches**, which cuts compute time by two to two and a half at equal quality, for about 2.5 GB more memory. Below 12 GB of RAM the app skips batching, and compute takes about twice as long.
+The measured row was taken in November 2026 on a three-minute French excerpt, with other programs busy on the machine: an idle machine is a little faster. A more modest processor takes longer. Since 2.4.0, speech passages are decoded **in batches**, which, together with one compute thread per physical core, cuts compute time by two and a half to three at equal quality, for about 2.5 GB more memory. Below 12 GB of RAM the app skips batching, and compute takes about twice as long.
 
 **Before the first transcription, the app shows a starting estimate, not a guarantee.** It is calibrated on public measurements and adjusted to the number of cores on your machine. The app shows the **time actually measured** after every transcription, and writes it in the header of the output file. Speaker separation adds roughly 0.2 x on CPU.
 
