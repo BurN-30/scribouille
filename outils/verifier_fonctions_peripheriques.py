@@ -1,7 +1,7 @@
 """
 Vérification en ligne de commande des fonctions périphériques.
 
-Seize sujets, tous vérifiables sans ouvrir de fenêtre, sans transcrire quoi que
+Vingt-quatre sujets, tous vérifiables sans ouvrir de fenêtre, sans transcrire quoi que
 ce soit et **sans le moindre appel réseau** :
 
   1. la scrutation du dossier surveillé, avec de vrais fichiers déposés dans un
@@ -48,6 +48,15 @@ ce soit et **sans le moindre appel réseau** :
   15. la sortie de pyannote.audio 4, un objet et non plus une annotation,
      dont les tours de parole se lisent bien ;
   16. le nombre de fils de calcul, un par cœur physique.
+  17. la topologie des processeurs hybrides (cœurs performants, efficaces,
+     basse consommation), lue dans un tampon fabriqué pour un Core Ultra 5 225U ;
+  18. les estimations de durée sur un portable de 15 W et avec OpenVINO ;
+  19. la sortie du bridage d'énergie de Windows (EcoQoS) pendant le calcul ;
+  20. les fenêtres du moteur OpenVINO et leurs horodatages ;
+  21. l'intégrité d'un modèle au format OpenVINO et la voie hors ligne ;
+  22. le réglage de vitesse propre au poste, sa suspension après un plantage ;
+  23. le banc d'essai : taux d'erreur, conseil, rapport sans nom ni chemin ;
+  24. la commande d'installation d'OpenVINO, sans télémétrie, et hors ligne.
 
 Rien de ce que fait ce script ne touche à l'installation : tout se passe dans
 un dossier temporaire, effacé à la fin.
@@ -1414,6 +1423,323 @@ def essai_cartes_graphiques() -> None:
              "sans registre, la valeur plafonnée de WMI n'est pas affichée")
 
 
+# ---------------------------------------------------------------------------
+# 17 à 22. Poste de travail à processeur hybride, moteur OpenVINO, banc d'essai
+# ---------------------------------------------------------------------------
+
+def _tampon_topologie(coeurs: list[tuple[int, list[int]]], caches_l3: list[list[int]]) -> bytes:
+    """Tampon de GetLogicalProcessorInformationEx fabriqué à la main."""
+    import struct
+
+    morceaux = []
+    for classe, logiques in coeurs:
+        masque = sum(1 << i for i in logiques)
+        corps = struct.pack("<BBHH16sH", 1 if len(logiques) > 1 else 0, classe, 0, 0,
+                            b"\0" * 16, 1) + struct.pack("<QH6s", masque, 0, b"\0" * 6)
+        morceaux.append(struct.pack("<II", 0, 8 + len(corps)) + corps)
+    for logiques in caches_l3:
+        masque = sum(1 << i for i in logiques)
+        corps = struct.pack("<BBHII18sH", 3, 12, 64, 12 << 20, 0, b"\0" * 18, 1) \
+            + struct.pack("<QH6s", masque, 0, b"\0" * 6)
+        morceaux.append(struct.pack("<II", 2, 8 + len(corps)) + corps)
+    return b"".join(morceaux)
+
+
+def essai_topologie() -> None:
+    """
+    Familles de cœurs lues comme Windows les décrit, et fils de calcul qui en
+    découlent. Le Core Ultra 5 225U (2 performants avec hyperthreading, 8
+    efficaces, 2 basse consommation hors du L3, 14 fils) est fabriqué de toutes
+    pièces : aucun poste de test n'en a un.
+    """
+    titre("Processeur hybride : topologie et fils de calcul")
+
+    coeurs_225u = [(1, [0, 1]), (1, [2, 3])] + [(0, [i]) for i in range(4, 12)] \
+        + [(0, [12]), (0, [13])]
+    topo = materiel.analyser_topologie(_tampon_topologie(coeurs_225u, [list(range(12))]))
+    verifier((topo.performants, topo.efficaces, topo.basse_consommation, topo.hybride)
+             == (2, 8, 2, True), "Core Ultra 5 225U : 2 performants, 8 efficaces, 2 basse consommation",
+             str(topo))
+    verifier(topo.logiques_principaux == list(range(12)),
+             "les cœurs basse consommation sont écartés de l'affinité possible")
+    machine = materiel.Materiel(cpu_nom="Intel(R) Core(TM) Ultra 5 225U", coeurs_physiques=12,
+                                coeurs_logiques=14, topologie=topo, ram_go=32.0,
+                                basse_consommation=materiel.est_basse_consommation(
+                                    "Intel(R) Core(TM) Ultra 5 225U"))
+    verifier(machine.fils_calcul == 10, "225U : un fil par cœur performant ou efficace (10)",
+             str(machine.fils_calcul))
+    machine.fils_imposes = 6
+    verifier(machine.fils_calcul == 6 and machine.fils_automatiques == 10,
+             "un réglage mesuré impose ses fils, le choix automatique reste lisible")
+    machine.fils_imposes = 40
+    verifier(machine.fils_calcul == 14, "un réglage imposé reste borné aux fils logiques")
+
+    alder = [(1, [2 * i, 2 * i + 1]) for i in range(6)] + [(0, [i]) for i in range(12, 20)]
+    topo_alder = materiel.analyser_topologie(_tampon_topologie(alder, [list(range(20))]))
+    verifier((topo_alder.performants, topo_alder.efficaces, topo_alder.basse_consommation)
+             == (6, 8, 0), "6 performants et 8 efficaces sans basse consommation (bureau)")
+    verifier(materiel.Materiel(coeurs_physiques=14, coeurs_logiques=20,
+                               topologie=topo_alder).fils_calcul == 14,
+             "sans cœurs basse consommation, la règle d'un fil par cœur physique tient")
+
+    lunar = [(1, [i]) for i in range(4)] + [(0, [i]) for i in range(4, 8)]
+    topo_lunar = materiel.analyser_topologie(_tampon_topologie(lunar, [list(range(4))]))
+    verifier((topo_lunar.performants, topo_lunar.efficaces, topo_lunar.basse_consommation)
+             == (4, 4, 0), "deux familles dont une hors du L3 (Lunar Lake) : comptées efficaces")
+
+    homogene = [(0, [2 * i, 2 * i + 1]) for i in range(8)]
+    topo_h = materiel.analyser_topologie(_tampon_topologie(homogene, [list(range(16))]))
+    verifier((topo_h.performants, topo_h.hybride) == (8, False),
+             "processeur homogène 8 cœurs / 16 fils : ni hybride ni basse consommation")
+    verifier(materiel.Materiel(coeurs_physiques=8, coeurs_logiques=16,
+                               topologie=topo_h).fils_calcul == 8,
+             "sur un processeur de bureau homogène, rien ne change (8 fils sur 8 cœurs)")
+    verifier(materiel.analyser_topologie(b"\x00" * 5).performants == 0,
+             "un tampon tronqué ne fait pas tomber la détection")
+
+    reel = materiel._topologie()
+    import psutil
+
+    physiques = psutil.cpu_count(logical=False) or 0
+    total = reel.performants + reel.efficaces + reel.basse_consommation
+    verifier(sys.platform != "win32" or total == physiques,
+             f"ce poste : {total} cœurs lus par Windows, {physiques} selon psutil")
+
+    for nom, attendu in (("Intel(R) Core(TM) Ultra 5 225U", True), ("Intel(R) Core(TM) i7-1255U", True),
+                         ("Intel(R) Core(TM) Ultra 7 258V", True), ("AMD Ryzen 5 7530U", True),
+                         ("Intel(R) Core(TM) Ultra 7 155H", False),
+                         ("AMD Ryzen 7 7800X3D 8-Core Processor", False)):
+        verifier(materiel.est_basse_consommation(nom) == attendu,
+                 f"« {nom} » " + ("est" if attendu else "n'est pas") + " un processeur basse consommation")
+
+
+def essai_estimations_machine(base: Path) -> None:
+    """Estimations honnêtes sur un portable de 15 W, conseil qui le dit."""
+    titre("Estimations de durée selon la machine et le moteur")
+    bac = base / "estimations"
+    bac.mkdir(parents=True, exist_ok=True)
+    racine_reelle = chemins.RACINE
+    chemins.RACINE = bac
+    try:
+        topo = materiel.Topologie(performants=2, efficaces=8, basse_consommation=2, hybride=True)
+        portable = materiel.Materiel(cpu_nom="Intel(R) Core(TM) Ultra 5 225U", coeurs_physiques=12,
+                                     coeurs_logiques=14, topologie=topo, ram_go=32.0,
+                                     basse_consommation=True)
+        bureau = materiel.Materiel(cpu_nom="Processeur de bureau", coeurs_physiques=8,
+                                   coeurs_logiques=16, ram_go=32.0)
+        rapide_portable = presets.facteur_temps_reel("rapide", portable)
+        verifier(rapide_portable > 2.5 * presets.facteur_temps_reel("rapide", bureau),
+                 "un processeur de 15 W est annoncé bien plus lent qu'un processeur de bureau",
+                 str(rapide_portable))
+        reco = presets.recommandation(portable)
+        verifier(reco["preset_conseille"] == "rapide" and "1 h" in reco["phrase"],
+                 "plus lent que le temps réel en Qualité : Rapide conseillé, chiffres à l'appui",
+                 reco["phrase"])
+        verifier(presets.recommandation(bureau)["preset_conseille"] == "qualite",
+                 "sur un processeur de bureau, le conseil reste « Qualité maximale »")
+        verifier(presets._coefficient_machine(materiel.Materiel(coeurs_physiques=6,
+                                                                coeurs_logiques=12)) == 1.0,
+                 "la machine repère garde son coefficient de 1")
+
+        portable.moteur, portable.peripherique_openvino = "openvino", "GPU"
+        verifier(portable.cle_calcul == "openvino-gpu", "clé de mesure propre à OpenVINO sur puce graphique")
+        verifier(abs(presets.facteur_temps_reel("rapide", portable) - 0.12) < 1e-6,
+                 "OpenVINO sur puce Intel : repli sur la mesure publiée (0,12 avec turbo)")
+        verifier(presets.recommandation(portable)["preset_conseille"] == "qualite",
+                 "avec la puce graphique, « Qualité maximale » redevient raisonnable")
+        calibration.enregistrer(presets.MODELE_TURBO, "openvino-gpu", 1, 300.0, 30.0, portable)
+        verifier(abs(presets.facteur_temps_reel("rapide", portable) - 0.1) < 1e-6,
+                 "une mesure OpenVINO (glouton, sans lots) remplace le repli")
+        verifier(calibration.enregistrer("large-v3", "cpu", 5, 40.0, 40.0, portable) == 0.0
+                 and calibration.enregistrer("large-v3", "cpu", 5, 40.0, 40.0, portable,
+                                             duree_minimale=20.0) > 0,
+                 "un extrait du banc (40 s) n'entre que si on l'accepte explicitement")
+    finally:
+        chemins.RACINE = racine_reelle
+
+
+def essai_energie() -> None:
+    """Le bridage d'énergie de Windows se lève le temps du calcul, puis se rend."""
+    titre("Bridage d'énergie (EcoQoS)")
+    from app import energie
+
+    if sys.platform != "win32":
+        print("  --    hors Windows, contrôle sauté")
+        return
+    with energie.pleine_vitesse() as pose:
+        verifier(pose, "SetProcessInformation accepte la sortie de l'EcoQoS")
+    verifier(energie.rendre_au_systeme(), "la main est rendue au système")
+
+
+def essai_openvino_decoupage() -> None:
+    """Fenêtres sans silences, et temps ramenés à l'enregistrement d'origine."""
+    titre("Moteur OpenVINO : fenêtres et horodatages")
+    import numpy as np
+
+    from app import moteur_openvino
+
+    verifier(moteur_openvino.decouper(np.zeros(16000 * 20, dtype=np.float32)) == [],
+             "un silence de 20 s ne produit aucune fenêtre (rien à inventer)")
+    passages = [{"start": 16000 * 2, "end": 16000 * 5}, {"start": 16000 * 10, "end": 16000 * 12}]
+    corr = moteur_openvino.Correspondance(passages)
+    verifier(abs(corr.duree - 5.0) < 1e-6, "la fenêtre ne garde que la parole (3 s + 2 s)")
+    verifier(abs(corr.origine(1.0) - 3.0) < 1e-6 and abs(corr.origine(3.5) - 10.5) < 1e-6,
+             "un temps de la fenêtre retombe au bon endroit de l'enregistrement")
+    verifier(abs(corr.origine(99.0) - 12.0) < 1e-6, "un temps hors fenêtre est borné à sa fin")
+    verifier(moteur_openvino._taux_compression("bonjour " * 40) > moteur_openvino.SEUIL_COMPRESSION
+             and moteur_openvino._taux_compression(
+                 "Les plages sont nombreuses, car Auckland est à cheval sur deux ports.")
+             < moteur_openvino.SEUIL_COMPRESSION,
+             "une boucle de répétition est repérée, une phrase normale non")
+    from app import moteur
+
+    verifier(moteur.est_modele_openvino("OpenVINO/whisper-large-v3-int8-ov")
+             and not moteur.est_modele_openvino("large-v3"), "dépôts OpenVINO reconnus")
+    verifier(presets.depot_openvino(presets.MODELE_TURBO) == "OpenVINO/whisper-large-v3-turbo-int8-ov",
+             "le modèle Rapide a son équivalent OpenVINO")
+
+
+def essai_modele_openvino_incomplet(base: Path) -> None:
+    """Un dossier OpenVINO sans décodeur est incomplet, avec le décodeur il est complet."""
+    titre("Moteur OpenVINO : intégrité d'un modèle")
+    from app import moteur
+
+    racine = base / "modeles-ov"
+    depot = "OpenVINO/whisper-tiny-int8-ov"
+    snapshot = racine / "models--OpenVINO--whisper-tiny-int8-ov" / "snapshots" / "abc"
+    snapshot.mkdir(parents=True, exist_ok=True)
+    for nom in moteur.FICHIERS_OPENVINO:
+        (snapshot / nom).write_text("{}", encoding="utf-8")
+    (snapshot / "openvino_encoder_model.bin").write_bytes(b"0" * (moteur.TAILLE_MINIMALE_POIDS + 1))
+    etat = moteur.etat_modele(depot, racine)
+    verifier(etat["etat"] == "incomplet" and "decoder" in etat["motif"],
+             "décodeur absent : modèle incomplet, motif nommé", str(etat))
+    (snapshot / "openvino_decoder_model.bin").write_bytes(b"0" * (moteur.TAILLE_MINIMALE_POIDS + 1))
+    verifier(moteur.etat_modele(depot, racine)["etat"] == "complet", "tous les fichiers : complet")
+    langues.definir("fr")
+    phrase = moteur.voie_hors_ligne(depot)
+    verifier("models--OpenVINO--whisper-tiny-int8-ov" in phrase and "huggingface.co/" + depot in phrase,
+             "la voie hors ligne nomme le dossier à recopier et le dépôt d'origine")
+
+
+def essai_reglage_machine(base: Path) -> None:
+    """Réglage du banc : signé pour ce poste, ignoré ailleurs, suspendu après un plantage."""
+    titre("Réglage de vitesse propre au poste")
+    from app import moteur_openvino, reglage_machine
+
+    racine_reelle = chemins.RACINE
+    temoin_reel = moteur_openvino.TEMOIN_CHARGEMENT
+    chemins.RACINE = base / "reglage"
+    chemins.RACINE.mkdir(parents=True, exist_ok=True)
+    moteur_openvino.TEMOIN_CHARGEMENT = chemins.RACINE / "temoin.txt"
+    try:
+        poste = materiel.Materiel(cpu_nom="Processeur d'essai", coeurs_physiques=8, coeurs_logiques=16)
+        config: dict = {}
+        reglage_machine.enregistrer(config, poste, {"moteur": "ctranslate2", "fils": 6, "lot": 4})
+        verifier(poste.fils_calcul == 6 and reglage_machine.lot_impose(config, poste) == 4,
+                 "fils et lots du banc appliqués sur ce poste")
+        autre = materiel.Materiel(cpu_nom="Autre processeur", coeurs_physiques=8, coeurs_logiques=16)
+        effet = reglage_machine.appliquer_au_materiel(config, autre)
+        verifier(not effet and autre.fils_calcul == 8 and reglage_machine.lot_impose(config, autre) is None,
+                 "recopié sur une autre machine, le réglage est ignoré")
+        reglage_machine.oublier(config, poste)
+        verifier(poste.fils_calcul == 8 and poste.moteur == "ctranslate2", "retour à l'automatique")
+
+        installe, vus = moteur_openvino.installe, moteur_openvino.peripheriques_disponibles
+        moteur_openvino.installe = lambda: True
+        moteur_openvino.peripheriques_disponibles = lambda forcer=False: ["CPU", "GPU"]
+        try:
+            reglage_machine.enregistrer(config, poste, {"moteur": "openvino", "peripherique": "GPU"})
+            verifier(poste.cle_calcul == "openvino-gpu", "OpenVINO sur puce graphique retenu")
+            moteur_openvino.TEMOIN_CHARGEMENT.write_text("GPU", encoding="utf-8")
+            effet = reglage_machine.appliquer_au_materiel(config, poste)
+            verifier(effet.get("plantage") == "GPU" and poste.moteur == "ctranslate2",
+                     "après un plantage au chargement, OpenVINO est suspendu au démarrage suivant")
+            reglage_machine.enregistrer(config, poste, {"moteur": "openvino", "peripherique": "GPU"})
+            verifier(not moteur_openvino.TEMOIN_CHARGEMENT.exists() and poste.moteur == "openvino",
+                     "réappliquer le conseil lève la suspension")
+            moteur_openvino.peripheriques_disponibles = lambda forcer=False: ["CPU"]
+            effet = reglage_machine.appliquer_au_materiel(config, poste)
+            verifier(effet.get("indisponible") and poste.moteur == "ctranslate2",
+                     "périphérique disparu : le moteur habituel reprend la main")
+        finally:
+            moteur_openvino.installe, moteur_openvino.peripheriques_disponibles = installe, vus
+    finally:
+        chemins.RACINE = racine_reelle
+        moteur_openvino.TEMOIN_CHARGEMENT = temoin_reel
+
+
+def essai_banc() -> None:
+    """Taux d'erreur, plan, conseil et rapport du banc, sans rien transcrire."""
+    titre("Banc d'essai : mesure, conseil, rapport")
+    from app import banc
+
+    verifier(banc.taux_erreur_mots("Le chat dort.", "le chat dort") == 0.0
+             and banc.taux_erreur_mots("un deux trois quatre", "un deux quatre") == 25.0,
+             "taux d'erreur sur les mots, ponctuation et casse ignorées")
+    verifier(banc.EXTRAIT.is_file() and banc.REFERENCE.is_file(),
+             "l'extrait du banc et sa référence sont livrés avec l'application")
+
+    topo = materiel.Topologie(performants=2, efficaces=8, basse_consommation=2, hybride=True,
+                              logiques_principaux=list(range(12)))
+    portable = materiel.Materiel(coeurs_physiques=12, coeurs_logiques=14, topologie=topo)
+    verifier(banc.candidats_fils(portable) == [(10, False), (12, False), (14, False), (10, True)],
+             "225U : 10, 12 et 14 fils, puis 10 fils cœurs basse consommation écartés",
+             str(banc.candidats_fils(portable)))
+    verifier(banc.candidats_fils(materiel.Materiel(coeurs_physiques=8, coeurs_logiques=16))
+             == [(8, False), (16, False)], "processeur de bureau : 8 et 16 fils")
+
+    def essai(etiquette, moteur_, facteur, wer, **k):
+        e = banc.Essai(etiquette, moteur=moteur_, **k)
+        e.resultat = {"etat": "ok", "facteur": facteur, "wer": wer, "duree_audio": 43.6,
+                      "fils": k.get("fils", 0)}
+        return e
+
+    t = presets.MODELE_TURBO
+    essais = [
+        essai("a", "ctranslate2", 0.60, 9.5, modele=t, fils=10, lot=8),
+        essai("b", "ctranslate2", 0.70, 9.5, modele=t, fils=12, lot=8),
+        essai("c", "openvino", 0.10, 8.4, modele=t, peripherique="GPU", lot=0, faisceau=1),
+        essai("d", "openvino", 0.05, 60.0, modele=t, peripherique="NPU", lot=0, faisceau=1),
+        essai("e", "openvino", 0.30, 7.4, modele="large-v3", peripherique="GPU", lot=0, faisceau=1),
+    ]
+    conseil = banc.conseiller(portable, essais)
+    verifier(conseil.get("moteur") == "openvino" and conseil.get("peripherique") == "GPU",
+             "le plus rapide qui reste juste l'emporte (puce graphique)", str(conseil))
+    verifier(conseil.get("fils") == 10 and conseil.get("lot") == 8,
+             "un NPU rapide mais faux (60 % de WER) est écarté ; fils et lots du meilleur CTranslate2 gardés")
+    verifier(conseil["facteurs"] == {"rapide": 0.10, "qualite": 0.30},
+             "facteurs Rapide et Qualité du moteur retenu")
+    essais[2].resultat = {"etat": "delai", "erreur": "plus de 420 s"}
+    verifier(banc.conseiller(portable, essais).get("moteur") == "ctranslate2",
+             "un périphérique bloqué n'est jamais conseillé")
+
+    nom = os.environ.get("USERNAME") or "personne"
+    texte = banc._masquer(f"utilisateur {nom}, dossier {Path.home()} et {chemins.RACINE}")
+    verifier(nom not in texte and str(Path.home()) not in texte,
+             "le rapport ne laisse passer ni nom d'utilisateur ni chemin", texte)
+    rapport = banc.rediger(portable, essais, conseil, 300.0)
+    verifier(str(Path.home()).lower() not in rapport.lower() and "Réglage conseillé" in rapport,
+             "rapport rédigé sans chemin personnel")
+
+
+def essai_extension_openvino() -> None:
+    """Installation d'OpenVINO : sans dépendances (donc sans télémétrie), voie hors ligne."""
+    titre("Extension OpenVINO : commande d'installation")
+    from app import extensions
+
+    arguments = extensions.arguments_pip(extensions.PAQUETS_OPENVINO, "", "", Path("cible"),
+                                         sans_dependances=True)
+    verifier("--no-deps" in arguments and not any("telemetry" in a for a in arguments),
+             "trois roues sans dépendances : openvino-telemetry n'est pas posé")
+    hors = extensions.arguments_pip(extensions.PAQUETS_OPENVINO, "https://pypi.org/simple", "",
+                                    Path("cible"), sans_dependances=True, hors_ligne=Path("roues"))
+    verifier("--no-index" in hors and "--find-links" in hors and "--index-url" not in hors,
+             "voie hors ligne : aucun index consulté, seulement les roues déposées")
+    verifier(extensions.options_reconnues(["--installer-openvino"]),
+             "l'option d'installation est reconnue par le point d'entrée")
+
+
 def principal() -> int:
     print(f"Vérification des fonctions périphériques de Scribouille\n{'=' * 54}")
     with tempfile.TemporaryDirectory(prefix="scribouille-verif-") as brut:
@@ -1435,6 +1761,14 @@ def principal() -> int:
         essai_sortie_pyannote()
         essai_fils_calcul()
         essai_cartes_graphiques()
+        essai_topologie()
+        essai_estimations_machine(base)
+        essai_energie()
+        essai_openvino_decoupage()
+        essai_modele_openvino_incomplet(base)
+        essai_reglage_machine(base)
+        essai_banc()
+        essai_extension_openvino()
 
     print(f"\n{'=' * 54}")
     if _echecs:
