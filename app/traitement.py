@@ -268,6 +268,11 @@ class FileTraitement:
         deja_transcrits: list[moteur.Segment] = []
         decalage = 0.0
         ecoule_anterieur = 0.0
+        # Seule la fin du signal repasse au modèle après une reprise. Le signal
+        # COMPLET, lui, reste entier pour la séparation des locuteurs : ses tours
+        # de parole doivent couvrir tout l'enregistrement et partir de zéro,
+        # comme les horodatages des segments. Une vue numpy, aucune copie.
+        a_transcrire = signal
 
         if element.reprise:
             etat_reprise = reprise_module.lire_etat(element.reprise) or {}
@@ -276,7 +281,7 @@ class FileTraitement:
                 decalage = deja_transcrits[-1].fin
                 ecoule_anterieur = float(etat_reprise.get("ecoule", 0) or 0)
                 depart -= ecoule_anterieur
-                signal = signal[int(decalage * audio_module.FREQUENCE):]
+                a_transcrire = signal[int(decalage * audio_module.FREQUENCE):]
                 signaler("info", langues.t(
                     "trait.reprise", nom=element.nom,
                     position=presets.formater_duree(decalage),
@@ -339,7 +344,7 @@ class FileTraitement:
 
         debut_transcription = time.time()
         segments, details = instance.transcrire(
-            signal, duree_audio, config.get("langue", "fr"), reglages,
+            a_transcrire, duree_audio, config.get("langue", "fr"), reglages,
             amorce=amorce_info["amorce"], progression=progression,
             interrompu=self._interrompu, decalage=decalage,
             sur_segment=lambda seg: session.ajouter(seg, time.time() - depart),
@@ -392,7 +397,7 @@ class FileTraitement:
                 signaler("attention", langues.t(
                     "trait.diar_incident", titre=incident["titre"]))
 
-        del signal
+        del signal, a_transcrire
         gc.collect()
 
         # 5. Corrections post-transcription
