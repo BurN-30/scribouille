@@ -738,6 +738,16 @@ def dernier_conseil() -> dict:
         return {}
 
 
+def dernier_rapport() -> str:
+    """Texte du rapport du dernier banc mené sur ce poste, vide s'il n'y en a pas."""
+    try:
+        donnees = json.loads((DOSSIER_RAPPORTS / "dernier-banc.json").read_text(encoding="utf-8"))
+        nom = Path(str(donnees.get("rapport") or "")).name
+        return (DOSSIER_RAPPORTS / nom).read_text(encoding="utf-8") if nom else ""
+    except (OSError, ValueError):
+        return ""
+
+
 def principal_cli(arguments: list[str]) -> int:
     """`--banc` : le banc complet en ligne de commande, rapport sur la sortie."""
     if "--banc-essai" in arguments:

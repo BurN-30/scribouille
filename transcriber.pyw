@@ -873,6 +873,7 @@ class Passerelle:
             "banc_en_cours": self._banc is not None,
             "conseil": conseil,
             "resume_conseil": self._resume_reglage(conseil) if conseil else "",
+            "rapport": banc.dernier_rapport() if conseil else "",
             "manquants": [
                 {"modele": moteur_nom_court(m), "taille": langues.octets(o)}
                 for m, o in banc.modeles_manquants()

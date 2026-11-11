@@ -522,6 +522,7 @@ function majVitesse() {
   if (v.conseil && Object.keys(v.conseil).length && !banc) {
     $('#banc-resultat').style.display = 'block';
     $('#banc-conseil').textContent = t('ui.banc.conseil', { reglage: v.resume_conseil || '--' });
+    if (!$('#banc-rapport').value && v.rapport) $('#banc-rapport').value = v.rapport;
     // Conseil deja en service : rien a appliquer de plus.
     const r = v.reglage || {};
     const c = v.conseil || {};
