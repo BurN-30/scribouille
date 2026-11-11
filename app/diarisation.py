@@ -149,6 +149,24 @@ def _charger_pipeline(cle: str, signaler: Callable[[str, str], None] | None):
     )
 
 
+def annotation_de(sortie):
+    """
+    Tours de parole tirés de ce que rend le pipeline, quelle que soit sa version.
+
+    pyannote.audio 3.x rend directement une `Annotation`. La 4.x rend un objet
+    `DiarizeOutput` (sauf en mode « legacy », qu'aucun des deux dépôts n'active),
+    sans méthode `itertracks` : l'appel échouait, l'incident était rattrapé, et
+    la transcription se terminait sans le moindre locuteur. On prend alors la
+    version EXCLUSIVE, sans chevauchement, que pyannote recommande précisément
+    pour la rapprocher des horodatages d'une transcription.
+    """
+    for attribut in ("exclusive_speaker_diarization", "speaker_diarization"):
+        annotation = getattr(sortie, attribut, None)
+        if annotation is not None:
+            return annotation
+    return sortie
+
+
 def diariser(
     signal: np.ndarray,
     frequence: int,
@@ -196,7 +214,7 @@ def diariser(
 
     try:
         with journal.SortieMuette("diarisation"):
-            annotation = pipeline(entree, **arguments)
+            sortie = pipeline(entree, **arguments)
     finally:
         del forme_onde, entree
         try:
@@ -205,6 +223,7 @@ def diariser(
             pass
         gc.collect()
 
+    annotation = annotation_de(sortie)
     tours: list[dict] = []
     etiquettes: dict[str, int] = {}
     for periode, _, etiquette in annotation.itertracks(yield_label=True):

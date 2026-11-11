@@ -1,7 +1,7 @@
 """
 Vérification en ligne de commande des fonctions périphériques.
 
-Quatorze sujets, tous vérifiables sans ouvrir de fenêtre, sans transcrire quoi que
+Quinze sujets, tous vérifiables sans ouvrir de fenêtre, sans transcrire quoi que
 ce soit et **sans le moindre appel réseau** :
 
   1. la scrutation du dossier surveillé, avec de vrais fichiers déposés dans un
@@ -44,7 +44,9 @@ ce soit et **sans le moindre appel réseau** :
   13. la reprise après coupure : le moteur ne repasse que la fin du signal,
      mais la séparation des locuteurs reçoit l'enregistrement entier ;
   14. la détection des cartes graphiques : écrans virtuels écartés, carte la
-     mieux dotée en tête, mémoire réelle lue au lieu du plafond de WMI.
+     mieux dotée en tête, mémoire réelle lue au lieu du plafond de WMI ;
+  15. la sortie de pyannote.audio 4, un objet et non plus une annotation,
+     dont les tours de parole se lisent bien.
 
 Rien de ce que fait ce script ne touche à l'installation : tout se passe dans
 un dossier temporaire, effacé à la fin.
@@ -1280,6 +1282,57 @@ def essai_reprise_locuteurs(base: Path) -> None:
     verifier(element.etat == "termine", "le fichier repris va jusqu'au bout")
 
 
+def essai_sortie_pyannote() -> None:
+    """
+    Les tours de parole se lisent aussi dans la sortie de pyannote.audio 4.
+
+    La 4.x rend un `DiarizeOutput` au lieu d'une `Annotation` : sans adaptation,
+    la séparation échouait toujours sur `itertracks` et la transcription sortait
+    sans locuteurs. Les objets de pyannote sont imités, rien n'est installé.
+    """
+    titre("Sortie de pyannote.audio 3 et 4")
+
+    from app import diarisation
+
+    class Periode:
+        def __init__(self, debut, fin):
+            self.start, self.end = debut, fin
+
+    class Annotation:
+        def __init__(self, *tours):
+            self.tours = tours
+
+        def itertracks(self, yield_label=False):
+            for debut, fin, etiquette in self.tours:
+                yield Periode(debut, fin), "_", etiquette
+
+    class SortieV4:
+        speaker_diarization = Annotation((0, 5, "A"), (4, 9, "B"))
+        exclusive_speaker_diarization = Annotation((0, 4, "A"), (4, 9, "B"))
+
+    verifier(diarisation.annotation_de(SortieV4()) is SortieV4.exclusive_speaker_diarization,
+             "pyannote 4 : la version exclusive, sans chevauchement, est retenue")
+    ancienne = Annotation((0, 3, "A"))
+    verifier(diarisation.annotation_de(ancienne) is ancienne,
+             "pyannote 3 : l'annotation rendue est lue telle quelle")
+
+    originaux = (diarisation.indisponibilite, diarisation.jeton, diarisation._charger_pipeline)
+    try:
+        diarisation.indisponibilite = lambda: ""
+        diarisation.jeton = lambda: "jeton-simule"
+        diarisation._charger_pipeline = lambda cle, signaler: (lambda entree, **k: SortieV4())
+        import numpy as np
+        try:
+            import torch  # noqa: F401
+            tours = diarisation.diariser(np.zeros(16000, dtype=np.float32), 16000)
+            verifier([t["fin"] for t in tours] == [4.0, 9.0] and len({t["locuteur"] for t in tours}) == 2,
+                     "diariser() rend deux locuteurs depuis une sortie 4.x", str(tours))
+        except ImportError:
+            print("  --    diariser() de bout en bout : PyTorch absent, contrôle sauté")
+    finally:
+        diarisation.indisponibilite, diarisation.jeton, diarisation._charger_pipeline = originaux
+
+
 def essai_cartes_graphiques() -> None:
     """
     Les écrans virtuels ne passent pas pour des cartes, la vraie mémoire est lue.
@@ -1346,6 +1399,7 @@ def principal() -> int:
         essai_calibration(base)
         essai_bornes_fenetres()
         essai_reprise_locuteurs(base)
+        essai_sortie_pyannote()
         essai_cartes_graphiques()
 
     print(f"\n{'=' * 54}")
