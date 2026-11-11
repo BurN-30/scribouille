@@ -12,18 +12,20 @@
 #
 # Les lignes vides et celles commençant par « # » sont ignorées.
 #
-# Remplacez les exemples ci-dessous par vos propres corrections.
+# Les exemples ci-dessous sont en commentaire : ils montrent la forme
+# attendue sans rien modifier dans vos transcriptions. Retirez le « # »
+# devant une ligne pour l'activer, ou écrivez directement vos règles.
 
 # --- Noms propres régulièrement massacrés
-jean dupont => Jean Dupont
-mon entreprise => MonEntreprise
+# jean dupont => Jean Dupont
+# mon entreprise => MonEntreprise
 
 # --- Outils et technologies
-guitte lab => GitLab
-guite lab => GitLab
-cubernetes => Kubernetes
-poste grès => PostgreSQL
+# guitte lab => GitLab
+# guite lab => GitLab
+# cubernetes => Kubernetes
+# poste grès => PostgreSQL
 
 # --- Sigles entendus phonétiquement
-er gé pé dé => RGPD
-a pé i => API
+# er gé pé dé => RGPD
+# a pé i => API

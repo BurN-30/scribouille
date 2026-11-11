@@ -10,24 +10,26 @@
 #
 # Les lignes vides et celles commençant par « # » sont ignorées.
 #
-# Remplacez les exemples ci-dessous par votre propre vocabulaire.
+# Les exemples ci-dessous sont en commentaire : ils montrent la forme
+# attendue sans rien souffler au modèle. Retirez le « # » devant une ligne
+# pour l'activer, ou écrivez directement vos propres termes.
 
 # --- Personnes (prénoms et noms des participants habituels)
-Jean Dupont
-Marie Lefèvre
-Karim Benali
+# Jean Dupont
+# Marie Lefèvre
+# Karim Benali
 
 # --- Organisations
-MonEntreprise
-Direction des systèmes d'information
+# MonEntreprise
+# Direction des systèmes d'information
 
 # --- Produits, outils et technologies
-GitLab
-Kubernetes
-Active Directory
-PostgreSQL
+# GitLab
+# Kubernetes
+# Active Directory
+# PostgreSQL
 
 # --- Sigles et jargon interne
-RGPD
-API
-SSO
+# RGPD
+# API
+# SSO
