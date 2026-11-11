@@ -31,7 +31,7 @@ EDITEUR = "Nathan SACCOL"
 # huggingface_hub sait descendre les poids de deux facons : le HTTPS ordinaire,
 # et un protocole maison, « xet », servi par une bibliotheque native separee
 # (hf_xet) et par des hotes qui lui sont propres. Le 21 aout 2026, sur le reseau
-# personnel de Nathan, ce second chemin rendait la main EN UNE SECONDE sans
+# domestique du poste de developpement, ce second chemin rendait la main EN UNE SECONDE sans
 # transferer un octet, alors que le meme fichier se telechargeait sans probleme
 # depuis un navigateur : le hub n'a rien dit, l'application a cru tenir un
 # modele, et le moteur a echoue plus loin sur un « model.bin » absent.
