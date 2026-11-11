@@ -1,0 +1,25 @@
+Extrait du banc d'essai de Scribouille
+=======================================
+
+extrait_fr.ogg (43,6 s, Opus 32 kbit/s, mono 16 kHz) met bout à bout cinq
+phrases lues du jeu de données FLEURS, partie « dev », langue fr_fr, séparées
+par 0,7 s de silence. extrait_fr.txt en donne le texte de référence, une phrase
+par ligne, tel que FLEURS le publie.
+
+Phrases retenues (identifiant FLEURS, fichier d'origine) :
+  1646 (14203199903136889342.wav)
+  1581 (580324696948961796.wav)
+  1589 (9932118623900859329.wav)
+  1529 (14577168266742294147.wav)
+  1577 (3920926992201662587.wav)
+
+Source : FLEURS, Google, https://huggingface.co/datasets/google/fleurs
+Licence : Creative Commons Attribution 4.0 International (CC BY 4.0),
+https://creativecommons.org/licenses/by/4.0/
+Modifications : extraits mis bout à bout, silences ajoutés, réencodage en Opus.
+
+Référence : Conneau et al., « FLEURS: Few-shot Learning Evaluation of Universal
+Representations of Speech », 2022, arXiv:2205.12446.
+
+Le banc d'essai (app/banc.py) transcrit cet extrait sous plusieurs réglages et
+compare chaque texte obtenu à la référence (taux d'erreur sur les mots).

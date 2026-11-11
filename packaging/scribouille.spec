@@ -96,6 +96,8 @@ donnees = [
     (str(RACINE / "corrections.txt"), "."),
     (str(RACINE / "LICENSE"), "."),
     (str(RACINE / "README.md"), "."),
+    # Extrait du banc d'essai de vitesse et son texte de référence (app/banc.py).
+    (str(RACINE / "banc"), "banc"),
 ]
 
 # faster-whisper embarque le modèle de détection d'activité vocale (silero, ONNX)

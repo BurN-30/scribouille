@@ -51,6 +51,18 @@ extensions.activer()
 if extensions.options_reconnues(sys.argv[1:]):
     sys.exit(extensions.principal_cli(sys.argv[1:]))
 
+# Banc d'essai de vitesse, en ligne de commande. « --banc-essai » est le
+# processus travailleur d'un essai, lancé par le banc lui-même : comme pour les
+# extensions, il n'écrit pas dans le journal de la fenêtre. Dans la version
+# installée, c'est « scribouille-verifier.exe --banc » qu'il faut lancer : il a
+# une console, l'exécutable fenêtré n'en a pas.
+if "--banc" in sys.argv[1:] or "--banc-essai" in sys.argv[1:]:
+    from app import banc as _banc
+
+    if "--banc" in sys.argv[1:]:
+        journal.demarrer()
+    sys.exit(_banc.principal_cli(sys.argv[1:]))
+
 journal.demarrer()
 journal.purger()
 journal.silence_bibliotheques()
@@ -245,7 +257,7 @@ from webview.dom import DOMEventHandler  # noqa: E402
 from app import audio as audio_module  # noqa: E402
 from app import config as config_module  # noqa: E402
 from app import barre_taches, diarisation, donnees, gabarit, lecture, maj  # noqa: E402
-from app import materiel, nommage, presets, reprise, stockage  # noqa: E402
+from app import banc, materiel, nommage, presets, reglage_machine, reprise, stockage  # noqa: E402
 from app import surveillance, traitement, vocabulaire  # noqa: E402
 
 _SANS_FENETRE = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
@@ -262,6 +274,8 @@ class Passerelle:
         self._fenetre = None
         self.config = config_module.charger()
         self.materiel = materiel.detecter()
+        # Réglage de vitesse mesuré par le banc d'essai et accepté sur ce poste.
+        self._effet_reglage = reglage_machine.appliquer_au_materiel(self.config, self.materiel)
         self.file = traitement.FileTraitement(self.materiel)
         self._rappels = traitement.Rappels(
             etat=self._sur_etat,
@@ -274,6 +288,12 @@ class Passerelle:
         #: Un seul à la fois, et l'interface le sait par `etat_locuteurs`.
         self._installation_locuteurs = None
         self._installation_annulee = False
+        #: Installation du moteur OpenVINO, même mécanique, processus à part.
+        self._installation_openvino = None
+        self._installation_ov_annulee = False
+        #: Banc d'essai en cours (un fil), et sa demande d'arrêt.
+        self._banc = None
+        self._arret_banc = threading.Event()
         #: Dossier surveillé. Le fil ne démarre que si l'option est active.
         self.surveillant = surveillance.Surveillant(
             sur_nouveaux=self._sur_fichiers_surveilles,
@@ -405,6 +425,7 @@ class Passerelle:
             "modeles": self.infos_modeles(),
             "version_installee": chemins.EST_GELE,
             "avertissements": self._avertissements(),
+            "vitesse": self.etat_vitesse(),
         }
 
     def _avertissements(self) -> list[str]:
@@ -420,8 +441,16 @@ class Passerelle:
         return messages
 
     def _modele_courant(self) -> str:
+        """
+        Modèle que la prochaine file va charger : celui du preset, ou son
+        équivalent au format d'OpenVINO quand ce moteur est retenu sur le poste.
+        """
         avance = self.config.get("modele_avance", "") if self.config.get("mode_avance") else ""
-        return presets.modele_du_preset(self.config.get("preset", "qualite"), avance)
+        modele = presets.modele_du_preset(self.config.get("preset", "qualite"), avance)
+        forcer = bool(self.config.get("forcer_processeur")) and bool(self.config.get("mode_avance"))
+        if self.materiel.moteur == "openvino" and not forcer and presets.depot_openvino(modele):
+            return presets.depot_openvino(modele)
+        return modele
 
     def _annonce_telechargement(self) -> str:
         """
@@ -815,7 +844,199 @@ class Passerelle:
         journal.info("Installation de la séparation des locuteurs annulée")
         return {"ok": True}
 
-    def _suivre_installation(self, processus) -> None:
+    # -- vitesse de cette machine : OpenVINO et banc d'essai ----------------
+    #
+    # Le moteur OpenVINO s'installe comme la séparation des locuteurs (même
+    # processus de fond, même protocole de lignes), dans son propre dossier.
+    # Le banc d'essai tourne dans un fil, chaque essai dans un processus.
+
+    def etat_vitesse(self) -> dict:
+        from app import extensions as ext_module, moteur_openvino
+
+        ov = ext_module.etat_openvino()
+        ov["en_cours"] = self._installation_openvino is not None
+        ov["version"] = moteur_openvino.version() if ov["installee"] else ""
+        ov["peripheriques"] = (moteur_openvino.peripheriques_disponibles()
+                               if ov["installee"] else [])
+        ov["utile"] = bool(self.materiel.a_graphique_intel()
+                           or any("intel" in n.nom.lower() for n in self.materiel.npus)
+                           or "intel" in (self.materiel.cpu_nom or "").lower()
+                           or ov["installee"])
+        reglage = reglage_machine.lire(self.config, self.materiel)
+        conseil = banc.dernier_conseil()
+        return {
+            "openvino": ov,
+            "reglage": reglage,
+            "effet": {k: v for k, v in (self._effet_reglage or {}).items()
+                      if k in ("indisponible", "plantage")},
+            "resume_reglage": self._resume_reglage(reglage),
+            "banc_en_cours": self._banc is not None,
+            "conseil": conseil,
+            "resume_conseil": self._resume_reglage(conseil) if conseil else "",
+            "manquants": [
+                {"modele": moteur_nom_court(m), "taille": langues.octets(o)}
+                for m, o in banc.modeles_manquants()
+            ],
+            "npu": any(True for _ in self.materiel.npus),
+        }
+
+    def _resume_reglage(self, reglage: dict) -> str:
+        if not reglage:
+            return langues.t("vitesse.automatique", fils=self.materiel.fils_automatiques)
+        if reglage.get("moteur") == "openvino":
+            from app import moteur_openvino
+
+            return langues.t("vitesse.reglage_ov", peripherique=moteur_openvino.nom_peripherique(
+                str(reglage.get("peripherique") or "CPU")))
+        lot = int(reglage.get("lot") or 0)
+        return langues.t("vitesse.reglage_ct2", fils=reglage.get("fils") or self.materiel.fils_automatiques,
+                         lots=langues.t("banc.lots", n=lot) if lot else langues.t("banc.un_a_un"))
+
+    def installer_openvino(self) -> dict:
+        from app import extensions as ext_module
+
+        if self._installation_openvino is not None:
+            return {"ok": False, "message": langues.t("ext.deja_en_cours")}
+        libre = chemins.espace_libre_go(chemins.RACINE)
+        if libre and libre < ext_module.ESPACE_REQUIS_OPENVINO_GO:
+            return {"ok": False, "message": langues.t(
+                "ext.espace_insuffisant", libre=langues.nombre(libre, 1),
+                requis=langues.nombre(ext_module.ESPACE_REQUIS_OPENVINO_GO, 1))}
+        commande, dossier = ext_module.commande_travailleur(["--installer-openvino"])
+        journal.info("Installation d'OpenVINO : %s", " ".join(commande))
+        try:
+            processus = subprocess.Popen(
+                commande, cwd=dossier, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace", bufsize=1,
+                creationflags=_SANS_FENETRE,
+            )
+        except OSError as exc:
+            journal.exception("Processus d'installation impossible à lancer", exc)
+            return {"ok": False, "message": langues.t("ext.lancement_impossible")}
+        self._installation_openvino = processus
+        self._installation_ov_annulee = False
+        self._fond(lambda: self._suivre_installation(processus, "openvino"))
+        return {"ok": True}
+
+    def annuler_installation_openvino(self) -> dict:
+        processus = self._installation_openvino
+        if processus is None:
+            return {"ok": False}
+        self._installation_ov_annulee = True
+        try:
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(processus.pid)],
+                           capture_output=True, creationflags=_SANS_FENETRE, timeout=30)
+        except Exception as exc:
+            journal.debug("Arrêt du processus d'installation : %s", exc)
+        return {"ok": True}
+
+    def _terminer_installation_openvino(self, code: int) -> None:
+        from app import extensions as ext_module, moteur_openvino
+
+        def conclure(charge: dict) -> None:
+            charge["vitesse"] = self.etat_vitesse()
+            self._js("onFinExtensionOpenvino(" + _json(charge) + ")")
+
+        if self._installation_ov_annulee:
+            conclure({"etat": "annulee", "message": langues.t("ext.annulee")})
+            return
+        if code != 0:
+            journal.erreur("Installation d'OpenVINO en échec (code %s)", code)
+            conclure({"etat": "echec", "message": langues.t("ov.installation_echec", dossier=str(
+                ext_module.DOSSIER_HORS_LIGNE))})
+            return
+        commande, dossier = ext_module.commande_travailleur(["--verifier-openvino"])
+        try:
+            sortie = subprocess.run(commande, cwd=dossier, capture_output=True, text=True,
+                                    encoding="utf-8", errors="replace", timeout=300,
+                                    creationflags=_SANS_FENETRE)
+            reussi = sortie.returncode == 0
+            detail = (sortie.stdout or "").strip().splitlines()[-1:] or [""]
+        except Exception as exc:
+            reussi, detail = False, [f"{type(exc).__name__}: {exc}"]
+        if not reussi:
+            journal.erreur("OpenVINO posé mais inutilisable : %s", detail[0])
+            conclure({"etat": "echec", "message": langues.t("ext.verification_ko")})
+            return
+        ext_module.activer()
+        import importlib
+
+        importlib.invalidate_caches()
+        moteur_openvino.peripheriques_disponibles(forcer=True)
+        journal.info("OpenVINO installé : %s", detail[0])
+        conclure({"etat": "installee", "message": langues.t("ov.installe")})
+
+    def retirer_openvino(self) -> dict:
+        from app import extensions as ext_module
+
+        if self._installation_openvino is not None:
+            return {"ok": False, "message": langues.t("ext.deja_en_cours")}
+        if not chemins.EST_GELE:
+            return {"ok": False, "message": langues.t("ov.retrait_sources")}
+        if self.materiel.moteur == "openvino":
+            reglage_machine.oublier(self.config, self.materiel)
+            config_module.sauver(self.config)
+        resultat = ext_module.retirer(ext_module.DOSSIER_OPENVINO, vider_cache=False)
+        if not resultat["ok"]:
+            # Les DLL d'OpenVINO déjà chargées par ce processus restent
+            # verrouillées jusqu'à la fermeture : on le dit.
+            journal.erreur("Retrait d'OpenVINO en échec : %s", resultat["message_technique"])
+            return {"ok": False, "message": langues.t("ov.retrait_echec")}
+        return {"ok": True, "message": langues.t(
+            "ext.retiree", taille=langues.nombre(resultat["libere_go"], 2)),
+            "vitesse": self.etat_vitesse()}
+
+    def lancer_banc(self, telecharger: bool = False, npu: bool = False) -> dict:
+        if self._banc is not None:
+            return {"ok": False, "message": langues.t("app.banc.en_cours")}
+        if self.file.occupee:
+            return {"ok": False, "message": langues.t("app.banc.file_occupee")}
+        self._arret_banc.clear()
+
+        def travail() -> None:
+            try:
+                resultat = banc.executer(
+                    telecharger=bool(telecharger), npu=bool(npu),
+                    rappel=lambda etape: self._js(f"onBanc({_json(etape)})"),
+                    interrompu=self._arret_banc.is_set)
+                charge = {"ok": True, "rapport": resultat["rapport"],
+                          "fichier": resultat["fichier"], "annule": resultat["annule"],
+                          "conseil": resultat["reglage"]}
+            except Exception as exc:
+                incident = journal.formater_incident(exc, "banc d'essai")
+                charge = {"ok": False, "message": incident["titre"]}
+            self._banc = None
+            charge["vitesse"] = self.etat_vitesse()
+            self._js(f"onFinBanc({_json(charge)})")
+
+        self._banc = threading.Thread(target=travail, daemon=True)
+        self._banc.start()
+        return {"ok": True}
+
+    def arreter_banc(self) -> dict:
+        self._arret_banc.set()
+        return {"ok": True}
+
+    def appliquer_conseil_banc(self) -> dict:
+        conseil = banc.dernier_conseil()
+        if not conseil:
+            return {"ok": False, "message": langues.t("vitesse.aucun_conseil")}
+        reglage_machine.enregistrer(self.config, self.materiel, conseil)
+        banc.enregistrer_mesures(self.materiel, conseil)
+        config_module.sauver(self.config)
+        self._effet_reglage = reglage_machine.appliquer_au_materiel(self.config, self.materiel)
+        journal.info("Réglage du banc appliqué : %s", self._resume_reglage(conseil))
+        return {"ok": True, "message": langues.t("vitesse.applique",
+                                                 reglage=self._resume_reglage(conseil))}
+
+    def revenir_reglage_automatique(self) -> dict:
+        reglage_machine.oublier(self.config, self.materiel)
+        config_module.sauver(self.config)
+        self._effet_reglage = {}
+        journal.info("Réglage de vitesse : retour au choix automatique")
+        return {"ok": True, "message": langues.t("vitesse.retour_auto")}
+
+    def _suivre_installation(self, processus, extension: str = "locuteurs") -> None:
         """
         Lit les lignes du processus de fond et les traduit pour l'interface.
 
@@ -832,11 +1053,16 @@ class Passerelle:
                     continue
                 _, _, reste = ligne.partition(extensions.MARQUE)
                 evenement, _, detail = reste.partition("|")
-                self._js(f"onExtensionLocuteurs({_json(self._traduire_etape(evenement, detail))})")
+                rappel = "onExtensionOpenvino" if extension == "openvino" else "onExtensionLocuteurs"
+                self._js(f"{rappel}({_json(self._traduire_etape(evenement, detail))})")
         except Exception as exc:
             journal.exception("Lecture du processus d'installation interrompue", exc)
 
         code = processus.wait()
+        if extension == "openvino":
+            self._installation_openvino = None
+            self._terminer_installation_openvino(code)
+            return
         self._installation_locuteurs = None
         self._terminer_installation(code)
 
@@ -849,7 +1075,8 @@ class Passerelle:
             numero = morceaux[0] if morceaux else "1"
             total = morceaux[1] if len(morceaux) > 1 else "1"
             nom = morceaux[2] if len(morceaux) > 2 else ""
-            cle = "ext.lot.locuteurs" if nom == "locuteurs" else "ext.lot.paquets"
+            cle = {"locuteurs": "ext.lot.locuteurs",
+                   "openvino": "ext.lot.openvino"}.get(nom, "ext.lot.paquets")
             # « Etape 1 sur 1 » ne dirait rien a personne : quand il n'y a
             # qu'un lot, on annonce simplement ce qui s'installe.
             if total == "1":
@@ -1132,6 +1359,9 @@ class Passerelle:
     def demarrer(self) -> dict:
         if self.file.occupee:
             return {"ok": False, "message": langues.t("app.demarrer.en_cours")}
+        if self._banc is not None:
+            return {"ok": False, "message": langues.t("app.banc.en_cours")}
+        self._effet_reglage = reglage_machine.appliquer_au_materiel(self.config, self.materiel)
         if not audio_module.ffmpeg_present():
             return {
                 "ok": False,
@@ -1220,7 +1450,7 @@ class Passerelle:
                 "message": langues.t(
                     "app.modele.incomplet_hors_ligne" if incomplet
                     else "app.modele.hors_ligne",
-                    taille=taille),
+                    taille=taille) + " " + moteur.voie_hors_ligne(modele),
             }
 
         self._sur_journal("attention", langues.t(
