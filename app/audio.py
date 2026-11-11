@@ -168,9 +168,14 @@ def duree(chemin: str | Path) -> float:
     return 0.0
 
 
-def decoder(chemin: str | Path, filtres_salle: bool = False) -> np.ndarray:
+def decoder(chemin: str | Path, filtres_salle: bool = False,
+            debut: float = 0.0, duree: float = 0.0) -> np.ndarray:
     """
     Décode le fichier en tableau float32 mono 16 kHz, normalisé entre -1 et 1.
+
+    `debut` et `duree`, en secondes, ne décodent qu'un extrait (comparaison des
+    moteurs) : FFmpeg se place directement au début voulu, sans décoder ce qui
+    précède. Zéro pour l'un ou l'autre : depuis le début, jusqu'à la fin.
 
     Lève une ErreurLisible si le fichier est illisible ou ne contient pas d'audio.
     """
@@ -185,8 +190,13 @@ def decoder(chemin: str | Path, filtres_salle: bool = False) -> np.ndarray:
 
     commande = [
         binaire, "-nostdin", "-hide_banner", "-loglevel", "error",
-        "-threads", "0", "-i", str(fichier),
+        "-threads", "0",
     ]
+    if debut and debut > 0:
+        commande += ["-ss", f"{float(debut):.3f}"]
+    commande += ["-i", str(fichier)]
+    if duree and duree > 0:
+        commande += ["-t", f"{float(duree):.3f}"]
     if filtres_salle:
         commande += ["-af", FILTRES_SALLE]
     commande += [
