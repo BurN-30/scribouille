@@ -13,6 +13,9 @@ Clés du réglage, toutes facultatives :
     peripherique    « CPU », « GPU » ou « NPU » (OpenVINO seulement)
     fils            nombre de fils de calcul de CTranslate2, 0 = automatique
     lot             taille des lots de CTranslate2, 0 = un à un, absent = preset
+    faisceau        largeur du faisceau du moteur retenu, absent = valeur du
+                    moteur (5 pour CTranslate2, 1 pour OpenVINO) ; posé par la
+                    campagne de mesure (`app/campagne.py`)
 """
 
 from __future__ import annotations
@@ -80,10 +83,20 @@ def lot_impose(config: dict, mat: Materiel) -> int | None:
         return None
 
 
+def faisceau_impose(config: dict, mat: Materiel) -> int | None:
+    """Largeur de faisceau imposée par le réglage, None pour garder celle du moteur."""
+    reglage = lire(config, mat)
+    try:
+        valeur = int(reglage.get("faisceau") or 0)
+    except (TypeError, ValueError):
+        return None
+    return valeur if valeur >= 1 else None
+
+
 def enregistrer(config: dict, mat: Materiel, reglage: dict) -> dict:
     """Écrit le réglage dans la configuration (en mémoire), signé pour ce poste."""
     propre = {
-        cle: reglage[cle] for cle in ("moteur", "peripherique", "fils", "lot")
+        cle: reglage[cle] for cle in ("moteur", "peripherique", "fils", "lot", "faisceau")
         if cle in reglage and reglage[cle] is not None
     }
     if propre.get("moteur") not in MOTEURS:

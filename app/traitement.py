@@ -210,6 +210,14 @@ class FileTraitement:
             # Le banc a mesuré mieux sur ce poste ; la garde mémoire, elle,
             # reste prioritaire (un lot de 0 venu d'elle n'est jamais relevé).
             reglages["lot"] = impose
+        # Faisceau mesuré par la campagne et accepté (« --appliquer ») : il vaut
+        # pour le moteur retenu. Sans réglage, rien ne change.
+        faisceau = reglage_machine.faisceau_impose(config, self.materiel)
+        if faisceau is not None:
+            if self.materiel.moteur == "openvino":
+                reglages["faisceau_openvino"] = faisceau
+            else:
+                reglages["beam_size"] = reglages["best_of"] = faisceau
         moteur.limiter_parallelisme(self.materiel.fils_calcul)
 
         instance = fabriquer_moteur(self.materiel, reglages)
