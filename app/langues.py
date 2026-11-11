@@ -169,8 +169,8 @@ _FR: dict[str, str] = {
         "avant de lancer la file."
     ),
     "avert.amd": (
-        "{carte} détectée mais non utilisée : en v1, seul le processeur travaille sur "
-        "les cartes non NVIDIA."
+        "{carte} détectée mais non utilisée : seul le processeur travaille sur les "
+        "cartes non NVIDIA."
     ),
 
     # -- matériel (app/materiel.py) ----------------------------------------
@@ -179,7 +179,7 @@ _FR: dict[str, str] = {
     "mat.coeurs_fils": "{coeurs} cœurs / {fils} fils",
     "mat.memoire": "{go} Go de mémoire",
     "mat.gpu_accelere": "{nom} (accéléré)",
-    "mat.gpu_non_accelere": "{nom} (non accéléré en v1)",
+    "mat.gpu_non_accelere": "{nom} (non exploitée)",
     "mat.sans_gpu": "pas de carte graphique dédiée",
     "mat.npu_non_exploite": "{nom} (non exploité)",
     "gpu.note.cuda_active": "Accélération CUDA active.",
@@ -188,17 +188,18 @@ _FR: dict[str, str] = {
         "pas. Relancez l'installateur pour les poser."
     ),
     "gpu.note.amd": (
-        "Non accéléré en v1 : CTranslate2 ne gère que CPU et CUDA. L'accélération AMD "
-        "via whisper.cpp Vulkan est prévue en v1.x."
+        "Non exploitée : la transcription tourne sur le processeur. Le moteur sait "
+        "calculer sur les cartes AMD récentes (ROCm), mais l'application ne l'embarque "
+        "pas encore."
     ),
     "gpu.note.intel": (
-        "Circuit graphique intégré, détecté mais non exploité en v1 : la transcription "
-        "tourne sur le processeur. Pistes v1.x : whisper.cpp Vulkan, ou OpenVINO."
+        "Circuit graphique intégré, détecté mais non exploité : la transcription "
+        "tourne sur le processeur."
     ),
-    "gpu.note.autre": "Non accéléré en v1.",
+    "gpu.note.autre": "Non exploitée.",
     "npu.note": (
-        "Détecté, non exploité en v1. Un NPU vise surtout l'autonomie sur batterie ; "
-        "la piste OpenVINO est documentée comme évolution v1.x."
+        "Détecté, non exploité. Un NPU vise surtout l'autonomie sur batterie, la "
+        "transcription tourne sur le processeur."
     ),
 
     # -- chemins et dossiers (app/chemins.py) ------------------------------
@@ -941,7 +942,7 @@ _EN: dict[str, str] = {
         "the queue."
     ),
     "avert.amd": (
-        "{carte} detected but not used: in v1, only the CPU works on non NVIDIA cards."
+        "{carte} detected but not used: only the CPU works on non NVIDIA cards."
     ),
 
     "mat.cpu_inconnu": "Unknown processor",
@@ -949,7 +950,7 @@ _EN: dict[str, str] = {
     "mat.coeurs_fils": "{coeurs} cores / {fils} threads",
     "mat.memoire": "{go} GB of memory",
     "mat.gpu_accelere": "{nom} (accelerated)",
-    "mat.gpu_non_accelere": "{nom} (not accelerated in v1)",
+    "mat.gpu_non_accelere": "{nom} (not used)",
     "mat.sans_gpu": "no dedicated graphics card",
     "mat.npu_non_exploite": "{nom} (not used)",
     "gpu.note.cuda_active": "CUDA acceleration active.",
@@ -958,17 +959,16 @@ _EN: dict[str, str] = {
         "answering. Run the installer again to put them in place."
     ),
     "gpu.note.amd": (
-        "Not accelerated in v1: CTranslate2 only supports CPU and CUDA. AMD acceleration "
-        "through whisper.cpp Vulkan is planned for v1.x."
+        "Not used: transcription runs on the CPU. The engine can compute on recent AMD "
+        "cards (ROCm), but the application does not ship it yet."
     ),
     "gpu.note.intel": (
-        "Integrated graphics, detected but not used in v1: transcription runs on the "
-        "CPU. Options for v1.x: whisper.cpp Vulkan, or OpenVINO."
+        "Integrated graphics, detected but not used: transcription runs on the CPU."
     ),
-    "gpu.note.autre": "Not accelerated in v1.",
+    "gpu.note.autre": "Not used.",
     "npu.note": (
-        "Detected, not used in v1. An NPU mainly targets battery life; OpenVINO is "
-        "documented as a v1.x direction."
+        "Detected, not used. An NPU mainly targets battery life; transcription runs "
+        "on the CPU."
     ),
 
     "chemin.dossier_non_cree": "This folder could not be created ({erreur}).",
