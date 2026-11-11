@@ -57,16 +57,16 @@ Le facteur ci-dessous est le rapport durée de calcul sur durée de l'audio. En 
 
 | Matériel | Qualité maximale | Rapide | Une heure d'audio, en qualité |
 |---|---|---|---|
-| Ultraportable, 12 à 14 fils, sans carte dédiée | environ 1,2 x | environ 0,3 x | environ 1 h 15 |
-| Processeur de bureau, 16 fils et plus | environ 0,7 x | environ 0,2 x | environ 40 min |
-| Portable modeste, 4 à 8 fils | environ 2 x | environ 0,5 x | environ 2 h |
-| Carte NVIDIA (CUDA, float16) | environ 0,1 x | environ 0,05 x | environ 6 min |
+| Processeur de bureau, 8 cœurs / 16 fils (Ryzen 7 7800X3D), **mesuré** | 0,7 x | 0,17 x | environ 42 min |
+| Carte NVIDIA (CUDA, float16), estimation non mesurée | environ 0,1 x | environ 0,05 x | environ 6 min |
 
-**Ce sont des estimations de départ, pas des garanties.** Elles sont calées sur des mesures publiques et ajustées au nombre de cœurs de votre machine. L'application affiche le **temps réellement mesuré** après chaque transcription, et l'écrit dans l'en-tête du fichier produit. La séparation des locuteurs ajoute à peu près 0,2 x sur processeur.
+La ligne mesurée l'a été en novembre 2026 sur un extrait français de trois minutes, machine occupée par d'autres programmes : sur une machine au repos, c'est un peu plus rapide. Un processeur plus modeste demande davantage. Depuis la 2.4.0, les passages de parole sont décodés **par lots**, ce qui divise le temps de calcul par deux à deux et demi à qualité égale, au prix d'environ 2,5 Go de mémoire de plus. Sous 12 Go de mémoire vive, l'application s'en passe et le calcul est environ deux fois plus long.
+
+**Avant la première transcription, l'application annonce une estimation de départ, pas une garantie.** Elle est calée sur des mesures publiques et ajustée au nombre de cœurs de votre machine. L'application affiche le **temps réellement mesuré** après chaque transcription, et l'écrit dans l'en-tête du fichier produit. La séparation des locuteurs ajoute à peu près 0,2 x sur processeur.
 
 **Elles se corrigent toutes seules.** Dès qu'une transcription arrive à son terme, le facteur observé est retenu, et c'est lui qui sert aux annonces suivantes : la carte du matériel précise alors « mesuré sur cette machine ». Les cinq dernières mesures sont moyennées, la plus récente et la plus longue pesant le plus, et chaque combinaison de modèle et de largeur de faisceau est suivie à part. Rien à régler, et rien qui parte en ligne : les mesures vivent dans `calibration.json`, à côté de vos réglages.
 
-Ce qui est accéléré dans cette version : le **processeur, partout**, en quantification `int8`, qui est le mode par défaut et reste parfaitement utilisable, et les **cartes NVIDIA** en CUDA `float16`, automatiquement, si le pilote et les bibliothèques répondent. Les cartes AMD Radeon, les circuits graphiques intégrés Intel et les NPU sont détectés et affichés mais **pas exploités**, parce que faster-whisper repose sur [CTranslate2](https://opennmt.net/CTranslate2/hardware_support.html), qui ne supporte que le CPU x86-64 ou ARM64 et les GPU NVIDIA. L'application le dit noir sur blanc plutôt que de laisser croire à une accélération qui n'existe pas.
+Ce qui est accéléré dans cette version : le **processeur, partout**, en quantification `int8`, qui est le mode par défaut et reste parfaitement utilisable, et les **cartes NVIDIA** en CUDA `float16`, automatiquement, si le pilote et les bibliothèques répondent. Les cartes AMD Radeon, les circuits graphiques intégrés Intel et les NPU sont détectés et affichés mais **pas exploités**. [CTranslate2](https://opennmt.net/CTranslate2/hardware_support.html), le moteur de faster-whisper, sait désormais calculer sur les cartes AMD récentes avec ROCm, sous Windows comme sous Linux, mais l'application n'embarque pas encore ces bibliothèques. Elle le dit noir sur blanc plutôt que de laisser croire à une accélération qui n'existe pas.
 
 <details>
 <summary>Ce qui pourrait changer cela, plus tard</summary>

@@ -209,8 +209,9 @@ def installer_cuda(nvidia: bool) -> None:
     if not nvidia:
         ok("Aucune carte NVIDIA détectée, transcription sur processeur.")
         info("C'est le cas le plus courant, et parfaitement utilisable :")
-        info("un enregistrement d'une heure se traite en une à deux heures")
-        info("en qualité maximale, et en une vingtaine de minutes en mode rapide.")
+        info("un enregistrement d'une heure se traite en trois quarts d'heure")
+        info("environ en qualité maximale sur un processeur de bureau récent,")
+        info("davantage sur un portable, et en dix à vingt minutes en mode rapide.")
         return
 
     info("Carte NVIDIA détectée, pose des bibliothèques CUDA dans l'environnement ...")

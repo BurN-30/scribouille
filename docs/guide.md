@@ -57,16 +57,16 @@ The factor below is compute time divided by audio duration. Under 1 is faster th
 
 | Hardware | Highest quality | Fast | One hour of audio, in quality |
 |---|---|---|---|
-| Thin laptop, 12 to 14 threads, no dedicated card | about 1.2 x | about 0.3 x | about 1 h 15 |
-| Desktop processor, 16 threads and up | about 0.7 x | about 0.2 x | about 40 min |
-| Modest laptop, 4 to 8 threads | about 2 x | about 0.5 x | about 2 h |
-| NVIDIA card (CUDA, float16) | about 0.1 x | about 0.05 x | about 6 min |
+| Desktop processor, 8 cores / 16 threads (Ryzen 7 7800X3D), **measured** | 0.7 x | 0.17 x | about 42 min |
+| NVIDIA card (CUDA, float16), estimate, not measured | about 0.1 x | about 0.05 x | about 6 min |
 
-**These are starting estimates, not guarantees.** They are calibrated on public measurements and adjusted to the number of cores on your machine. The app shows the **time actually measured** after every transcription, and writes it in the header of the output file. Speaker separation adds roughly 0.2 x on CPU.
+The measured row was taken in November 2026 on a three-minute French excerpt, with other programs busy on the machine: an idle machine is a little faster. A more modest processor takes longer. Since 2.4.0, speech passages are decoded **in batches**, which cuts compute time by two to two and a half at equal quality, for about 2.5 GB more memory. Below 12 GB of RAM the app skips batching, and compute takes about twice as long.
+
+**Before the first transcription, the app shows a starting estimate, not a guarantee.** It is calibrated on public measurements and adjusted to the number of cores on your machine. The app shows the **time actually measured** after every transcription, and writes it in the header of the output file. Speaker separation adds roughly 0.2 x on CPU.
 
 **They correct themselves.** As soon as a transcription completes, the observed factor is kept, and it is what the next announcements are based on: the hardware card then says "measured on this machine". The last five measurements are averaged, the most recent and the longest weighing the most, and every combination of model and beam width is tracked separately. Nothing to set up, and nothing goes online: the measurements live in `calibration.json`, next to your settings.
 
-Acceleration in this version: **CPU everywhere** with `int8` quantisation, which is the default and perfectly usable, and **NVIDIA cards** in CUDA `float16`, automatically, when the driver and libraries answer. AMD Radeon cards, Intel integrated graphics and NPUs are detected and displayed but **not used**, because faster-whisper sits on [CTranslate2](https://opennmt.net/CTranslate2/hardware_support.html), which supports x86-64 and ARM64 CPUs and NVIDIA GPUs only. The app says so plainly rather than implying an acceleration that does not exist.
+Acceleration in this version: **CPU everywhere** with `int8` quantisation, which is the default and perfectly usable, and **NVIDIA cards** in CUDA `float16`, automatically, when the driver and libraries answer. AMD Radeon cards, Intel integrated graphics and NPUs are detected and displayed but **not used**. [CTranslate2](https://opennmt.net/CTranslate2/hardware_support.html), the engine under faster-whisper, can now compute on recent AMD cards with ROCm, on Windows as on Linux, but the app does not ship those libraries yet. It says so plainly rather than implying an acceleration that does not exist.
 
 <details>
 <summary>What could change that, later</summary>
