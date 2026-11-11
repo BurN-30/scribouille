@@ -58,6 +58,9 @@ Le facteur ci-dessous est le rapport durée de calcul sur durée de l'audio. En 
 | Matériel | Qualité maximale | Rapide | Une heure d'audio, en qualité |
 |---|---|---|---|
 | Processeur de bureau, 8 cœurs / 16 fils (Ryzen 7 7800X3D), **mesuré** | 0,4 x | 0,15 x | environ 23 min |
+| Même processeur, moteur OpenVINO, **mesuré** | 0,24 x | 0,09 x | environ 14 min |
+| Puce graphique Intel d'un Core Ultra 7 265U, OpenVINO, mesure publiée par un tiers | non mesuré | 0,12 x | estimé autour de 20 min |
+| Processeur seul du même Core Ultra 7 265U, faster-whisper, mesure publiée par un tiers | non mesuré | 1,04 x | plus d'une heure |
 | Carte NVIDIA (CUDA, float16), estimation non mesurée | environ 0,1 x | environ 0,05 x | environ 6 min |
 
 La ligne mesurée l'a été en novembre 2026 sur un extrait français de trois minutes, machine occupée par d'autres programmes : sur une machine au repos, c'est un peu plus rapide. Un processeur plus modeste demande davantage. Depuis la 2.4.0, les passages de parole sont décodés **par lots**, ce qui, avec un fil de calcul par cœur physique, divise le temps de calcul par deux et demi à trois à qualité égale, au prix d'environ 2,5 Go de mémoire de plus. Sous 12 Go de mémoire vive, l'application s'en passe et le calcul est environ deux fois plus long.
@@ -66,14 +69,28 @@ La ligne mesurée l'a été en novembre 2026 sur un extrait français de trois m
 
 **Elles se corrigent toutes seules.** Dès qu'une transcription arrive à son terme, le facteur observé est retenu, et c'est lui qui sert aux annonces suivantes : la carte du matériel précise alors « mesuré sur cette machine ». Les cinq dernières mesures sont moyennées, la plus récente et la plus longue pesant le plus, et chaque combinaison de modèle et de largeur de faisceau est suivie à part. Rien à régler, et rien qui parte en ligne : les mesures vivent dans `calibration.json`, à côté de vos réglages.
 
-Ce qui est accéléré dans cette version : le **processeur, partout**, en quantification `int8`, qui est le mode par défaut et reste parfaitement utilisable, et les **cartes NVIDIA** en CUDA `float16`, automatiquement, si le pilote et les bibliothèques répondent. Les cartes AMD Radeon, les circuits graphiques intégrés Intel et les NPU sont détectés et affichés mais **pas exploités**. [CTranslate2](https://opennmt.net/CTranslate2/hardware_support.html), le moteur de faster-whisper, sait désormais calculer sur les cartes AMD récentes avec ROCm, sous Windows comme sous Linux, mais l'application n'embarque pas encore ces bibliothèques. Elle le dit noir sur blanc plutôt que de laisser croire à une accélération qui n'existe pas.
+Ce qui est accéléré : le **processeur, partout**, en quantification `int8` ; les **cartes NVIDIA** en CUDA `float16`, automatiquement, si le pilote et les bibliothèques répondent ; et, depuis la 2.4.0, **la puce graphique Intel intégrée** (et à titre expérimental le NPU) par le moteur **OpenVINO**, à installer en option. Les cartes AMD Radeon sont détectées et affichées mais pas exploitées.
+
+### Portable Intel (Core Ultra et apparentés)
+
+Sur un portable de 15 W sans carte dédiée, le processeur seul peut mettre plus longtemps à transcrire que la réunion n'a duré. Trois choses changent la donne, toutes dans la section **Vitesse de cette machine** des réglages :
+
+- **Le nombre de fils de calcul suit l'architecture.** Les Core Ultra série U mêlent cœurs performants, efficaces et « basse consommation » (2 + 8 + 2 sur un Core Ultra 5 225U). L'application les reconnaît et laisse de côté les cœurs basse consommation, plafonnés à 2,4 GHz et sans cache L3, qui freineraient tout le calcul. Elle empêche aussi Windows de brider la transcription quand la fenêtre est réduite.
+- **Le moteur OpenVINO** (Intel, licence Apache 2.0, environ 90 Mo depuis PyPI) transcrit sur la puce graphique intégrée. Seule mesure publiée sur un processeur de la même famille (Core Ultra 7 265U) : 0,12 x avec le modèle Rapide sur la puce graphique, contre 1,04 x sur son processeur, texte identique. Les modèles au format OpenVINO (0,8 Go pour Rapide, 1,6 Go pour Qualité) se téléchargent au premier usage. Ce que l'on perd : la probabilité de chaque mot, que ce moteur ne donne pas (la vue de relecture ne surligne alors aucun mot incertain). Tout le reste est gardé : segments horodatés, horodatage des mots pour les locuteurs, glossaire, reprise après coupure, arrêt. En cas de panne d'OpenVINO, le moteur habituel prend le relais sans perdre ce qui est déjà transcrit.
+- **Le banc d'essai** transcrit un extrait de 44 s livré avec l'application sous plusieurs réglages (fils de calcul, lots, modèle Rapide et modèle Qualité, chaque moteur et périphérique disponible), compare le texte obtenu à la référence, puis conseille le plus rapide qui reste juste. Il dure cinq à dix minutes. Rien ne change tant que vous n'avez pas cliqué sur **Appliquer le réglage conseillé** ; **Revenir au réglage automatique** défait tout. Le rapport (`rapports-banc\` dans le dossier de données) ne contient ni nom d'utilisateur, ni nom de machine, ni chemin : il peut être envoyé tel quel. Branchez le portable sur secteur avant de le lancer.
+
+En ligne de commande, sans fenêtre : `scribouille-verifier.exe --banc` dans le dossier d'installation (ou `.venv\Scripts\python transcriber.pyw --banc` depuis les sources) ; ajoutez `--telecharger` pour récupérer les modèles manquants, `--npu` pour essayer le NPU, `--appliquer` pour appliquer le conseil.
+
+**Réseau d'entreprise filtré.** Si PyPI ou Hugging Face sont bloqués, les messages d'erreur donnent la voie hors ligne : pour un modèle, recopier son dossier `models--...` depuis un poste qui l'a déjà téléchargé dans le dossier des modèles ; pour OpenVINO, déposer les trois fichiers `.whl` (obtenus ailleurs par `pip download`) dans `paquets-hors-ligne\` du dossier de données, puis relancer l'installation. Aucun droit d'administrateur n'est demandé : tout s'installe dans le dossier de l'utilisateur.
 
 <details>
-<summary>Ce qui pourrait changer cela, plus tard</summary>
+<summary>Pistes écartées pour l'instant, et pourquoi</summary>
 
-**whisper.cpp avec le backend Vulkan** est la piste solide, et la seule réaliste pour accélérer un Radeon sous Windows : un portage C/C++ indépendant de PyTorch et de CUDA, qui fait de l'inférence GPU multi-vendeur sans code spécifique au constructeur. Les mesures publiques donnent environ 8 x le temps réel sur une RX 9070 XT, et un facteur 3 à 4 fois meilleur que le CPU seul sur un iGPU Radeon 680M. La livraison envisagée est un binaire Windows Vulkan pré-compilé, piloté en sous-processus, pour ne demander à personne d'installer une chaîne de compilation C++. Le coût est un deuxième format de modèles, GGUF au lieu de CTranslate2, et une couche d'abstraction de moteur : c'est pour cela que ce n'est pas encore là.
+**whisper.cpp avec Vulkan ou OpenVINO** : aucun binaire Windows officiel avec ces moteurs (version 1.9.5, octobre 2026), il faudrait le construire soi-même et changer de format de modèles (GGUF). OpenVINO GenAI s'installe en trois paquets Python et lit des modèles déjà convertis par Intel : c'est la voie retenue.
 
-**OpenVINO pour l'iGPU et le NPU Intel** est intéressant mais pas mûr pour un outil clé en main : le backend réclame une version précise d'OpenVINO, et la conversion des modèles Whisper casse avec certaines versions de `transformers`. Quant au NPU lui-même, son intérêt est l'autonomie, quelques watts contre 15 à 25 pour l'iGPU, pas la vitesse brute. Si l'accélération Intel devient un objectif, passer par Vulkan est plus simple et plus robuste.
+**Le NPU** : pris en charge par OpenVINO, mais le seul essai publié sur un portable de cette famille l'a vu bloquer avec le modèle Rapide (Core Ultra 7 265U, octobre 2026). Il reste proposé au banc, à titre expérimental, et n'est jamais choisi sans y avoir réussi.
+
+**Les cartes AMD Radeon** : CTranslate2 sait calculer dessus avec ROCm sous Windows depuis la 4.9.0, mais l'application n'embarque pas encore ces bibliothèques (environ 1,1 Go).
 
 </details>
 

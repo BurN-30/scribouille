@@ -58,6 +58,9 @@ The factor below is compute time divided by audio duration. Under 1 is faster th
 | Hardware | Highest quality | Fast | One hour of audio, in quality |
 |---|---|---|---|
 | Desktop processor, 8 cores / 16 threads (Ryzen 7 7800X3D), **measured** | 0.4 x | 0.15 x | about 23 min |
+| Same processor, OpenVINO engine, **measured** | 0.24 x | 0.09 x | about 14 min |
+| Intel graphics of a Core Ultra 7 265U, OpenVINO, measurement published by a third party | not measured | 0.12 x | estimated around 20 min |
+| CPU alone of the same Core Ultra 7 265U, faster-whisper, measurement published by a third party | not measured | 1.04 x | over an hour |
 | NVIDIA card (CUDA, float16), estimate, not measured | about 0.1 x | about 0.05 x | about 6 min |
 
 The measured row was taken in November 2026 on a three-minute French excerpt, with other programs busy on the machine: an idle machine is a little faster. A more modest processor takes longer. Since 2.4.0, speech passages are decoded **in batches**, which, together with one compute thread per physical core, cuts compute time by two and a half to three at equal quality, for about 2.5 GB more memory. Below 12 GB of RAM the app skips batching, and compute takes about twice as long.
@@ -66,14 +69,28 @@ The measured row was taken in November 2026 on a three-minute French excerpt, wi
 
 **They correct themselves.** As soon as a transcription completes, the observed factor is kept, and it is what the next announcements are based on: the hardware card then says "measured on this machine". The last five measurements are averaged, the most recent and the longest weighing the most, and every combination of model and beam width is tracked separately. Nothing to set up, and nothing goes online: the measurements live in `calibration.json`, next to your settings.
 
-Acceleration in this version: **CPU everywhere** with `int8` quantisation, which is the default and perfectly usable, and **NVIDIA cards** in CUDA `float16`, automatically, when the driver and libraries answer. AMD Radeon cards, Intel integrated graphics and NPUs are detected and displayed but **not used**. [CTranslate2](https://opennmt.net/CTranslate2/hardware_support.html), the engine under faster-whisper, can now compute on recent AMD cards with ROCm, on Windows as on Linux, but the app does not ship those libraries yet. It says so plainly rather than implying an acceleration that does not exist.
+Acceleration: **CPU everywhere** with `int8` quantisation; **NVIDIA cards** in CUDA `float16`, automatically, when the driver and libraries answer; and, since 2.4.0, **Intel integrated graphics** (and, experimentally, the NPU) through the optional **OpenVINO** engine. AMD Radeon cards are detected and displayed but not used.
+
+### Intel laptops (Core Ultra and similar)
+
+On a 15 W laptop without a dedicated card, the CPU alone can take longer to transcribe than the meeting lasted. Three things change that, all in the **Speed of this machine** section of the settings:
+
+- **The number of compute threads follows the architecture.** Core Ultra U-series chips mix performance, efficient and low-power cores (2 + 8 + 2 on a Core Ultra 5 225U). The app recognises them and leaves out the low-power cores, capped at 2.4 GHz and without L3 cache, which would slow the whole computation down. It also stops Windows from throttling the transcription when the window is minimised.
+- **The OpenVINO engine** (Intel, Apache 2.0 licence, about 90 MB from PyPI) transcribes on the integrated graphics. The only published measurement on a processor of the same family (Core Ultra 7 265U): 0.12 x with the Fast model on the integrated graphics, against 1.04 x on its CPU, identical text. Models in OpenVINO format (0.8 GB for Fast, 1.6 GB for Quality) are downloaded on first use. What you lose: the probability of each word, which this engine does not give (the review view then highlights no uncertain word). Everything else is kept: timestamped segments, word timestamps for speakers, glossary, resume after interruption, stop. If OpenVINO fails, the usual engine takes over without losing what is already transcribed.
+- **The benchmark** transcribes a 44 s clip shipped with the app under several settings (compute threads, batches, Fast and Quality models, every available engine and device), compares the text with the reference, then recommends the fastest one that stays accurate. It takes five to ten minutes. Nothing changes until you click **Apply the recommended setting**; **Back to the automatic setting** undoes it all. The report (`rapports-banc\` in the data folder) contains no user name, machine name or path: it can be sent as is. Plug the laptop in before running it.
+
+From the command line, without a window: `scribouille-verifier.exe --banc` in the installation folder (or `.venv\Scripts\python transcriber.pyw --banc` from source); add `--telecharger` to fetch missing models, `--npu` to try the NPU, `--appliquer` to apply the recommendation.
+
+**Filtered company network.** If PyPI or Hugging Face are blocked, the error messages give the offline route: for a model, copy its `models--...` folder from a computer that already downloaded it into the models folder; for OpenVINO, drop the three `.whl` files (obtained elsewhere with `pip download`) into `paquets-hors-ligne\` in the data folder, then start the installation again. No administrator rights are needed: everything installs in the user's folder.
 
 <details>
-<summary>What could change that, later</summary>
+<summary>Options set aside for now, and why</summary>
 
-**whisper.cpp with the Vulkan backend** is the solid path, and the only realistic one to accelerate a Radeon on Windows: a C/C++ port independent of PyTorch and CUDA, doing multi-vendor GPU inference without vendor specific code. Public measurements put it around 8 x real time on an RX 9070 XT, and 3 to 4 times better than CPU alone on a Radeon 680M integrated GPU. It would ship as a prebuilt Windows Vulkan binary driven as a subprocess, so that nobody has to install a C++ toolchain. The cost is a second model format, GGUF instead of CTranslate2, and an engine abstraction layer, which is why it is not here yet.
+**whisper.cpp with Vulkan or OpenVINO**: no official Windows binary with these backends (version 1.9.5, October 2026); it would have to be built in house, with another model format (GGUF). OpenVINO GenAI installs as three Python packages and reads models already converted by Intel: that is the path taken.
 
-**OpenVINO for Intel integrated GPUs and NPUs** is interesting but not mature enough for a turnkey tool: the backend wants a precise OpenVINO version, and Whisper model conversion breaks with some `transformers` versions. As for the NPU itself, its appeal is battery life, a few watts against 15 to 25 for the integrated GPU, not raw speed. If Intel acceleration ever becomes a goal, Vulkan is the simpler and more robust route.
+**The NPU**: supported by OpenVINO, but the only published run on a laptop of this family saw it hang with the Fast model (Core Ultra 7 265U, October 2026). The benchmark still offers it, experimentally, and it is never chosen unless it succeeded there.
+
+**AMD Radeon cards**: CTranslate2 can compute on them with ROCm on Windows since 4.9.0, but the app does not ship those libraries yet (about 1.1 GB).
 
 </details>
 

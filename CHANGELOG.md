@@ -10,6 +10,87 @@ version : la chaîne de publication en extrait la section correspondant au tag.
 
 *Non publiée.*
 
+Les portables Intel ne sont plus laissés au seul processeur.
+
+Sur un portable de 15 W sans carte dédiée (Core Ultra série U), le processeur
+seul pouvait mettre plus longtemps à transcrire qu'il n'en fallait pour écouter
+la réunion. Trois changements, réunis dans une nouvelle section des réglages,
+« Vitesse de cette machine ».
+
+- **Processeurs hybrides reconnus.** L'application lit dans Windows la famille
+  de chaque cœur : performants, efficaces et « basse consommation » (2 + 8 + 2
+  sur un Core Ultra 5 225U). Elle calcule sur un fil par cœur performant ou
+  efficace et laisse de côté les cœurs basse consommation, plafonnés à 2,4 GHz
+  et sans cache L3 (10 fils au lieu de 12 sur ce processeur). Rien ne change
+  sur un processeur de bureau homogène : 8 fils sur un 8 cœurs, comme avant.
+- **Pleine vitesse fenêtre réduite.** Windows 11 range d'office sur les cœurs
+  efficaces, à fréquence réduite, un programme dont la fenêtre est réduite
+  (« EcoQoS »). L'application s'en exempte le temps de la file, comme le
+  documente Microsoft, puis rend la main au système.
+- **Estimations honnêtes sur un processeur basse consommation.** Les durées
+  annoncées avant toute mesure y étaient deux à trois fois trop optimistes ;
+  elles s'appuient désormais sur la seule mesure publiée pour cette famille
+  (Core Ultra 7 265U), et le preset « Rapide » est conseillé, chiffres à
+  l'appui, quand « Qualité maximale » dépasserait la durée de l'audio.
+- **Moteur OpenVINO, en option.** Le moteur d'Intel (licence Apache 2.0,
+  environ 90 Mo, installé depuis l'application, sans droits d'administrateur)
+  transcrit sur la puce graphique intégrée, sur le processeur, et à titre
+  expérimental sur le NPU, avec les modèles Whisper déjà convertis en int8 par
+  Intel (0,8 Go pour Rapide, 1,6 Go pour Qualité). Seule mesure publiée sur un
+  processeur de la même famille : 0,12 x avec turbo sur la puce graphique,
+  contre 1,04 x sur le processeur. Les segments horodatés, l'horodatage des
+  mots, le glossaire, la reprise après coupure et l'arrêt sont gardés ; la
+  probabilité de chaque mot, que ce moteur ne donne pas, est marquée inconnue.
+  En cas de panne, CTranslate2 prend le relais sans perdre ce qui est déjà
+  transcrit, et un chargement qui ferait tomber l'application suspend le
+  réglage au démarrage suivant. Les trois paquets sont posés sans leurs
+  dépendances : le module de télémétrie qu'OpenVINO déclare, et qui ne sert
+  qu'à son outil de conversion, n'est pas installé.
+- **Banc d'essai.** Un extrait de 44 s livré avec l'application (phrases du jeu
+  FLEURS, licence CC-BY-4.0) est transcrit sous plusieurs réglages : nombre de
+  fils, taille des lots, modèle Rapide et modèle Qualité, chaque moteur et
+  périphérique disponible. Chaque essai tourne dans son propre processus, avec
+  un délai : un périphérique qui bloque est abandonné sans emporter
+  l'application. Le banc conseille le réglage le plus rapide qui reste juste,
+  écrit un rapport sans nom d'utilisateur, nom de machine ni chemin, et
+  n'applique rien sans un clic. Aussi en ligne de commande :
+  `scribouille-verifier.exe --banc`.
+- **Réseau d'entreprise filtré** : les messages d'échec de téléchargement
+  donnent une voie hors ligne, pour les modèles (recopier leur dossier depuis
+  un autre poste) comme pour OpenVINO (déposer les roues dans
+  `paquets-hors-ligne`).
+
+Mesures (Ryzen 7 7800X3D, occupé par d'autres programmes, coup sur coup) :
+
+| Réglage, chemin réel de l'application | Français 3 min 06 : calcul, WER | Anglais 2 min 06 : calcul, WER |
+|---|---|---|
+| Rapide, CTranslate2 par lots, 8 fils | 25,0 s, 8,3 % | 15,7 s, 12,9 % |
+| Rapide, OpenVINO processeur | 16,0 s, 8,3 % | 9,9 s, 10,7 % |
+| Qualité maximale, CTranslate2 par lots, 8 fils | 66,1 s, 7,3 % | 34,1 s, 8,9 % |
+| Qualité maximale, OpenVINO processeur | 44,0 s, 8,5 % | 30,2 s, 8,1 % |
+
+Un mot d'écart vaut environ 0,25 point en français et 0,37 en anglais : les
+écarts de justesse tiennent en quelques mots, dans un sens ou dans l'autre.
+Dans la vraie fenêtre, après application du conseil du banc, la vidéo de
+3 min 06 a été transcrite en 22 s avec le preset Rapide (0,12 x).
+
+La puce graphique Intel et le NPU n'ont pas pu être essayés : la machine de
+développement n'en a pas. Le greffon graphique d'OpenVINO voit bien les cartes
+AMD, mais ses noyaux n'y compilent pas ; l'application ne garde donc que les
+puces Intel.
+
+La séparation des locuteurs passe à pyannote « community-1 ».
+
+Le modèle de septembre 2025 (licence CC-BY-4.0) est essayé en premier : sa
+fiche le donne meilleur que 3.1 sur presque tous les jeux de test (AMI IHM :
+17,0 % d'erreur de diarisation contre 18,8 %), il tient en un seul dépôt et
+fournit la sortie « exclusive » faite pour l'alignement avec une transcription.
+3.1 reste essayé ensuite, pour qui n'a accepté que ses conditions. Nouvel outil
+`outils/verifier_locuteurs.py` : essai de bout en bout, jeton lu dans un fichier.
+
+Le dépôt public ne porte plus de nom complet : licence, éditeur de
+l'exécutable et programme d'installation sont au pseudonyme du projet.
+
 L'application s'appelle Scribouille.
 
 « WhiScribe » entrait en collision avec deux autres projets du même nom, ce
