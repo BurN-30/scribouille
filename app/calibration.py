@@ -203,7 +203,8 @@ def facteur_mesure(modele: str, peripherique: str, beam: int,
 
 
 def enregistrer(modele: str, peripherique: str, beam: int, duree_audio: float,
-                temps_calcul: float, mat: Materiel | None = None, lot: int = 0) -> float:
+                temps_calcul: float, mat: Materiel | None = None, lot: int = 0,
+                duree_minimale: float = DUREE_MINIMALE) -> float:
     """
     Retient le facteur d'une transcription réussie et renvoie le facteur lissé.
 
@@ -215,7 +216,7 @@ def enregistrer(modele: str, peripherique: str, beam: int, duree_audio: float,
         temps_calcul = float(temps_calcul)
     except (TypeError, ValueError):
         return 0.0
-    if duree_audio < DUREE_MINIMALE or temps_calcul <= 0:
+    if duree_audio < duree_minimale or temps_calcul <= 0:
         return 0.0
 
     facteur = round(temps_calcul / duree_audio, 3)

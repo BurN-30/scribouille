@@ -91,6 +91,52 @@ MODELES_AVANCES: list[dict] = [
      "facteur_cpu": 0.35, "qualite_cle": "modele.qualite.tres_bonne"},
 ]
 
+# Modèles au format d'OpenVINO (moteur Intel, en option) : dépôt converti en
+# int8 par l'organisation « OpenVINO » de Hugging Face, pour chaque modèle du
+# catalogue. Licences MIT (turbo) et Apache-2.0 (les autres), comme les modèles
+# d'origine d'OpenAI. Poids relevés sur les dépôts en novembre 2026.
+DEPOTS_OPENVINO: dict[str, str] = {
+    "large-v3": "OpenVINO/whisper-large-v3-int8-ov",
+    MODELE_TURBO: "OpenVINO/whisper-large-v3-turbo-int8-ov",
+    "large-v2": "OpenVINO/whisper-large-v2-int8-ov",
+    "medium": "OpenVINO/whisper-medium-int8-ov",
+    "small": "OpenVINO/whisper-small-int8-ov",
+    "base": "OpenVINO/whisper-base-int8-ov",
+    "tiny": "OpenVINO/whisper-tiny-int8-ov",
+}
+POIDS_OPENVINO: dict[str, int] = {
+    "OpenVINO/whisper-large-v3-int8-ov": 1_570_000_000,
+    "OpenVINO/whisper-large-v3-turbo-int8-ov": 830_000_000,
+    "OpenVINO/whisper-large-v2-int8-ov": 1_567_000_000,
+    "OpenVINO/whisper-medium-int8-ov": 784_000_000,
+    "OpenVINO/whisper-small-int8-ov": 257_000_000,
+    "OpenVINO/whisper-base-int8-ov": 85_000_000,
+    "OpenVINO/whisper-tiny-int8-ov": 49_000_000,
+}
+
+# Facteurs de repli d'OpenVINO sur la puce graphique Intel. Une seule mesure
+# publiée sur une machine comparable : large-v3-turbo à 0,12 fois la durée de
+# l'audio sur la puce graphique d'un Core Ultra 7 265U (même famille et même
+# nombre de cœurs Xe que le 225U ; ticket TalkTrack n° 131, octobre 2026).
+# large-v3 n'y a pas été mesuré : son décodeur compte 32 couches contre 4, le
+# chiffre retenu (trois fois turbo) est une estimation prudente, remplacée par
+# la mesure du poste dès la première transcription ou le banc d'essai.
+FACTEURS_OPENVINO_GPU: dict[str, float] = {MODELE_TURBO: 0.12, "large-v3": 0.36}
+
+# OpenVINO sur processeur, rapporté à CTranslate2 par lots : 0,55 avec turbo et
+# 0,69 avec large-v3, mêmes extraits, même machine (Ryzen 7 7800X3D, novembre
+# 2026). On retient la valeur la moins flatteuse.
+RAPPORT_OPENVINO_CPU = 0.70
+
+# Processeur mobile basse consommation (suffixe U ou V, 15 W de base) : les
+# facteurs de repli, relevés sur des processeurs plus gourmands, y seraient
+# deux à trois fois trop optimistes. Seule mesure publiée sur un processeur de
+# cette famille : large-v3-turbo à 1,04 fois la durée de l'audio sur processeur,
+# un à un, Core Ultra 7 265U (ticket TalkTrack n° 131), là où le calcul de repli
+# annonçait 0,32. Le coefficient ramène l'estimation à ce niveau ; il est
+# volontairement pessimiste, et la première mesure faite sur le poste le remplace.
+COEFFICIENT_BASSE_CONSOMMATION = 3.0
+
 # Surcoût de la diarisation, exprimé en facteur temps réel.
 FACTEUR_DIARISATION_CPU = 0.20
 FACTEUR_DIARISATION_CUDA = 0.05
@@ -155,6 +201,11 @@ def taille_modele_avance(cle: str) -> str:
     return ""
 
 
+def depot_openvino(modele: str) -> str:
+    """Dépôt OpenVINO équivalent à un modèle du catalogue, vide s'il n'y en a pas."""
+    return DEPOTS_OPENVINO.get(modele, "")
+
+
 def modele_du_preset(cle: str, modele_avance: str = "") -> str:
     if modele_avance:
         return modele_avance
@@ -178,12 +229,40 @@ def _coefficient_machine(mat: Materiel) -> float:
 
     L'accélération n'est pas linéaire avec le nombre de cœurs : on applique un
     exposant 0,6 et on borne le résultat pour rester honnête dans les deux sens.
+    Un processeur mobile basse consommation reçoit en plus son coefficient
+    propre : à nombre de fils égal, il calcule bien moins vite.
     """
     # Les facteurs de référence sont donnés par nombre de fils LOGIQUES de la
     # machine repère, quel que soit le nombre de fils de calcul retenu.
     fils = max(2, mat.coeurs_logiques or (mat.fils_calcul + 2))
-    coefficient = (FILS_REFERENCE / fils) ** 0.6
-    return min(2.5, max(0.35, coefficient))
+    coefficient = min(2.5, max(0.35, (FILS_REFERENCE / fils) ** 0.6))
+    if getattr(mat, "basse_consommation", False):
+        coefficient *= COEFFICIENT_BASSE_CONSOMMATION
+    return coefficient
+
+
+def _facteur_repli(modele: str, mat: Materiel, lot: int) -> float:
+    """
+    Facteur estimé quand aucune mesure n'existe encore pour cette situation.
+
+    Distingue le moteur et le périphérique : CTranslate2 sur processeur ou sur
+    carte NVIDIA, OpenVINO sur processeur, sur puce graphique ou sur NPU.
+    """
+    cle = mat.cle_calcul
+    if cle == "cuda":
+        return _facteur_modele(modele, True)
+    base = _facteur_modele(modele, False)
+    if cle in ("openvino-gpu", "openvino-npu"):
+        facteur = FACTEURS_OPENVINO_GPU.get(modele, base * 0.3)
+        # Le NPU n'a de mesure publiée qu'avec de petits modèles : on le tient
+        # pour moitié plus lent que la puce graphique, par prudence.
+        return facteur * (1.5 if cle == "openvino-npu" else 1.0)
+    facteur = base * _coefficient_machine(mat)
+    if cle == "openvino-cpu":
+        return facteur * GAIN_LOTS_CPU * RAPPORT_OPENVINO_CPU
+    if lot > 1:
+        facteur *= GAIN_LOTS_CPU
+    return facteur
 
 
 def facteur_mesure(cle_preset: str, mat: Materiel, modele_avance: str = "",
@@ -194,9 +273,13 @@ def facteur_mesure(cle_preset: str, mat: Materiel, modele_avance: str = "",
     Une mesure remplace le facteur statique ET le coefficient de machine : elle
     a été prise sur la machine, il n'y a plus rien à extrapoler.
     """
+    if mat.cle_calcul.startswith("openvino"):
+        # OpenVINO décode en glouton, fenêtre par fenêtre : ni faisceau ni lots.
+        # Les mesures sont rangées ainsi, par la file comme par le banc.
+        beam, lot = 1, 0
     return calibration.facteur_mesure(
         modele_du_preset(cle_preset, modele_avance),
-        mat.peripherique,
+        mat.cle_calcul,
         beam or preset(cle_preset)["beam_size"],
         mat,
         taille_lot(cle_preset, mat) if lot is None else lot,
@@ -219,11 +302,7 @@ def facteur_temps_reel(cle_preset: str, mat: Materiel, diarisation: bool = False
         lot = taille_lot(cle_preset, mat)
     facteur = facteur_mesure(cle_preset, mat, modele_avance, beam, lot)
     if not facteur:
-        facteur = _facteur_modele(modele, sur_gpu)
-        if not sur_gpu:
-            facteur *= _coefficient_machine(mat)
-            if lot > 1:
-                facteur *= GAIN_LOTS_CPU
+        facteur = _facteur_repli(modele, mat, lot)
     if diarisation:
         facteur += FACTEUR_DIARISATION_CUDA if sur_gpu else FACTEUR_DIARISATION_CPU * _coefficient_machine(mat)
     return round(facteur, 3)
@@ -274,6 +353,16 @@ def recommandation(mat: Materiel) -> dict:
     elif mat.cuda_disponible:
         conseille = "qualite"
         phrase = langues.t("reco.cuda")
+    elif mat.cle_calcul in ("openvino-gpu", "openvino-npu"):
+        conseille = "qualite" if qualite <= duree_reference else "rapide"
+        phrase = langues.t("reco.openvino", qualite=formater_duree(qualite),
+                           rapide=formater_duree(rapide))
+    elif qualite > duree_reference:
+        # Plus lent que le temps réel : une réunion d'une heure en demanderait
+        # plus d'une. On le dit, chiffres à l'appui, et l'on conseille Rapide.
+        conseille = "rapide"
+        phrase = langues.t("reco.processeur_lent", qualite=formater_duree(qualite),
+                           rapide=formater_duree(rapide))
     else:
         conseille = "qualite"
         phrase = langues.t("reco.processeur")
