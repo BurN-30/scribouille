@@ -1307,6 +1307,11 @@ def essai_sortie_pyannote() -> None:
 
     from app import diarisation
 
+    verifier(os.environ.get("PYANNOTE_METRICS_ENABLED") == "false",
+             "la télémétrie de pyannote.audio 4 est coupée avant tout import")
+    verifier(os.environ.get("HF_HUB_DISABLE_TELEMETRY") == "1",
+             "celle de huggingface_hub aussi")
+
     class Periode:
         def __init__(self, debut, fin):
             self.start, self.end = debut, fin

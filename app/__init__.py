@@ -46,4 +46,18 @@ EDITEUR = "Nathan SACCOL"
 import os as _os  # noqa: E402
 
 _os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+
+# ---------------------------------------------------------------------------
+# Aucune telemetrie, y compris celle des bibliotheques
+# ---------------------------------------------------------------------------
+#
+# pyannote.audio 4 envoie par defaut des mesures d'usage a son editeur
+# (otel.pyannote.ai) : nom du pipeline, duree de chaque fichier traite, nombre
+# de locuteurs demande, identifiant de session. Le README promet « pas de
+# telemetrie » : on la coupe avant tout import de pyannote, qui ne pose sa
+# valeur par defaut que si la variable est absente. Meme chose pour la
+# telemetrie optionnelle de huggingface_hub. Un choix explicite de
+# l'utilisateur garde, la encore, le dernier mot.
+_os.environ.setdefault("PYANNOTE_METRICS_ENABLED", "false")
+_os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
 del _os
