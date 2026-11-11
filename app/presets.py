@@ -123,10 +123,11 @@ POIDS_OPENVINO: dict[str, int] = {
 # la mesure du poste dès la première transcription ou le banc d'essai.
 FACTEURS_OPENVINO_GPU: dict[str, float] = {MODELE_TURBO: 0.12, "large-v3": 0.36}
 
-# OpenVINO sur processeur, rapporté à CTranslate2 par lots : 0,55 avec turbo et
-# 0,69 avec large-v3, mêmes extraits, même machine (Ryzen 7 7800X3D, novembre
-# 2026). On retient la valeur la moins flatteuse.
-RAPPORT_OPENVINO_CPU = 0.70
+# OpenVINO sur processeur, rapporté à CTranslate2 par lots, coup sur coup sur les
+# mêmes extraits (Ryzen 7 7800X3D, novembre 2026) : 0,64 et 0,63 avec turbo
+# (français, anglais), 0,67 et 0,89 avec large-v3. On retient la valeur la moins
+# flatteuse.
+RAPPORT_OPENVINO_CPU = 0.90
 
 # Processeur mobile basse consommation (suffixe U ou V, 15 W de base) : les
 # facteurs de repli, relevés sur des processeurs plus gourmands, y seraient

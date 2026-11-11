@@ -15,8 +15,8 @@ large-v3-turbo à 0,12 fois la durée de l'audio sur la puce graphique d'un Core
 Ultra 7 265U, contre 1,04 sur son processeur avec faster-whisper, texte
 identique mot pour mot sur l'extrait comparé ; le NPU de la même machine a
 bloqué avec turbo (ticket TalkTrack n° 131, octobre 2026). Sur processeur,
-mesuré ici : 1,4 à 1,8 fois plus rapide que CTranslate2 par lots, à justesse
-comparable (voir le CHANGELOG de la 2.5.0).
+mesuré ici : 1,1 à 1,6 fois plus rapide que CTranslate2 par lots, à justesse
+comparable (voir le CHANGELOG de la 2.4.0).
 
 Ce que l'application garde, et comment
 --------------------------------------
