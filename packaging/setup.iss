@@ -26,7 +26,7 @@
 #endif
 
 #define NomApp        "Scribouille"
-#define Editeur       "Nathan SACCOL"
+#define Editeur       "BurN-30"
 #define UrlProjet     "https://github.com/BurN-30/scribouille"
 #define ExeApp        "Scribouille.exe"
 #define DossierSource "..\dist\Scribouille"

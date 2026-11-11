@@ -20,7 +20,7 @@ vérification des mises à jour interroge une page qui n'existe plus.
 - [ ] Les captures d'écran ne doivent montrer aucun nom de fichier réel, aucun chemin
       utilisateur nominatif, aucun contenu de transcription réel. Prévoir un jeu
       d'enregistrements de démonstration.
-- [ ] `LICENSE` présent, MIT, au nom de Nathan SACCOL.
+- [ ] `LICENSE` présent, MIT, au nom de BurN-30.
 - [ ] Une Release existe déjà, avec le `Scribouille-Setup-X.Y.Z.exe` en pièce jointe.
 
 ---

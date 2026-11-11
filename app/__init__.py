@@ -21,7 +21,7 @@ NOM_APPLICATION = "Scribouille"
 # depot change : l'interface et la recette PyInstaller la relisent. Le script
 # Inno Setup la porte de son cote, dans packaging/setup.iss.
 URL_PROJET = "https://github.com/BurN-30/scribouille"
-EDITEUR = "Nathan SACCOL"
+EDITEUR = "BurN-30"
 
 
 # ---------------------------------------------------------------------------
