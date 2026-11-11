@@ -1295,6 +1295,21 @@ def executer(fichier: str, debut: float = 0.0, duree: float = 0.0, reference: st
              rappel: Callable[[dict], None] | None = None,
              interrompu: Callable[[], bool] | None = None) -> dict:
     """Mène la comparaison complète et renvoie {rapport, page, rapport_fichier, dossier}."""
+    from . import energie
+
+    # Une comparaison dure de quinze à quarante minutes : la mise en veille du
+    # poste la suspendrait (constaté : lancée à 18 h 40, démarrée à 22 h 56).
+    with energie.sans_veille():
+        return _executer(fichier, debut, duree, reference, sortie, peripherique, preset,
+                         faisceau_openvino, faisceau_ct2, glossaire, corrections,
+                         fichier_glossaire, rappel, interrompu)
+
+
+def _executer(fichier: str, debut: float, duree: float, reference: str, sortie: str,
+              peripherique: str, preset: str, faisceau_openvino: int, faisceau_ct2: int,
+              glossaire: bool, corrections: bool, fichier_glossaire: str,
+              rappel: Callable[[dict], None] | None,
+              interrompu: Callable[[], bool] | None) -> dict:
     from . import audio, config as config_module, moteur_openvino, vocabulaire
 
     def dire(message: str, pct: int) -> None:

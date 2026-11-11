@@ -68,6 +68,48 @@ def rendre_au_systeme() -> bool:
     return _poser(0, 0)
 
 
+#: Drapeaux de `SetThreadExecutionState` (Microsoft Learn, winbase.h).
+ES_CONTINUOUS = 0x80000000
+ES_SYSTEM_REQUIRED = 0x00000001
+
+
+def _etat_execution(drapeaux: int) -> bool:
+    if sys.platform != "win32":
+        return False
+    try:
+        import ctypes
+
+        noyau = ctypes.WinDLL("kernel32", use_last_error=True)
+        fonction = noyau.SetThreadExecutionState
+        fonction.argtypes = [ctypes.c_uint32]
+        fonction.restype = ctypes.c_uint32
+        return fonction(drapeaux) != 0
+    except Exception as exc:  # pragma: no cover - dépend du système
+        journal.debug("Mise en veille non retenue : %s", exc)
+        return False
+
+
+@contextmanager
+def sans_veille():
+    """
+    Le système ne se met pas en veille pendant le bloc (calcul de plusieurs heures).
+
+    `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)` est une demande
+    propre au processus : aucun réglage d'alimentation n'est modifié, l'écran
+    peut s'éteindre, et la demande tombe d'elle-même si le processus s'arrête.
+    Elle est relâchée à la sortie du bloc, erreur comprise. À appeler depuis le
+    fil qui reste vivant pendant tout le calcul.
+    """
+    pose = _etat_execution(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)
+    if pose:
+        journal.info("Mise en veille du système suspendue le temps du calcul")
+    try:
+        yield pose
+    finally:
+        if pose:
+            _etat_execution(ES_CONTINUOUS)
+
+
 @contextmanager
 def pleine_vitesse():
     """Bloc exécuté sans bridage d'énergie, quoi qu'il arrive à la fenêtre."""
