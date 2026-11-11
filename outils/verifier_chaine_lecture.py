@@ -41,7 +41,7 @@ if str(RACINE) not in sys.path:
     sys.path.insert(0, str(RACINE))
 
 from app import chemins, compagnon, config as config_module  # noqa: E402
-from app import gabarit, langues, lecture, materiel, reprise, traitement, vocabulaire  # noqa: E402
+from app import gabarit, langues, lecture, materiel, presets, reprise, traitement, vocabulaire  # noqa: E402
 
 # Le contrôle compare des chaînes produites par l'application : la langue
 # d'interface est fixée, sans quoi le résultat dépendrait de la langue de
@@ -146,6 +146,22 @@ def reprendre(audio: Path, dossier: Path, modele: str, cle: str) -> tuple[list[d
 
 
 def controler_reprise(audio: Path, bac: Path, modele: str) -> None:
+    # Traitement un à un pour ce contrôle : un extrait de quelques minutes tient
+    # dans un seul lot, et les segments d'un lot n'arrivent qu'une fois le lot
+    # entier décodé. L'interrompre en route ne laisserait donc rien à reprendre,
+    # alors que c'est la sauvegarde et la reprise, communes aux deux modes, qui
+    # sont contrôlées ici. Le chemin par lots s'éprouve sur un fichier long.
+    lots = {cle: p.get("lot") for cle, p in presets.PRESETS.items()}
+    for p in presets.PRESETS.values():
+        p["lot"] = 0
+    try:
+        _controler_reprise(audio, bac, modele)
+    finally:
+        for cle, valeur in lots.items():
+            presets.PRESETS[cle]["lot"] = valeur
+
+
+def _controler_reprise(audio: Path, bac: Path, modele: str) -> None:
     sortie = bac / "reprise"
     trouvee = None
     for delai in (7.0, 11.0, 15.0):
