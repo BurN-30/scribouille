@@ -81,6 +81,21 @@ On a 15 W laptop without a dedicated card, the CPU alone can take longer to tran
 
 From the command line, without a window: `scribouille-verifier.exe --banc` in the installation folder (or `.venv\Scripts\python transcriber.pyw --banc` from source); add `--telecharger` to fetch missing models, `--npu` to try the NPU, `--appliquer` to apply the recommendation.
 
+**Compare both engines on your own recordings.** The benchmark measures speed on 44 s of sentences read by a single voice: it says nothing about accuracy on a real meeting (several voices, broken sentences, swallowed words, English words, team vocabulary). The comparison transcribes the same excerpt of one of your files with CTranslate2 and with OpenVINO, each in its Quality setting, with your language, glossary and corrections, then writes into `comparaisons\` in the data folder:
+
+- `cote-a-cote.html`, to open in the browser: both timestamped texts side by side, passages where they disagree highlighted, words CTranslate2 is unsure of underlined with dots, and clicking a time plays the passage. This page contains the transcript, like the `textes-*.json` files next to it: they stay on the computer;
+- `rapport-chiffres.txt`: figures only (computing times, word counts, disagreement rate, diverging passages by kind, timing gaps, segments, glossary terms, common English words, uncertain words), without a single word of the transcript, name or path. This one can be shared.
+
+From the window: **Speed of this machine** section, **Compare both engines** block (shown once OpenVINO is installed). From the command line:
+
+```
+scribouille-verifier.exe --comparer "D:\Meetings\weekly.m4a" --debut 00:05:00 --duree 600 --ouvrir
+```
+
+`--debut` and `--duree` (seconds, or `hh:mm:ss`) choose the excerpt; its edges are moved to the nearest pause so that no sentence is cut. `--reference FILE` adds an already reviewed transcript of the same recording (text, SRT, VTT, Scribouille text export or `.json` companion; timestamps and speaker names are ignored): the report then gives each engine's error rate, and the page a third column. On an excerpt, the reference must be timestamped (SRT, or an export with timestamps): without timestamps, comparing with the reference is only possible on the whole file. A reference produced by Scribouille and lightly corrected favours CTranslate2, which wrote it. Other options: `--peripherique GPU|CPU|NPU` (by default the Intel integrated graphics if OpenVINO sees it), `--preset rapide`, `--sans-glossaire`, `--sans-corrections`, `--faisceau-openvino 5`. Expect two to three times the excerpt length on a laptop, much less on the integrated graphics.
+
+What is already known, measured on three public meetings with three or four voices (SUMM-RE corpus) on the processor: OpenVINO is not less accurate than CTranslate2 there, equal on single-voice speech, slightly better where voices overlap. That is no guarantee for your meetings, nor for the integrated graphics, which computes differently (fp16): the comparison is there to check it.
+
 **Filtered company network.** If PyPI or Hugging Face are blocked, the error messages give the offline route: for a model, copy its `models--...` folder from a computer that already downloaded it into the models folder; for OpenVINO, drop the three `.whl` files (obtained elsewhere with `pip download`) into `paquets-hors-ligne\` in the data folder, then start the installation again. No administrator rights are needed: everything installs in the user's folder.
 
 <details>

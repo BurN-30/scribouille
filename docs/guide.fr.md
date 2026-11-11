@@ -81,6 +81,21 @@ Sur un portable de 15 W sans carte dédiée, le processeur seul peut mettre plus
 
 En ligne de commande, sans fenêtre : `scribouille-verifier.exe --banc` dans le dossier d'installation (ou `.venv\Scripts\python transcriber.pyw --banc` depuis les sources) ; ajoutez `--telecharger` pour récupérer les modèles manquants, `--npu` pour essayer le NPU, `--appliquer` pour appliquer le conseil.
 
+**Comparer les deux moteurs sur vos propres enregistrements.** Le banc mesure la vitesse sur 44 s de phrases lues d'une seule voix : il ne dit rien de la justesse sur une vraie réunion (plusieurs voix, phrases coupées, mots avalés, mots anglais, vocabulaire de l'équipe). La comparaison transcrit le même extrait d'un de vos fichiers avec CTranslate2 et avec OpenVINO, chacun dans son réglage Qualité, avec votre langue, votre glossaire et vos corrections, puis écrit dans `comparaisons\` du dossier de données :
+
+- `cote-a-cote.html`, à ouvrir dans le navigateur : les deux textes horodatés face à face, les passages où ils divergent surlignés, les mots dont CTranslate2 doute soulignés en pointillé, un clic sur une heure réécoute le passage. Cette page contient la transcription, comme les fichiers `textes-*.json` posés à côté : ils restent sur le poste ;
+- `rapport-chiffres.txt` : des nombres seulement (durées de calcul, nombre de mots, taux de désaccord, passages divergents par nature, écarts d'horodatage, segments, termes du glossaire, mots anglais courants, mots incertains), sans un mot de la transcription ni nom ni chemin. Lui peut être transmis.
+
+Depuis la fenêtre : section **Vitesse de cette machine**, bloc **Comparer les deux moteurs** (visible une fois OpenVINO installé). En ligne de commande :
+
+```
+scribouille-verifier.exe --comparer "D:\Réunions\point-hebdo.m4a" --debut 00:05:00 --duree 600 --ouvrir
+```
+
+`--debut` et `--duree` (secondes, ou `hh:mm:ss`) choisissent l'extrait ; ses bords sont ramenés sur la pause la plus proche, pour ne pas couper une phrase. `--reference FICHIER` ajoute une transcription déjà relue du même enregistrement (texte, SRT, VTT, export texte ou compagnon `.json` de Scribouille ; horodatages et noms de locuteurs ignorés) : le rapport donne alors le taux d'erreur de chaque moteur, et la page une troisième colonne. Sur un extrait, la référence doit être horodatée (SRT, ou export avec horodatage) : sans horodatages, la comparaison à la référence n'est possible que sur le fichier entier. Une référence produite par Scribouille puis peu corrigée favorise CTranslate2, qui l'a écrite. Autres options : `--peripherique GPU|CPU|NPU` (par défaut la puce graphique Intel si OpenVINO la voit), `--preset rapide`, `--sans-glossaire`, `--sans-corrections`, `--faisceau-openvino 5`. Compter deux à trois fois la durée de l'extrait sur un portable, beaucoup moins avec la puce graphique.
+
+Ce que l'on sait déjà, mesuré sur trois réunions publiques à trois ou quatre voix (corpus SUMM-RE) avec le processeur : OpenVINO n'y est pas moins juste que CTranslate2, à égalité sur la parole d'une seule voix, un peu meilleur là où les voix se chevauchent. Ce n'est pas une garantie pour vos réunions, ni pour la puce graphique, qui calcule autrement (fp16) : la comparaison sert à le vérifier.
+
 **Réseau d'entreprise filtré.** Si PyPI ou Hugging Face sont bloqués, les messages d'erreur donnent la voie hors ligne : pour un modèle, recopier son dossier `models--...` depuis un poste qui l'a déjà téléchargé dans le dossier des modèles ; pour OpenVINO, déposer les trois fichiers `.whl` (obtenus ailleurs par `pip download`) dans `paquets-hors-ligne\` du dossier de données, puis relancer l'installation. Aucun droit d'administrateur n'est demandé : tout s'installe dans le dossier de l'utilisateur.
 
 <details>

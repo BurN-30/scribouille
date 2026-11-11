@@ -6,6 +6,69 @@ version : la chaîne de publication en extrait la section correspondant au tag.
 
 ---
 
+## 2.4.1
+
+*Non publiée.*
+
+Comparer les deux moteurs sur ses propres enregistrements.
+
+Le banc d'essai de la 2.4.0 dit quel moteur va le plus vite, sur 44 s de
+phrases lues d'une seule voix. Il ne dit rien de la justesse sur une vraie
+réunion. La nouvelle comparaison transcrit le même extrait d'un de vos
+fichiers avec CTranslate2 et avec OpenVINO, chacun dans son réglage Qualité,
+avec votre langue, votre glossaire et vos corrections, et écrit dans
+`comparaisons\` du dossier de données :
+
+- **une page côte à côte** (`cote-a-cote.html`) : les deux textes horodatés
+  face à face, les passages qui divergent surlignés, les mots dont CTranslate2
+  doute soulignés, un clic sur une heure pour réécouter. Elle contient la
+  transcription et reste sur le poste ;
+- **un rapport de chiffres** (`rapport-chiffres.txt`) sans un mot de la
+  transcription, ni nom, ni chemin : durées de calcul, nombre de mots, taux de
+  désaccord (WER de l'un rapporté à l'autre), passages divergents par nature
+  (un mot, plusieurs mots, morceau entendu par un seul moteur), écarts
+  d'horodatage de plus d'une seconde, longueur des segments (sur lesquels
+  s'appuie la séparation des locuteurs), termes du glossaire retrouvés, mots
+  anglais courants écrits en anglais, mots incertains de CTranslate2 et part de
+  ceux qui tombent là où les moteurs divergent ;
+- **avec une transcription déjà relue** (`--reference`, texte, SRT, VTT, export
+  ou compagnon de Scribouille), le taux d'erreur de chaque moteur et une
+  troisième colonne. Sur un extrait, la référence est recalée par ses
+  horodatages ; sans horodatages, elle ne sert que sur le fichier entier.
+  Normalisation commune : casse, ponctuation, nombres en lettres, élisions,
+  hésitations.
+
+Depuis la section « Vitesse de cette machine », ou en ligne de commande :
+`scribouille-verifier.exe --comparer FICHIER --debut 00:05:00 --duree 600`.
+Les bords de l'extrait sont ramenés sur une pause : une phrase coupée au début
+d'un extrait a fait sauter au faisceau de CTranslate2 tout le début de la
+fenêtre, ce qui n'arrive pas à un enregistrement qui commence normalement.
+
+Mesuré sur trois réunions publiques en français, à trois ou quatre voix
+(corpus SUMM-RE, CC BY-SA 4.0, 10 minutes chacune, pistes mélangées, processeur
+Ryzen 7 7800X3D) : OpenVINO sur processeur n'est pas moins juste que
+CTranslate2 (taux d'erreur cumulé 37,6 % contre 40,3 % avec un glossaire,
+38,1 % contre 38,8 % sans ; à égalité sur la parole d'une seule voix), pour
+1,3 à 1,6 fois moins de calcul. Les deux perdent surtout la parole qui se
+chevauche et les « ouais » d'approbation. Un faisceau de 5 n'apporte rien de
+constant à OpenVINO ; à CTranslate2, passer en glouton coûte 1 à 4 points.
+Rien de tout cela ne vaut pour la puce graphique Intel (calcul en fp16), ni
+pour une réunion donnée : c'est l'objet de la comparaison.
+
+Corrigé
+
+- **OpenVINO, langue détectée** : le moteur lisait un attribut qui n'existe
+  pas (`language` au lieu de `languages`). En détection automatique, la langue
+  était redemandée à chaque fenêtre de 30 s au lieu d'être fixée sur la
+  première, et l'en-tête du fichier produit ne donnait pas la langue
+  trouvée. Sans effet quand la langue est choisie (le français par défaut).
+- OpenVINO compte les fenêtres de 30 s qu'il a dû décoder en deux passes
+  (plafond de jetons, ou phrase annoncée comme continuant au-delà) : la
+  seconde passe se fait sans l'amorce du glossaire. Le rapport de comparaison
+  en donne le nombre.
+
+---
+
 ## 2.4.0
 
 *Non publiée.*
