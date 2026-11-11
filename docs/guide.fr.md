@@ -148,7 +148,7 @@ Le bouton choisit tout seul la variante adaptée au poste : processeur par défa
 **Ensuite, le jeton.** C'est une étape distincte, et elle n'a rien à voir avec le téléchargement : le modèle qui reconnaît les voix, pyannote, est gratuit mais sous conditions, et son auteur demande de les accepter et de s'identifier.
 
 1. Créez un compte sur [huggingface.co](https://huggingface.co).
-2. Ouvrez [pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1) et acceptez les conditions.
+2. Ouvrez [pyannote/speaker-diarization-community-1](https://huggingface.co/pyannote/speaker-diarization-community-1) et acceptez les conditions (licence CC-BY-4.0 ; le formulaire demande une organisation et un usage, et pyannote peut vous écrire de temps en temps). Ce modèle, plus juste que l'ancien 3.1, est essayé en premier ; 3.1 reste utilisé si vous n'avez accepté que ses conditions.
 3. Créez un jeton d'accès **Read** dans les réglages du compte.
 4. Collez-le dans le panneau « Locuteurs » de l'application.
 

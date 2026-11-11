@@ -23,14 +23,18 @@ from . import URL_PROJET as _URL_DEPOT
 from . import chemins, journal, langues
 from .journal import ErreurLisible
 
-# Dépôts essayés dans l'ordre. Le premier est la référence stable, le second
-# est le nom retenu par pyannote.audio 4.x.
+# Dépôts essayés dans l'ordre. « community-1 » (pyannote.audio 4, licence
+# CC-BY-4.0, septembre 2025) passe en tête : sa fiche le donne meilleur que 3.1
+# sur presque tous les jeux de test (AMI IHM : 17,0 % d'erreur de diarisation
+# contre 18,8 % ; AliMeeting : 20,3 contre 24,5), il tient en un seul dépôt et
+# fournit la sortie « exclusive » faite pour l'alignement avec une transcription.
+# 3.1 reste en second, pour qui n'a accepté que ses conditions.
 DEPOTS = (
-    "pyannote/speaker-diarization-3.1",
     "pyannote/speaker-diarization-community-1",
+    "pyannote/speaker-diarization-3.1",
 )
 
-URL_CONDITIONS = "https://huggingface.co/pyannote/speaker-diarization-3.1"
+URL_CONDITIONS = "https://huggingface.co/pyannote/speaker-diarization-community-1"
 URL_JETON = "https://huggingface.co/settings/tokens"
 
 # Le dépôt du projet, cité quand la fonction n'est pas incluse dans la version

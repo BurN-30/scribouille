@@ -407,7 +407,9 @@ _FR: dict[str, str] = {
     "diar.analyse": "Analyse des voix en cours...",
     "diar.guide.etape1": (
         "Créez un compte gratuit sur huggingface.co, puis ouvrez la page du modèle "
-        "pyannote/speaker-diarization-3.1 et acceptez ses conditions d'utilisation."
+        "pyannote/speaker-diarization-community-1 et acceptez ses conditions "
+        "d'utilisation (licence CC-BY-4.0 ; le formulaire demande une organisation et "
+        "un usage, et pyannote peut vous écrire de temps en temps)."
     ),
     "diar.guide.etape2": "Dans les réglages du compte, créez un jeton d'accès de type « Read ».",
     "diar.guide.etape3": (
@@ -1294,7 +1296,9 @@ _EN: dict[str, str] = {
     "diar.analyse": "Analysing voices...",
     "diar.guide.etape1": (
         "Create a free account on huggingface.co, then open the page of the "
-        "pyannote/speaker-diarization-3.1 model and accept its terms of use."
+        "pyannote/speaker-diarization-community-1 model and accept its terms of use "
+        "(CC-BY-4.0 licence; the form asks for an organisation and a use case, and "
+        "pyannote may email you now and then)."
     ),
     "diar.guide.etape2": "In your account settings, create an access token of type \"Read\".",
     "diar.guide.etape3": (

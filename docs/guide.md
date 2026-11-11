@@ -150,7 +150,7 @@ The button picks the right build on its own: CPU by default, CUDA when an NVIDIA
 The model that recognises voices, pyannote, is free but gated: its author asks you to accept the terms and identify yourself.
 
 1. Create an account on [huggingface.co](https://huggingface.co).
-2. Open [pyannote/speaker-diarization-3.1](https://huggingface.co/pyannote/speaker-diarization-3.1) and accept the terms.
+2. Open [pyannote/speaker-diarization-community-1](https://huggingface.co/pyannote/speaker-diarization-community-1) and accept the terms (CC-BY-4.0 licence; the form asks for an organisation and a use case, and pyannote may email you now and then). This model, more accurate than the older 3.1, is tried first; 3.1 is still used if you only accepted its terms.
 3. Create a **Read** access token in your account settings.
 4. Paste it into the Speakers panel of the app.
 
