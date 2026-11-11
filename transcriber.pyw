@@ -24,6 +24,10 @@ relançant dans un processus de fond : voir `app/extensions.py`.
 Comparaison des deux moteurs sur un vrai enregistrement (voir `app/comparaison.py`) :
 
     transcriber.pyw --comparer FICHIER [--debut 00:05:00] [--duree 600] [--reference FICHIER]
+
+Campagne de mesure des réglages sur un corpus public avec référence (voir `app/campagne.py`) :
+
+    transcriber.pyw --campagne [--appliquer] [--reunion FICHIER --debut 00:05:00 --duree 600]
 """
 
 from __future__ import annotations
@@ -66,6 +70,17 @@ if "--banc" in sys.argv[1:] or "--banc-essai" in sys.argv[1:]:
     if "--banc" in sys.argv[1:]:
         journal.demarrer()
     sys.exit(_banc.principal_cli(sys.argv[1:]))
+
+# Campagne de mesure (voir `app/campagne.py`) : chaque réglage candidat sur un
+# corpus public avec référence, puis verdict. « --campagne-essai » est le
+# processus d'un réglage. Version installée : « scribouille-verifier.exe --campagne ».
+if "--campagne" in sys.argv[1:] or "--campagne-essai" in sys.argv[1:]:
+    from app import campagne as _campagne
+
+    if "--campagne" in sys.argv[1:]:
+        journal.demarrer()
+    journal.silence_bibliotheques()
+    sys.exit(_campagne.principal_cli(sys.argv[1:]))
 
 # Comparaison des deux moteurs sur un vrai fichier, en ligne de commande, même
 # organisation que le banc : « --comparer-essai » est le processus d'un moteur.

@@ -60,6 +60,7 @@ PREFIXES_DYNAMIQUES = (
     "ui.motif.", "app.motif.", "app.demarrer.ffmpeg_", "audio.ffmpeg.",
     "diar.indispo.", "stock.programme.detail_", "arch.chemin_",
     "lect.tronque", "lect.sans_compagnon",
+    "camp.rapport.motif.", "camp.rapport.cout_", "camp.reunion.ancre.",
 )
 
 

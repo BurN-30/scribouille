@@ -1087,6 +1087,153 @@ Transcription :
 
 {texte}
 """,
+    # -- Campagne de mesure (app/campagne.py) ----------------------------------
+    "camp.libelle_ov": "OpenVINO {peripherique}, {modele}, faisceau {faisceau}",
+    "camp.libelle_ct2": "CTranslate2 processeur, {modele}, faisceau {faisceau}",
+    "camp.rapport.titre": "Campagne de mesure des réglages, {nom} {version}, {date}",
+    "camp.rapport.machine": "Machine : {processeur}, {memoire} Go, {alimentation}",
+    "camp.rapport.openvino": "OpenVINO {version}, périphériques vus : {peripheriques}",
+    "camp.rapport.vitesse": (
+        "vitesse : {facteur} fois la durée de l'audio (une heure de réunion : {heure}), "
+        "chargement {chargement} s, mémoire {memoire} Go ; passé de {debut} à {fin}"
+    ),
+    "camp.rapport.section.corpus": "Corpus public avec référence",
+    "camp.rapport.corpus": (
+        "{extraits} extraits de {reunions} réunions, {minutes} min d'audio, {mots} mots de "
+        "référence, dont {chev} % prononcés pendant qu'une autre personne parle ; "
+        "{anglais} mots anglais courants"
+    ),
+    "camp.rapport.armes_egales": (
+        "à armes égales : mêmes extraits, même normalisation (minuscules, ponctuation et "
+        "hésitations retirées, nombres en lettres), glossaire et corrections éteints, langue fr"
+    ),
+    "camp.rapport.source": "source : {attribution}",
+    "camp.rapport.section.reglages": "Réglages mesurés",
+    "camp.rapport.preset_actuel": "(réglage actuel « {preset} »)",
+    "camp.rapport.echec": "échec ({etat}) {detail}",
+    "camp.rapport.wer": (
+        "taux d'erreur de mots : {wer} % (intervalle à 95 % : {bas} à {haut}) ; "
+        "{sub} substitutions, {sup} omissions, {ins} insertions sur {mots} mots"
+    ),
+    "camp.rapport.chevauchement": (
+        "mots de la référence perdus : {chev} % quand deux personnes parlent en même temps, "
+        "{hors} % sinon"
+    ),
+    "camp.rapport.inventions": (
+        "insertions longues ({seuil} mots ou plus absents de la référence) : {n}, {mots} mots ; "
+        "segments de plus de {duree} s : {longs} % de {segments}"
+    ),
+    "camp.rapport.temoin": "témoin de parole lue (FLEURS, 44 s) : {wer} % d'erreur",
+    "camp.rapport.section.verdict": "Verdict",
+    "camp.rapport.regle": (
+        "règle : écarter tout réglage plus lent que la réunion ; garder ceux dont le taux "
+        "d'erreur ne se distingue pas du meilleur (moins de {ecart} point d'écart, ou écart "
+        "apparié dont l'intervalle à 95 % contient zéro et qui reste sous {plafond} points) ; "
+        "parmi eux, le plus rapide"
+    ),
+    "camp.rapport.aucun_verdict": "aucun réglage n'a abouti : pas de verdict.",
+    "camp.rapport.retenu": "réglage retenu : {code}, {reglage}",
+    "camp.rapport.motif.equivalent_plus_rapide": (
+        "le plus rapide des réglages aussi justes que le meilleur ({meilleur})"
+    ),
+    "camp.rapport.motif.plus_juste_admissible": (
+        "aucun réglage assez rapide n'égale le meilleur ({meilleur}) : le plus juste des "
+        "réglages plus rapides que la réunion"
+    ),
+    "camp.rapport.equivalent": "équivalent",
+    "camp.rapport.distinct": "moins juste",
+    "camp.rapport.trop_lent": "plus lent que la réunion",
+    "camp.rapport.ecart": (
+        "{code} : {ecart} points d'écart au meilleur (intervalle apparié {bas} à {haut}), {etat}"
+    ),
+    "camp.rapport.contre_qualite": (
+        "par rapport au preset « Qualité maximale » actuel : {ecart} points de taux d'erreur, "
+        "{rapport} fois plus rapide"
+    ),
+    "camp.rapport.cout_ov": (
+        "ce qu'il coûte : OpenVINO ne donne pas la probabilité des mots, la vue de relecture "
+        "ne souligne donc aucun mot douteux ; segments plus courts ; en cas de panne de la "
+        "puce graphique, l'application repasse d'elle-même sur CTranslate2"
+    ),
+    "camp.rapport.cout_ct2": (
+        "ce qu'il coûte : calcul sur le processeur seul, la puce graphique reste inutilisée ; "
+        "les mots incertains restent soulignés dans la vue de relecture"
+    ),
+    "camp.rapport.pour_une_heure": "durée attendue pour une heure de réunion : {duree}",
+    "camp.rapport.section.doutes": "Mots douteux",
+    "camp.rapport.doute_ct2": (
+        "{code}, probabilité sous {seuil} : {part} % des mots signalés, qui couvrent {rappel} % "
+        "des mots faux ; {precision} % des mots signalés sont faux"
+    ),
+    "camp.rapport.doute_seconde": (
+        "{code} contrôlé par une seconde passe {second} (mots écrits autrement) : {part} % des "
+        "mots signalés, qui couvrent {rappel} % des mots faux ; {precision} % des mots signalés "
+        "sont faux ; coût : {cout} % de calcul en plus"
+    ),
+    "camp.rapport.doute_aucun": "pas assez de réglages réussis pour mesurer un signalement.",
+    "camp.rapport.section.glossaire": "Glossaire",
+    "camp.rapport.glossaire_public": "corpus public : glossaire éteint pour tous les réglages",
+    "camp.rapport.glossaire_poste": (
+        "glossaire de ce poste : {termes} termes chargés, dont {exemples} exemples livrés "
+        "actifs par les anciennes versions (noms fictifs)"
+    ),
+    "camp.rapport.glossaire_exemples": (
+        "le glossaire de ce poste n'est que l'exemple d'origine : aucun de ses termes ne peut "
+        "être retrouvé dans une vraie réunion. Remplacer son contenu par les noms propres et "
+        "sigles de l'équipe (Réglages, Glossaire)."
+    ),
+    "camp.rapport.duree": "Durée de la campagne : {duree}",
+    "camp.rapport.appliquer": (
+        "Pour appliquer ce verdict, dans le dossier du programme : "
+        "scribouille-verifier.exe --campagne --appliquer (rien n'est recalculé)"
+    ),
+    "camp.rapport.remarque": (
+        "Ce rapport ne contient que des nombres : aucun mot transcrit, aucun nom, aucun chemin."
+    ),
+    "camp.etape.deja": "{code} : déjà mesuré, repris tel quel",
+    "camp.etape.reglage": "Réglage {numero} sur {total} : {reglage} ({code})",
+    "camp.etape.progres": "{code} : extrait {n} sur {total}",
+    "camp.etape.modele": "Téléchargement du modèle {modele}",
+    "camp.etape.corpus": "Préparation du corpus public (au plus {mo} Mo à télécharger sans paquet préparé)",
+    "camp.etape.paquet": "Corpus pris dans le paquet préparé",
+    "camp.etape.reseau": "Corpus : extrait {rang} téléchargé et mélangé",
+    "camp.corpus_absent.titre": "Corpus public indisponible",
+    "camp.corpus_absent.msg": (
+        "Le corpus n'a pu être ni lu dans un paquet préparé ({paquet}), ni téléchargé. "
+        "Déposez le paquet à côté du programme ou désignez-le avec --corpus. Détail : {detail}"
+    ),
+    "camp.reglage_inconnu.titre": "Réglage inconnu",
+    "camp.reglage_inconnu.msg": "Réglage inconnu : {cles}. Réglages possibles : {connues}.",
+    "camp.reunion.titre": "Campagne, réunion réelle (sans référence), {nom} {version}, {date}",
+    "camp.reunion.extrait": "Extrait : {minutes} min (bords ramenés sur des pauses)",
+    "camp.reunion.ancre": "Réglage de comparaison : {code} ({source})",
+    "camp.reunion.ancre.verdict": "retenu par la campagne publique",
+    "camp.reunion.ancre.qualite": "preset « Qualité maximale », pas de verdict public",
+    "camp.reunion.ancre.premier": "premier réglage réussi",
+    "camp.reunion.glossaire": (
+        "Glossaire et corrections du poste appliqués : {termes} termes chargés, dont "
+        "{exemples} exemples livrés actifs par les anciennes versions"
+    ),
+    "camp.reunion.accord": (
+        "désaccord avec {ancre} : {desaccord} % ({mots} mots contre {mots_ancre}) ; passages "
+        "d'au moins {mots_seg} mots en plus : {en_plus}, en moins : {en_moins}"
+    ),
+    "camp.reunion.segments": (
+        "segments : {n}, durée médiane {mediane} s, plus de {duree} s : {longs} %"
+    ),
+    "camp.reunion.termes": "termes du glossaire retrouvés : {trouves} sur {termes}",
+    "camp.reunion.remarque": (
+        "Sans référence, un désaccord dit où les réglages divergent, pas lequel a raison. "
+        "Ce rapport ne contient que des nombres : aucun mot transcrit, aucun nom, aucun chemin."
+    ),
+    "camp.cli.usage": (
+        "Usage : --campagne [--appliquer] [--recommencer] [--reglages CLE,CLE] "
+        "[--limite-extraits N] [--corpus PAQUET.zip] [--peripherique GPU|CPU] [--telecharger]\n"
+        "        --campagne --reunion FICHIER [--debut 00:05:00] [--duree 600] [--reglages CLE,CLE]"
+    ),
+    "camp.cli.fichier": "Rapport : {fichier}",
+    "camp.cli.applique": "Réglage {code} appliqué : il sert dès la prochaine transcription.",
+    "camp.cli.rien_a_appliquer": "Aucun verdict : rien n'est appliqué.",
 }
 
 
@@ -2079,6 +2226,151 @@ Transcript:
 
 {texte}
 """,
+    # -- Measurement campaign (app/campagne.py) --------------------------------
+    "camp.libelle_ov": "OpenVINO {peripherique}, {modele}, beam {faisceau}",
+    "camp.libelle_ct2": "CTranslate2 processor, {modele}, beam {faisceau}",
+    "camp.rapport.titre": "Settings measurement campaign, {nom} {version}, {date}",
+    "camp.rapport.machine": "Machine: {processeur}, {memoire} GB, {alimentation}",
+    "camp.rapport.openvino": "OpenVINO {version}, devices seen: {peripheriques}",
+    "camp.rapport.vitesse": (
+        "speed: {facteur} times the audio duration (one hour of meeting: {heure}), "
+        "loading {chargement} s, memory {memoire} GB; ran from {debut} to {fin}"
+    ),
+    "camp.rapport.section.corpus": "Public corpus with reference",
+    "camp.rapport.corpus": (
+        "{extraits} excerpts from {reunions} meetings, {minutes} min of audio, {mots} reference "
+        "words, {chev} % of them spoken while someone else is talking; "
+        "{anglais} common English words"
+    ),
+    "camp.rapport.armes_egales": (
+        "like for like: same excerpts, same normalisation (lower case, punctuation and "
+        "hesitations removed, numbers in words), glossary and corrections off, language fr"
+    ),
+    "camp.rapport.source": "source: {attribution}",
+    "camp.rapport.section.reglages": "Measured settings",
+    "camp.rapport.preset_actuel": "(current \"{preset}\" setting)",
+    "camp.rapport.echec": "failed ({etat}) {detail}",
+    "camp.rapport.wer": (
+        "word error rate: {wer} % (95 % interval: {bas} to {haut}); "
+        "{sub} substitutions, {sup} deletions, {ins} insertions over {mots} words"
+    ),
+    "camp.rapport.chevauchement": (
+        "reference words lost: {chev} % when two people speak at once, {hors} % otherwise"
+    ),
+    "camp.rapport.inventions": (
+        "long insertions ({seuil} or more words absent from the reference): {n}, {mots} words; "
+        "segments longer than {duree} s: {longs} % of {segments}"
+    ),
+    "camp.rapport.temoin": "read speech control (FLEURS, 44 s): {wer} % errors",
+    "camp.rapport.section.verdict": "Verdict",
+    "camp.rapport.regle": (
+        "rule: drop any setting slower than the meeting; keep those whose error rate cannot be "
+        "told apart from the best (less than {ecart} point apart, or paired difference whose "
+        "95 % interval contains zero and which stays under {plafond} points); among them, the fastest"
+    ),
+    "camp.rapport.aucun_verdict": "no setting completed: no verdict.",
+    "camp.rapport.retenu": "chosen setting: {code}, {reglage}",
+    "camp.rapport.motif.equivalent_plus_rapide": (
+        "the fastest of the settings as accurate as the best ({meilleur})"
+    ),
+    "camp.rapport.motif.plus_juste_admissible": (
+        "no fast enough setting matches the best ({meilleur}): the most accurate of the "
+        "settings faster than the meeting"
+    ),
+    "camp.rapport.equivalent": "equivalent",
+    "camp.rapport.distinct": "less accurate",
+    "camp.rapport.trop_lent": "slower than the meeting",
+    "camp.rapport.ecart": (
+        "{code}: {ecart} points from the best (paired interval {bas} to {haut}), {etat}"
+    ),
+    "camp.rapport.contre_qualite": (
+        "compared with the current \"Maximum quality\" preset: {ecart} points of error rate, "
+        "{rapport} times faster"
+    ),
+    "camp.rapport.cout_ov": (
+        "what it costs: OpenVINO gives no word probability, so the review view underlines no "
+        "doubtful word; shorter segments; if the graphics chip fails, the application falls "
+        "back to CTranslate2 on its own"
+    ),
+    "camp.rapport.cout_ct2": (
+        "what it costs: processor only, the graphics chip stays idle; uncertain words stay "
+        "underlined in the review view"
+    ),
+    "camp.rapport.pour_une_heure": "expected time for one hour of meeting: {duree}",
+    "camp.rapport.section.doutes": "Doubtful words",
+    "camp.rapport.doute_ct2": (
+        "{code}, probability below {seuil}: {part} % of words flagged, covering {rappel} % of "
+        "wrong words; {precision} % of flagged words are wrong"
+    ),
+    "camp.rapport.doute_seconde": (
+        "{code} checked by a second {second} pass (words written differently): {part} % of words "
+        "flagged, covering {rappel} % of wrong words; {precision} % of flagged words are wrong; "
+        "cost: {cout} % more computing"
+    ),
+    "camp.rapport.doute_aucun": "not enough successful settings to measure flagging.",
+    "camp.rapport.section.glossaire": "Glossary",
+    "camp.rapport.glossaire_public": "public corpus: glossary off for every setting",
+    "camp.rapport.glossaire_poste": (
+        "this computer's glossary: {termes} terms loaded, {exemples} of them examples shipped "
+        "active by older versions (fictitious names)"
+    ),
+    "camp.rapport.glossaire_exemples": (
+        "this computer's glossary is only the original example: none of its terms can be found "
+        "in a real meeting. Replace its content with the team's proper names and acronyms "
+        "(Settings, Glossary)."
+    ),
+    "camp.rapport.duree": "Campaign duration: {duree}",
+    "camp.rapport.appliquer": (
+        "To apply this verdict, in the program folder: "
+        "scribouille-verifier.exe --campagne --appliquer (nothing is computed again)"
+    ),
+    "camp.rapport.remarque": (
+        "This report holds numbers only: no transcribed word, no name, no path."
+    ),
+    "camp.etape.deja": "{code}: already measured, reused as is",
+    "camp.etape.reglage": "Setting {numero} of {total}: {reglage} ({code})",
+    "camp.etape.progres": "{code}: excerpt {n} of {total}",
+    "camp.etape.modele": "Downloading model {modele}",
+    "camp.etape.corpus": "Preparing the public corpus (at most {mo} MB to download without a prepared pack)",
+    "camp.etape.paquet": "Corpus taken from the prepared pack",
+    "camp.etape.reseau": "Corpus: excerpt {rang} downloaded and mixed",
+    "camp.corpus_absent.titre": "Public corpus unavailable",
+    "camp.corpus_absent.msg": (
+        "The corpus could neither be read from a prepared pack ({paquet}) nor downloaded. "
+        "Put the pack next to the program or point to it with --corpus. Detail: {detail}"
+    ),
+    "camp.reglage_inconnu.titre": "Unknown setting",
+    "camp.reglage_inconnu.msg": "Unknown setting: {cles}. Possible settings: {connues}.",
+    "camp.reunion.titre": "Campaign, real meeting (no reference), {nom} {version}, {date}",
+    "camp.reunion.extrait": "Excerpt: {minutes} min (edges moved to pauses)",
+    "camp.reunion.ancre": "Comparison setting: {code} ({source})",
+    "camp.reunion.ancre.verdict": "chosen by the public campaign",
+    "camp.reunion.ancre.qualite": "\"Maximum quality\" preset, no public verdict",
+    "camp.reunion.ancre.premier": "first successful setting",
+    "camp.reunion.glossaire": (
+        "This computer's glossary and corrections applied: {termes} terms loaded, "
+        "{exemples} of them examples shipped active by older versions"
+    ),
+    "camp.reunion.accord": (
+        "disagreement with {ancre}: {desaccord} % ({mots} words against {mots_ancre}); passages "
+        "of at least {mots_seg} extra words: {en_plus}, missing: {en_moins}"
+    ),
+    "camp.reunion.segments": (
+        "segments: {n}, median duration {mediane} s, longer than {duree} s: {longs} %"
+    ),
+    "camp.reunion.termes": "glossary terms found: {trouves} of {termes}",
+    "camp.reunion.remarque": (
+        "Without a reference, a disagreement says where settings diverge, not which is right. "
+        "This report holds numbers only: no transcribed word, no name, no path."
+    ),
+    "camp.cli.usage": (
+        "Usage: --campagne [--appliquer] [--recommencer] [--reglages KEY,KEY] "
+        "[--limite-extraits N] [--corpus PACK.zip] [--peripherique GPU|CPU] [--telecharger]\n"
+        "       --campagne --reunion FILE [--debut 00:05:00] [--duree 600] [--reglages KEY,KEY]"
+    ),
+    "camp.cli.fichier": "Report: {fichier}",
+    "camp.cli.applique": "Setting {code} applied: it is used from the next transcription.",
+    "camp.cli.rien_a_appliquer": "No verdict: nothing applied.",
 }
 
 

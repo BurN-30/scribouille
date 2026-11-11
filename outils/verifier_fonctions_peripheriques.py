@@ -1,7 +1,7 @@
 """
 Vérification en ligne de commande des fonctions périphériques.
 
-Vingt-quatre sujets, tous vérifiables sans ouvrir de fenêtre, sans transcrire quoi que
+Vingt-six sujets, tous vérifiables sans ouvrir de fenêtre, sans transcrire quoi que
 ce soit et **sans le moindre appel réseau** :
 
   1. la scrutation du dossier surveillé, avec de vrais fichiers déposés dans un
@@ -57,6 +57,10 @@ ce soit et **sans le moindre appel réseau** :
   22. le réglage de vitesse propre au poste, sa suspension après un plantage ;
   23. le banc d'essai : taux d'erreur, conseil, rapport sans nom ni chemin ;
   24. la commande d'installation d'OpenVINO, sans télémétrie, et hors ligne.
+  25. la comparaison des moteurs sur un vrai enregistrement ;
+  26. la campagne de mesure : taux d'erreur et intervalles, verdict, corpus
+      (annotations, chevauchements, empreintes), rapport sans texte ni chemin,
+      exemples anciens du glossaire, application du verdict, veille suspendue.
 
 Rien de ce que fait ce script ne touche à l'installation : tout se passe dans
 un dossier temporaire, effacé à la fin.
@@ -1886,6 +1890,228 @@ def essai_comparaison(base: Path) -> None:
              "options de la ligne de commande et durées « 00:05:00 », « 600 », « 1:30 »")
 
 
+def essai_campagne(base: Path) -> None:
+    """Campagne : taux d'erreur, intervalles, verdict, corpus, rapport sans texte, application."""
+    titre("Campagne de mesure des réglages")
+    import numpy as np
+
+    from app import campagne as cp, config as config_module, corpus, energie, reglage_machine
+
+    # Taux d'erreur contre une référence, chevauchements, insertions longues.
+    reference = {"mots": [["bonjour", 0, 1, 0, False], ["tout", 1, 2, 0, False],
+                          ["le", 2, 3, 0, True], ["monde", 3, 4, 0, True],
+                          ["on", 4, 5, 1, True], ["commence", 5, 6, 1, False]]}
+    segments = [{"d": 0.0, "f": 20.0, "t": "Bonjour tout le monde, alpha bravo charlie delta, on commence.",
+                 "m": []},
+                {"d": 20.0, "f": 22.0, "t": "voilà", "m": []}]
+    m = cp.mesurer_extrait(reference, segments)
+    verifier(m["mots_ref"] == 6 and m["sub"] == 0 and m["sup"] == 0 and m["ins"] == 5
+             and m["insertions_longues"] == 1 and m["mots_insertions_longues"] == 4,
+             "insertions comptées, quatre mots inventés d'affilée font une insertion longue")
+    verifier(m["segments"] == 2 and m["segments_longs"] == 1, "un segment de plus de 15 s est relevé")
+    manque = cp.mesurer_extrait(reference, [{"d": 0, "f": 3, "t": "bonjour tout commence", "m": []}])
+    verifier(manque["chev_total"] == 3 and manque["chev_perdus"] == 3 and manque["hors_perdus"] == 0
+             and manque["sup"] == 3, "mots perdus pendant un chevauchement, et seulement eux")
+    avec_proba = cp.mesurer_extrait(reference, [{"d": 0, "f": 6, "t": "bonjour tout le monde on commande", "m": [
+        ["bonjour", 0, 1, 0.9], ["tout", 1, 2, 0.9], ["le", 2, 3, 0.9], ["monde", 3, 4, 0.9],
+        ["on", 4, 5, 0.9], ["commande", 5, 6, 0.3]]}])
+    verifier(avec_proba["incertains"] == 1 and avec_proba["incertains_errones"] == 1
+             and avec_proba["sub"] == 1, "un mot incertain qui est faux est compté comme tel")
+
+    # Intervalles : rééchantillonnage des extraits, apparié entre réglages.
+    erreurs, mots = [10, 12, 8, 11, 9] * 4, [100] * 20
+    bas, haut = cp.intervalle(erreurs, mots)
+    verifier(bas <= 10.0 <= haut and haut - bas < 3.0, "intervalle à 95 % autour du taux global",
+             f"{bas}..{haut}")
+    ecart, eb, eh = cp.ecart_apparie(erreurs, erreurs, mots)
+    verifier(ecart == 0.0 and eb == 0.0 and eh == 0.0, "deux réglages identiques : écart nul, intervalle nul")
+    ecart, eb, eh = cp.ecart_apparie([e + 3 for e in erreurs], erreurs, mots)
+    verifier(ecart == 3.0 and eb > 0, "trois points de plus sur chaque extrait : écart significatif")
+
+    # Verdict.
+    ordre = [f"x{k}" for k in range(20)]
+
+    def faux(erreurs_par_extrait: list[int]) -> dict:
+        return {i: {"erreurs": e, "mots_ref": 100} for i, e in zip(ordre, erreurs_par_extrait)}
+
+    rng = np.random.default_rng(3)
+    base_err = [int(v) for v in rng.integers(15, 25, size=20)]
+    par_extrait = {
+        "ct2-v3-f5": faux(base_err),
+        "ov-v3-f1": faux([e + (1 if k % 3 == 0 else 0) for k, e in enumerate(base_err)]),
+        "ov-turbo-f1": faux([e + 4 for e in base_err]),
+        "ct2-v3-f1": faux([max(0, e - 2) for e in base_err]),
+    }
+    resultats = {c: {"etat": "ok", "wer": 100.0 * sum(v["erreurs"] for v in d.values()) / 2000.0}
+                 for c, d in par_extrait.items()}
+    resultats["ct2-v3-f5"]["facteur"] = 0.9
+    resultats["ov-v3-f1"]["facteur"] = 0.35
+    resultats["ov-turbo-f1"]["facteur"] = 0.15
+    resultats["ct2-v3-f1"]["facteur"] = 1.2
+    d = cp.verdict(resultats, ordre, par_extrait)
+    verifier(d["meilleur"] == "ct2-v3-f1" and not d["lignes"]["ct2-v3-f1"]["admissible"],
+             "le plus juste, plus lent que la réunion, est écarté du choix")
+    verifier(d["retenu"] == "ct2-v3-f5" and d["motif"] == "plus_juste_admissible",
+             "aucun équivalent assez rapide : le plus juste des réglages admissibles",
+             str(d.get("retenu")))
+    resultats["ct2-v3-f1"]["facteur"] = 0.95
+    par_extrait["ct2-v3-f1"] = faux(base_err)
+    resultats["ct2-v3-f1"]["wer"] = resultats["ct2-v3-f5"]["wer"]
+    d = cp.verdict(resultats, ordre, par_extrait)
+    verifier(d["retenu"] == "ov-v3-f1" and d["lignes"]["ov-v3-f1"]["equivalent"]
+             and not d["lignes"]["ov-turbo-f1"]["equivalent"],
+             "moins d'un point d'écart : le plus rapide des équivalents ; quatre points : écarté",
+             str(d.get("retenu")))
+    verifier(cp.verdict({}, ordre, {}) == {}, "aucun réglage réussi : pas de verdict")
+
+    # Corpus : annotations SPPAS, référence, chevauchements, en-tête WAV, mélange.
+    verifier(corpus.nettoyer_jeton("p(eu)t-être") == "peut-être" and corpus.nettoyer_jeton("ex-") == ""
+             and corpus.nettoyer_jeton("[sept,set]") == "sept" and corpus.nettoyer_jeton("SPEAKER_3") == ""
+             and corpus.nettoyer_jeton("$Paris$") == "Paris" and corpus.nettoyer_jeton("@") == "",
+             "annotations de la transcription manuelle retirées")
+    pistes = {"a": [(0.0, 0.5, "#"), (0.5, 1.0, "bonjour"), (1.0, 1.5, "à"), (1.5, 2.0, "tous"),
+                    (2.0, 3.0, "#"), (3.0, 3.5, "voilà")],
+              "b": [(0.0, 1.2, "#"), (1.2, 1.6, "oui"), (1.6, 3.4, "#")]}
+    ref = corpus.construire_reference(pistes, 0.0, 3.4)
+    verifier([m[0] for m in ref["mots"]] == ["bonjour", "à", "tous", "oui"]
+             and [m[4] for m in ref["mots"]] == [False, True, True, True],
+             "référence rangée par prise de parole, chevauchements marqués, mot coupé au bord exclu")
+    entete = b"RIFF" + (0).to_bytes(4, "little") + b"WAVEfmt " + (16).to_bytes(4, "little") + \
+        (1).to_bytes(2, "little") + (1).to_bytes(2, "little") + (48000).to_bytes(4, "little") + \
+        (96000).to_bytes(4, "little") + (2).to_bytes(2, "little") + (16).to_bytes(2, "little") + \
+        b"data" + (0).to_bytes(4, "little")
+    verifier(corpus.lire_entete(entete) == (1, 1, 48000, 16, 44), "en-tête WAV lu")
+    fort, faible = np.ones(16000, dtype=np.float32) * 0.5, np.ones(16000, dtype=np.float32) * 0.01
+    melange = corpus.melanger([fort, faible], [[(0.0, 1.0)], [(0.0, 1.0)]])
+    verifier(melange.dtype == np.dtype("<i2") and int(np.max(np.abs(melange))) == int(0.9 * 32767),
+             "pistes égalisées puis mélangées, crête à 0,9")
+    from app.corpus_manifeste import MANIFESTE
+    verifier(len(MANIFESTE["extraits"]) >= 15 and all(e["sha256_wav"] and e["sha256_ref"]
+                                                      for e in MANIFESTE["extraits"])
+             and 20 * 60 <= sum(e["fin"] - e["debut"] for e in MANIFESTE["extraits"]) <= 30 * 60,
+             "manifeste du corpus : extraits figés et empreintes, 20 à 30 minutes")
+    paquet = base / "paquet.zip"
+    import zipfile
+    with zipfile.ZipFile(paquet, "w") as z:
+        z.writestr(MANIFESTE["extraits"][0]["id"] + ".wav", b"pas le bon contenu")
+    dossier_corpus = base / "corpus"
+    dossier_corpus.mkdir()
+    poses = corpus._depuis_paquet(paquet, dossier_corpus)
+    verifier(poses == 0 and not any(dossier_corpus.iterdir()),
+             "un fichier du paquet à l'empreinte fausse est refusé")
+    sources = corpus.SOURCES
+    corpus.SOURCES = ("http://127.0.0.1:9",)
+    try:
+        corpus.telecharger("x", "0" * 64, 0, 10)
+        refuse = False
+    except corpus.ErreurCorpus as exc:
+        refuse = exc.motif == "reseau"
+    finally:
+        corpus.SOURCES = sources
+    verifier(refuse, "réseau refusé : erreur nommée, pas de traceback")
+
+    # Rapport de chiffres : aucun mot du texte, aucun chemin.
+    mat = materiel.detecter()
+    secrets = ("zygomatique", "bérénice", "pentagone", "octogone")
+    ref_secrete = {"mots": [[m, 0, 1, 0, False] for m in secrets]}
+    seg_secret = [{"d": 0, "f": 1, "t": "Zygomatique Bérénice hexagone", "m": []}]
+    mesure = cp.mesurer_extrait(ref_secrete, seg_secret)
+    agregat = cp.agreger({"e1": mesure}, ["e1"])
+    res = {"ov-v3-f1": {"etat": "ok", "facteur": 0.3, "chargement_s": 4, "memoire_go": 2.0,
+                        "heure_debut": "2026-11-12 09:00", "heure_fin": "2026-11-12 09:10",
+                        "peripherique": "GPU", "calcul_s": 3.0}}
+    decision = cp.verdict({"ov-v3-f1": {**res["ov-v3-f1"], "wer": agregat["wer"]}}, ["e1"],
+                          {"ov-v3-f1": {"e1": mesure}})
+    rapport = cp.rediger_rapport(mat, {"extraits": 1, "reunions": 1, "duree_s": 60.0, "mots": 4,
+                                       "chev": 0, "anglais": 0}, res, {"ov-v3-f1": agregat}, decision,
+                                 {"ov-v3-f1": 5.0}, {}, {"termes": 12, "exemples": 12}, "GPU", 600.0)
+    verifier(not any(s in rapport.lower() for s in secrets + ("hexagone",)),
+             "le rapport de la campagne ne contient aucun mot de la référence ni du texte")
+    verifier(str(Path.home()) not in rapport and "09:00" in rapport and "--campagne --appliquer" in rapport,
+             "rapport sans chemin, avec l'heure de chaque réglage et la commande pour appliquer")
+    verifier("12" in rapport and "exemple" in rapport.lower(),
+             "le rapport dit combien de termes du glossaire sont des exemples d'origine, sans les citer")
+    verifier(not any(t.lower() in rapport.lower() for t in vocabulaire.EXEMPLES_ANCIENS if len(t) > 3),
+             "aucun terme du glossaire n'est cité")
+    rapport_reunion = cp.rediger_rapport_reunion(
+        mat, 600.0, res, {"ov-v3-f1": {"desaccord": 0.0, "mots": 3, "mots_ancre": 3, "en_plus": 0,
+                                       "en_moins": 0}},
+        "ov-v3-f1", "verdict", {"termes": 3, "exemples": 0}, {"ov-v3-f1": 1},
+        {"ov-v3-f1": {"n": 1, "mediane": 1.0, "longs": 0}}, "GPU", 700.0)
+    verifier(not any(s in rapport_reunion.lower() for s in secrets) and str(Path.home()) not in rapport_reunion,
+             "le rapport d'une réunion réelle ne contient ni texte ni chemin")
+
+    # Glossaire livré avec des exemples actifs par les anciennes versions.
+    ancien = "# Glossaire\n\n" + "\n".join(vocabulaire.EXEMPLES_ANCIENS) + "\n"
+    verifier(vocabulaire.glossaire_exemple_intact(ancien)
+             and not vocabulaire.glossaire_exemple_intact(ancien + "Scribouille\n")
+             and vocabulaire.nombre_exemples_anciens(vocabulaire.termes(ancien + "Scribouille\n")) == 12,
+             "glossaire d'origine reconnu, un glossaire complété ne l'est plus")
+    vocab_reel, corr_reel, modeles_reels = (chemins.FICHIER_VOCABULAIRE, chemins.FICHIER_CORRECTIONS,
+                                            dict(chemins.MODELES_FICHIERS_EXEMPLE))
+    dossier_v = base / "vocab"
+    dossier_v.mkdir()
+    try:
+        chemins.FICHIER_VOCABULAIRE = dossier_v / "vocabulaire.txt"
+        chemins.FICHIER_CORRECTIONS = dossier_v / "corrections.txt"
+        chemins.MODELES_FICHIERS_EXEMPLE.clear()
+        chemins.MODELES_FICHIERS_EXEMPLE.update({
+            chemins.FICHIER_VOCABULAIRE: RACINE / "vocabulaire.txt",
+            chemins.FICHIER_CORRECTIONS: RACINE / "corrections.txt"})
+        chemins.FICHIER_VOCABULAIRE.write_text(ancien, encoding="utf-8")
+        corrections_anciennes = "\n".join(f"{a} => {b}" for a, b in vocabulaire.CORRECTIONS_ANCIENNES)
+        chemins.FICHIER_CORRECTIONS.write_text(corrections_anciennes + "\nmaison => Maison\n", encoding="utf-8")
+        remplaces = vocabulaire.retirer_exemples_anciens()
+        verifier(remplaces == ["vocabulaire.txt"] and vocabulaire.termes(
+            chemins.FICHIER_VOCABULAIRE.read_text(encoding="utf-8")) == []
+                 and (dossier_v / "vocabulaire-exemples-anciens.txt").is_file()
+                 and "maison => Maison" in chemins.FICHIER_CORRECTIONS.read_text(encoding="utf-8"),
+                 "exemples d'origine remplacés (copie gardée), fichier retouché laissé tel quel")
+    finally:
+        chemins.FICHIER_VOCABULAIRE, chemins.FICHIER_CORRECTIONS = vocab_reel, corr_reel
+        chemins.MODELES_FICHIERS_EXEMPLE.clear()
+        chemins.MODELES_FICHIERS_EXEMPLE.update(modeles_reels)
+
+    # Application du verdict, signée pour le poste ; faisceau pris par la file.
+    racine_reelle, config_reelle = chemins.RACINE, chemins.FICHIER_CONFIG
+    chemins.RACINE = base / "appliquer"
+    chemins.RACINE.mkdir()
+    chemins.FICHIER_CONFIG = chemins.RACINE / "config.json"
+    from app import moteur_openvino
+    temoin_reel = moteur_openvino.TEMOIN_CHARGEMENT
+    moteur_openvino.TEMOIN_CHARGEMENT = chemins.RACINE / "temoin.txt"
+    enregistrer_reel = calibration.enregistrer
+    calibration.enregistrer = lambda *a, **k: 0.0
+    try:
+        config_module.sauver({"preset": "qualite", "langue_interface": "fr"})
+        cp.appliquer({"cle": "ct2-v3-f1", "moteur": "ctranslate2", "modele": "large-v3", "faisceau": 1,
+                      "preset": "qualite", "peripherique": "cpu", "facteur": 0.6, "duree_audio": 1300.0,
+                      "lot": 8})
+        config = config_module.charger()
+        verifier(config["reglage_machine"].get("faisceau") == 1
+                 and config["reglage_machine"].get("source") == "campagne"
+                 and reglage_machine.faisceau_impose(config, mat) == 1 and config["preset"] == "qualite",
+                 "--appliquer écrit moteur, faisceau et preset, signés pour ce poste")
+        verifier(reglage_machine.faisceau_impose({}, mat) is None,
+                 "sans réglage, le faisceau reste celui du moteur")
+    finally:
+        chemins.RACINE, chemins.FICHIER_CONFIG = racine_reelle, config_reelle
+        moteur_openvino.TEMOIN_CHARGEMENT = temoin_reel
+        calibration.enregistrer = enregistrer_reel
+
+    with energie.sans_veille() as pose:
+        verifier(pose == (sys.platform == "win32"), "veille du système suspendue le temps du calcul")
+    verifier(cp.options_reconnues(["--campagne"]) and cp.options_reconnues(["--campagne-essai", "{}"])
+             and [r.cle for r in cp._choisir("ov-v3-f1,ct2-v3-f5")] == ["ov-v3-f1", "ct2-v3-f5"],
+             "options de la ligne de commande et choix des réglages")
+    try:
+        cp._choisir("inconnu")
+        refuse = False
+    except Exception:
+        refuse = True
+    verifier(refuse, "un réglage inconnu est refusé avec un message")
+
+
 def principal() -> int:
     print(f"Vérification des fonctions périphériques de Scribouille\n{'=' * 54}")
     with tempfile.TemporaryDirectory(prefix="scribouille-verif-") as brut:
@@ -1916,6 +2142,7 @@ def principal() -> int:
         essai_banc()
         essai_extension_openvino()
         essai_comparaison(base)
+        essai_campagne(base)
 
     print(f"\n{'=' * 54}")
     if _echecs:
