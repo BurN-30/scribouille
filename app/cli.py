@@ -1583,6 +1583,7 @@ def _confirmer(sortie: Sortie, question: str, oui: bool) -> bool:
     try:
         reponse = input(question + " Taper « oui » pour confirmer : ")
     except EOFError:
+        sortie.dire("")  # la question reste seule sur sa ligne
         return False
     return reponse.strip().lower() == "oui"
 
@@ -1592,13 +1593,19 @@ def cmd_effacer(options, sortie: Sortie) -> int:
 
     config = config_cli("effacer")
     if options.complet:
+        # Version portable (ou sources) : rien ne retire le programme, il
+        # n'est donc ni annoncé ni compté ; la sortie dit qu'il reste.
+        installee = inventaire.desinstalleur() is not None
         apercu = inventaire.apercu_effacement(not options.avec_transcriptions, config,
-                                              avec_programme=not options.garder_programme)
+                                              avec_programme=installee and not options.garder_programme)
+        apercu["programme_reste"] = "" if installee else str(chemins.DOSSIER_PROGRAMME)
         texte = (f"Effacement complet : {apercu['total']}\n" + _tableau(apercu["postes"])
                  + ("\n  Transcriptions : gardées" if apercu["garder_transcriptions"]
                     else f"\n  TRANSCRIPTIONS AUSSI : {langues.octets(apercu['transcriptions_octets'])}"
                          f" dans {apercu['transcriptions']['dossier']}")
-                 + (f"\n  Puis désinstallation silencieuse : {apercu['desinstalleur']}" if apercu["desinstalleur"] else ""))
+                 + (f"\n  Puis désinstallation silencieuse : {apercu['desinstalleur']}" if apercu["desinstalleur"] else "")
+                 + (f"\n  Le dossier du programme reste, à supprimer vous-même : {apercu['programme_reste']}"
+                    if apercu["programme_reste"] else ""))
         if apercu["non_reconnus"]:
             texte += "\n  Non reconnus, laissés : " + ", ".join(apercu["non_reconnus"][:10])
         if options.resume:
@@ -1619,7 +1626,9 @@ def cmd_effacer(options, sortie: Sortie) -> int:
             inventaire.nettoyer_apres(os.getpid(), bilan["desinstalleur"])
         sortie.donnees({"apercu": apercu, "fait": True, "bilan": bilan},
                        f"Effacé : {langues.octets(bilan.get('octets', 0))}"
-                       + ("".join(f"\n  reste : {r}" for r in bilan.get("restes", [])[:10])))
+                       + ("".join(f"\n  reste : {r}" for r in bilan.get("restes", [])[:10]))
+                       + (f"\n  Le dossier du programme reste, à supprimer vous-même : {apercu['programme_reste']}"
+                          if apercu["programme_reste"] else ""))
         return OK if not bilan.get("restes") else ECHEC_PARTIEL
     resultat = inventaire.inventaire(config)
     if options.liberable:

@@ -812,6 +812,11 @@ def essai_inventaire() -> None:
     code, lignes, _ = cli("effacer", "--complet", "--apercu", "--json")
     verifier(code == 0 and lignes[-1]["donnees"]["fait"] is False and lignes[-1]["donnees"]["apercu"]["postes"],
              "effacer --apercu : la liste et les tailles, rien de fait")
+    apercu = lignes[-1]["donnees"]["apercu"] if lignes else {}
+    verifier(not any(p["cle"] in ("programme", "installation") for p in apercu.get("postes", []))
+             and apercu.get("programme_reste"),
+             "effacer --complet sans désinstalleur (portable, sources) : programme ni annoncé ni compté, dit qu'il reste",
+             str([p["cle"] for p in apercu.get("postes", [])]))
     code, lignes, _ = cli("espace", "--json")
     verifier(code == 0 and "postes" in lignes[-1]["donnees"], "espace : inventaire en JSON")
 
