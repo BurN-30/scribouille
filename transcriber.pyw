@@ -1923,7 +1923,30 @@ class Passerelle:
         elements = sorties.historique(Path(self.config.get("dossier_sortie") or ""))
         for element in elements:
             element["taille"] = audio_module.formater_taille(element["taille"])
+            # Durée de la réunion et date de la transcription, lues dans
+            # l'en-tête du .txt : une correction ne redate plus la réunion.
+            element.update(self._entete_historique(element.get("chemin", "")))
         self._js(f"onHistorique({_json(elements)})")
+
+    @staticmethod
+    def _entete_historique(chemin: str) -> dict:
+        fichier = Path(chemin or "")
+        if fichier.suffix.lower() != ".txt":
+            return {}
+        try:
+            with fichier.open(encoding="utf-8", errors="replace") as flux:
+                debut = flux.read(2000)
+        except OSError:
+            return {}
+        entete = lecture.separer_entete(debut + "\n")[0]
+        retour = {}
+        duree = lecture._valeur_entete_traduite(entete, "ent.duree")
+        date = lecture._valeur_entete_traduite(entete, "ent.transcrit_le")
+        if duree:
+            retour["duree"] = duree
+        if date:
+            retour["date"] = date
+        return retour
 
     def lire_texte(self, chemin: str) -> str:
         try:

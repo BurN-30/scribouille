@@ -36,6 +36,11 @@ fr: {
   'ui.entete.local': '100 % local',
   'ui.entete.local_titre': 'Aucune donnée ne quitte cette machine',
   'ui.entete.theme': 'Changer de thème',
+  'ui.espace.rien': "Rien à libérer.",
+  'ui.rl.rien_a_verifier': "Rien à vérifier",
+  'ui.bouton.en_cours': "Transcription en cours",
+  'ui.ligne.relire_nom': "Relire {nom}",
+  'ui.entete.theme_etat': "Thème : {theme}. Cliquer pour changer.",
   'ui.entete.aide': 'Aide',
 
   /* -- bandeau de mise à jour ------------------------------------------- */
@@ -837,6 +842,11 @@ en: {
   'ui.entete.local': '100 % local',
   'ui.entete.local_titre': 'No data ever leaves this machine',
   'ui.entete.theme': 'Switch theme',
+  'ui.espace.rien': "Nothing to free.",
+  'ui.rl.rien_a_verifier': "Nothing to check",
+  'ui.bouton.en_cours': "Transcribing",
+  'ui.ligne.relire_nom': "Review {nom}",
+  'ui.entete.theme_etat': "Theme: {theme}. Click to change.",
   'ui.entete.aide': 'Help',
 
   'ui.maj.voir': 'View release',

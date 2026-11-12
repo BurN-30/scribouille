@@ -56,6 +56,7 @@
   --trouve: #ffe08a;
   --trouve-courant: #ffb84d;
   --lu: #cfe0ff;
+  --placeholder: #5f6470;
 
   --rayon: 10px;
   --rayon-petit: 6px;
@@ -93,6 +94,7 @@
     --trouve: #6b5512;
     --trouve-courant: #a86a10;
     --lu: #2a3d6e;
+    --placeholder: #9aa1ad;
 
     --ombre: 0 1px 2px rgba(0, 0, 0, .4), 0 4px 12px rgba(0, 0, 0, .3);
     --ombre-forte: 0 8px 32px rgba(0, 0, 0, .55);
@@ -108,7 +110,7 @@
   --texte: #16181d; --texte-doux: #565b66; --texte-faible: #646a78;
   --vert: #17784a; --vert-fond: #e6f4ec; --ambre: #8a5806; --ambre-fond: #fdf2dd;
   --rouge: #b5292f; --rouge-fond: #fbeaea;
-  --trouve: #ffe08a; --trouve-courant: #ffb84d; --lu: #cfe0ff;
+  --trouve: #ffe08a; --trouve-courant: #ffb84d; --lu: #cfe0ff; --placeholder: #5f6470;
   --ombre: 0 1px 2px rgba(16,20,30,.06), 0 4px 12px rgba(16,20,30,.05);
   --ombre-forte: 0 8px 32px rgba(16,20,30,.18);
 }
@@ -121,7 +123,7 @@
   --texte: #e7eaf0; --texte-doux: #a3aab8; --texte-faible: #8a92a1;
   --vert: #55d68f; --vert-fond: #122a1f; --ambre: #e9b667; --ambre-fond: #2c2314;
   --rouge: #f28b8b; --rouge-fond: #2e1a1c;
-  --trouve: #6b5512; --trouve-courant: #a86a10; --lu: #2a3d6e;
+  --trouve: #6b5512; --trouve-courant: #a86a10; --lu: #2a3d6e; --placeholder: #9aa1ad;
   --ombre: 0 1px 2px rgba(0,0,0,.4), 0 4px 12px rgba(0,0,0,.3);
   --ombre-forte: 0 8px 32px rgba(0,0,0,.55);
 }
@@ -223,7 +225,7 @@ kbd {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   font-variant-numeric: tabular-nums;
 }
-.activite .point { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: pulsation 1.4s ease-in-out infinite; flex: none; }
+.activite .point { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; }
 
 .navigation { display: flex; align-items: center; gap: 6px; }
 .bouton-nav { padding: 6px 12px; }
@@ -516,18 +518,15 @@ p.aide { margin: 0 0 8px; }
 .comp-plage { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
 .comp-plage label { flex: 1; min-width: 120px; display: flex; flex-direction: column; gap: 4px; }
 
-.presets { display: flex; flex-direction: column; gap: 8px; }
+.presets { display: flex; flex-direction: column; gap: 0; border-top: 1px solid var(--bordure); }
 .preset {
   display: block; width: 100%; text-align: left;
-  border: 1px solid var(--bordure); background: var(--carte-creuse);
-  border-radius: var(--rayon); padding: 10px 13px;
-  transition: border-color var(--vitesse) ease, background var(--vitesse) ease, box-shadow var(--vitesse) ease;
+  border: 0; border-bottom: 1px solid var(--bordure); background: transparent;
+  border-radius: 0; padding: 10px 13px;
+  transition: background var(--vitesse) ease, box-shadow var(--vitesse) ease;
 }
-.preset:hover { border-color: var(--bordure-forte); background: var(--carte); }
-.preset[aria-checked="true"] {
-  border-color: var(--accent); background: var(--accent-doux);
-  box-shadow: inset 0 0 0 1px var(--accent);
-}
+.preset:hover { background: var(--carte-creuse); }
+.preset[aria-checked="true"] { background: var(--accent-doux); box-shadow: inset 3px 0 0 var(--accent); }
 .preset .titre { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 650; }
 .preset .marqueur {
   width: 14px; height: 14px; border-radius: 50%; flex: none;
@@ -659,7 +658,7 @@ textarea { resize: vertical; font-family: var(--police-mono); font-size: 12.5px;
 .journal-contenu {
   height: calc(var(--hauteur-fenetre) - 260px); min-height: 200px; overflow-y: auto;
   margin-top: 12px; padding: 10px 12px;
-  background: var(--carte-creuse); border: 1px solid var(--bordure); border-radius: var(--rayon-petit);
+  background: var(--carte-creuse); border-radius: var(--rayon-petit);
   font-family: var(--police-mono); font-size: 11.5px; line-height: 1.75;
   user-select: text;
 }
@@ -792,17 +791,21 @@ textarea { resize: vertical; font-family: var(--police-mono); font-size: 12.5px;
   padding: 7px 18px; background: var(--carte-creuse); border-bottom: 1px solid var(--bordure); flex: none;
 }
 .rl-groupe { display: flex; align-items: center; gap: 6px; min-width: 0; }
+/* Deux rangees fixes : l'ecoute, puis chercher et verifier. La barre garde la
+   meme hauteur quand un compteur ou un bouton apparait. */
+.rl-lecteur { flex: 1 0 100%; }
 .rl-lire { min-width: 92px; }
+.rl-saut { width: auto; min-width: 38px; padding: 0 6px; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--texte-doux); }
 .rl-lire[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-contraste); }
-.rl-temps { font-size: 12.5px; color: var(--texte-doux); font-variant-numeric: tabular-nums; min-width: 84px; text-align: center; }
+.rl-temps { font-size: 12.5px; color: var(--texte-doux); font-variant-numeric: tabular-nums; min-width: 17ch; text-align: center; }
 #rl-position { width: 130px; accent-color: var(--accent); min-height: 24px; }
 #rl-vitesse { width: auto; padding: 3px 6px; min-height: 30px; font-size: 12.5px; }
 .rl-suivre { font-size: 12.5px; color: var(--texte-doux); }
 .rl-recherche { position: relative; }
 .rl-recherche .rl-loupe { position: absolute; left: 8px; color: var(--texte-faible); pointer-events: none; }
 #rl-chercher { width: 170px; padding: 4px 8px 4px 28px; min-height: 30px; font-size: 12.5px; }
-.rl-compte { font-size: 12px; color: var(--texte-faible); font-variant-numeric: tabular-nums; text-align: center; white-space: nowrap; }
-.rl-compte:empty { display: none; }
+.rl-compte { font-size: 12px; color: var(--texte-faible); font-variant-numeric: tabular-nums; text-align: center; white-space: nowrap; min-width: 9ch; }
+.rl-verifier { padding-left: 14px; border-left: 1px solid var(--bordure); }
 #rl-categorie { width: auto; max-width: 240px; padding: 3px 8px; min-height: 30px; font-size: 12.5px; }
 
 .rl-avis:not(:empty) { padding: 8px 18px 0; flex: none; }
@@ -915,7 +918,7 @@ textarea { resize: vertical; font-family: var(--police-mono); font-size: 12.5px;
 .espace-bilan .chiffre .valeur { font-size: 20px; font-weight: 650; }
 .espace-bilan .chiffre .etiquette { font-size: 12px; color: var(--texte-faible); }
 .espace-bilan .chiffre.liberable .valeur { color: var(--accent); }
-.espace-postes { border: 1px solid var(--bordure); border-radius: var(--rayon-petit); }
+.espace-postes { border-top: 1px solid var(--bordure); border-bottom: 1px solid var(--bordure); }
 .poste-espace {
   display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 2px 10px; align-items: start;
   padding: 9px 12px; border-bottom: 1px solid var(--bordure);
@@ -1023,7 +1026,8 @@ html.etroit .reglages-nav button { padding: 4px 10px; font-size: 13px; }
 html.etroit .reglages-contenu { padding: 14px 14px 24px; }
 html.etroit .vocabulaire { grid-template-columns: minmax(0, 1fr); padding: 12px; }
 html.etroit .colonne-centre { padding: 12px 12px 18px; }
-html.etroit .rl-para { grid-template-columns: 76px minmax(0, 1fr); gap: 0 8px; }
+html.etroit .rl-para { grid-template-columns: 76px minmax(0, 66ch); gap: 0 8px; }
+html.etroit #rl-exporter > span, html.etroit #btn-copier-ia > span, html.etroit #rl-annuler > span { display: none; }
 html.etroit .rl-heure, html.etroit .rl-locuteur { max-width: 76px; }
 html.etroit #rl-position { width: 110px; }
 html.etroit .rl-defilement { padding: 10px 12px 30px; }
@@ -1033,6 +1037,30 @@ html.tres-etroit .bouton-nav span[data-i18n] { display: none; }
 html.tres-etroit .correction-champs { grid-template-columns: 1fr; }
 html.tres-etroit .voc-grille { grid-template-columns: 1fr 1fr; }
 html.tres-etroit .rl-temps { min-width: 0; }
+html.tres-etroit .rl-compte { min-width: 0; }
 html.tres-etroit #rl-chercher { width: 140px; }
 html.tres-etroit #rl-position, html.tres-etroit .rl-suivre { display: none; }
 html.tres-etroit .lancement-choix { gap: 8px 14px; }
+
+/* ------------------------------------------------------------- Finition */
+
+/* Relecture : l'en-tete de l'application laisse la place au texte ; une
+   transcription en cours reste visible dans l'en-tete de la relecture. */
+html[data-vue="relecture"] .entete { display: none; }
+.rl-entete .activite { max-width: 240px; }
+
+/* Rien ne bouge quand la liste depasse la fenetre. */
+#vue-principale, #vue-reglages, #vue-vocabulaire { scrollbar-gutter: stable; }
+
+/* Placeholders lisibles dans les deux themes. */
+::placeholder { color: var(--placeholder); opacity: 1; }
+
+/* Textes d'aide : lignes courtes, pas de mot seul en fin de paragraphe. */
+.aide, p { text-wrap: pretty; }
+.aide, .reglages-contenu p, .modale-corps p { max-width: 70ch; }
+
+/* Reglages sur le meme axe que l'ecran des reunions. */
+.reglages { max-width: 1000px; margin: 0 auto; }
+
+/* La zone de depot ne garde pas d'anneau apres un clic ou un retour a la souris. */
+.zone-depot:focus:not(:focus-visible) { outline: none; }

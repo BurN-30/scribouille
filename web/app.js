@@ -191,6 +191,7 @@ function afficherVue(nom, options) {
   const avant = etat.vue;
   if (avant === 'relecture' && nom !== 'relecture' && typeof quitterRelecture === 'function') quitterRelecture();
   etat.vue = nom;
+  document.documentElement.dataset.vue = nom;
   VUES.forEach((v) => { $('#vue-' + v).hidden = v !== nom; });
   $('#pied').hidden = nom !== 'principale';
   $$('.bouton-nav').forEach((b) => {
@@ -208,7 +209,11 @@ function afficherVue(nom, options) {
 }
 
 function retourPrincipale() {
-  afficherVue('principale');
+  const origine = etat.vue === 'relecture' && typeof lect !== 'undefined' ? lect.chemin : '';
+  const bouton = origine
+    ? Array.from(document.querySelectorAll('#vue-principale [data-lire]')).find((b) => b.dataset.lire === origine)
+    : null;
+  afficherVue('principale', bouton ? { retourFocus: bouton } : {});
 }
 
 /* Reglages : trois familles (usage courant, avance, mesures et diagnostic),
@@ -237,14 +242,18 @@ function ouvrirReglages(section) {
 
 /* Pastille d'activite : la transcription en cours, vue depuis un autre ecran. */
 function majActivite() {
-  const pastille = $('#indic-activite');
   const visible = etat.enCours && etat.vue !== 'principale';
-  pastille.hidden = !visible;
+  const dansRelecture = etat.vue === 'relecture';
+  $('#indic-activite').hidden = !visible || dansRelecture;
+  $('#rl-activite').hidden = !visible || !dansRelecture;
   if (!visible) return;
   const actif = Array.from(etat.fichiers.values()).find((f) => ETATS_ACTIFS.includes(f.etat));
-  $('#indic-activite-texte').textContent = !actif ? t('ui.etat.demarrage')
-    : (actif.indetermine ? t('ui.activite.phase', { phase: actif.phase || '' })
-      : t('ui.activite.texte', { phase: actif.phase || '', pct: actif.pct || 0 }));
+  const prog = actif ? progressionAffichee(actif) : null;
+  const texte = !actif ? t('ui.etat.demarrage')
+    : (prog.indetermine ? t('ui.activite.phase', { phase: actif.phase || '' })
+      : t('ui.activite.texte', { phase: actif.phase || '', pct: prog.pct }));
+  $('#indic-activite-texte').textContent = texte;
+  $('#rl-activite-texte').textContent = texte;
 }
 
 /* -------------------------------------------------------------- Materiel */
@@ -1416,8 +1425,9 @@ function dessinerFile() {
   // Le depot se reduit a une ligne des qu'il y a des fichiers : la file reste
   // visible sans defiler.
   $('#zone-depot').classList.toggle('compacte', !!etat.fichiers.size || !!etat.historique.length);
+  vue.closest('section').hidden = !etat.fichiers.size;
   if (!etat.fichiers.size) {
-    vue.innerHTML = `<div class="vide">${ech(t('ui.file.vide'))}</div>`;
+    vue.innerHTML = '';
     return;
   }
   vue.innerHTML = Array.from(etat.fichiers.keys()).map(ligneHTML).join('');
@@ -1490,7 +1500,7 @@ function ligneHTML(id) {
   const autres = (it.sorties || []).filter((s) => s.format !== 'TXT').map((s) =>
     `<button class="etiquette-format" data-ouvrir="${ech(s.chemin)}" title="${ech(s.nom)}">${ech(s.format)}</button>`).join('');
   const actions = [];
-  if (texte) actions.push(`<button class="bouton bouton-accent bouton-petit" data-lire="${ech(texte.chemin)}">${icone('i-fichier', 'icone-s')}<span>${ech(t('ui.ligne.relire'))}</span></button>`);
+  if (texte) actions.push(`<button class="bouton bouton-accent bouton-petit" data-lire="${ech(texte.chemin)}" aria-label="${ech(t('ui.ligne.relire_nom', { nom: it.nom }))}">${icone('i-fichier', 'icone-s')}<span>${ech(t('ui.ligne.relire'))}</span></button>`);
   actions.push(autres);
   if (['annule', 'erreur'].includes(it.etat)) actions.push(`<button class="bouton bouton-petit" data-relancer>${icone('i-reprise', 'icone-s')}<span>${ech(t('ui.ligne.relancer'))}</span></button>`);
   if (it.etat === 'erreur') actions.push(boutonLigne('data-log', 'ui.ligne.journal', 'i-info'));
@@ -1641,10 +1651,10 @@ function dessinerHistorique() {
       <span class="pastille termine">${icone('i-coche', 'icone-s')}</span>
       <div class="infos">
         <div class="nom">${ech(h.nom)}</div>
-        <div class="meta">${ech(h.date)} · ${ech(h.taille)}</div>
+        <div class="meta">${ech([h.duree, h.date].filter(Boolean).join(' · '))}</div>
       </div>
       <div class="actions-ligne">
-        ${texte ? `<button class="bouton bouton-petit" data-lire="${ech(texte.chemin)}">${icone('i-fichier', 'icone-s')}<span>${ech(t('ui.ligne.relire'))}</span></button>` : ''}
+        ${texte ? `<button class="bouton bouton-petit" data-lire="${ech(texte.chemin)}" aria-label="${ech(t('ui.ligne.relire_nom', { nom: h.nom }))}">${icone('i-fichier', 'icone-s')}<span>${ech(t('ui.ligne.relire'))}</span></button>` : ''}
         ${formats.filter((f) => f.format !== 'TXT').map((f) =>
           `<button class="etiquette-format" data-ouvrir="${ech(f.chemin)}">${ech(f.format)}</button>`).join('')}
       </div>
@@ -1784,11 +1794,11 @@ function dessinerVocabulaire() {
   ['propose', 'actif', 'refuse'].forEach((k) => { $('#voc-n-' + k).textContent = comptes[k]; });
   document.querySelectorAll('[data-voc-onglet]').forEach((b) =>
     b.setAttribute('aria-selected', String(b.dataset.vocOnglet === voc.onglet)));
-  const revue = voc.onglet === 'propose';
+  // Accepter, refuser, tout cocher : seulement quand il y a de quoi relire.
+  const revue = voc.onglet === 'propose' && comptes.propose > 0;
   $('#btn-voc-accepter').hidden = !revue;
   $('#btn-voc-refuser').hidden = !revue;
   $('#voc-tout').closest('label').hidden = !revue;
-  $('#voc-clavier').hidden = !revue;
   $('#voc-tout').checked = false;
   $('#opt-rapprochement').checked = d.rapprochement;
   const categories = $('#voc-categorie');
@@ -1806,13 +1816,14 @@ function dessinerVocabulaire() {
 }
 
 function texteFaute(f) {
+  // Seule la forme risquée est barrée, jamais la note qui la suit.
   let texte = ech(f.forme);
+  if (f.risquee && !f.forcer) texte = `<span class="risquee" title="${ech(t('ui.voc2.risquee'))}">${texte}</span>`;
   const notes = [];
   if (f.voisins && f.voisins.length) notes.push(t('ui.voc2.pres_de', { voisins: f.voisins.join(', ') }));
   else if (f.forcer) notes.push(t('ui.voc2.forcee'));
   if (f.vu) notes.push(vuDans(f));
   if (notes.length) texte += ` <span class="note">(${ech(notes.join(' ; '))})</span>`;
-  if (f.risquee && !f.forcer) texte = `<span class="risquee" title="${ech(t('ui.voc2.risquee'))}">${texte}</span>`;
   return texte;
 }
 
@@ -2038,8 +2049,10 @@ window.onVocabulaire = async function (r) {
 
 function dessinerReprises() {
   const zone = $('#bloc-reprises');
-  if (!etat.reprises.length) { zone.innerHTML = ''; return; }
-  zone.innerHTML = etat.reprises.map((r) => `
+  const enFile = new Set(Array.from(etat.fichiers.values()).map((f) => String(f.chemin || '').toLowerCase()));
+  const reprises = etat.reprises.filter((r) => !enFile.has(String(r.chemin || '').toLowerCase()));
+  if (!reprises.length) { zone.innerHTML = ''; return; }
+  zone.innerHTML = reprises.map((r) => `
     <div class="reprise-carte" data-cle="${ech(r.cle)}">
       ${icone('i-reprise')}
       <div class="infos">
@@ -2125,8 +2138,10 @@ function majBoutons() {
   const enAttente = Array.from(etat.fichiers.values()).filter((f) => f.etat === 'attente').length;
   $('#btn-lancer').disabled = etat.enCours || etat.bancEnCours || !enAttente || !etat.pret;
   $('#btn-arreter').disabled = !etat.enCours;
+  $('#btn-arreter').hidden = !etat.enCours;
   $('#btn-lancer').innerHTML = icone('i-lecture', 'icone-s') + ' '
-    + ech(enAttente > 1 ? t('ui.bouton.lancer_n', { n: enAttente }) : t('ui.bouton.lancer'));
+    + ech(etat.enCours ? t('ui.bouton.en_cours')
+      : (enAttente > 1 ? t('ui.bouton.lancer_n', { n: enAttente }) : t('ui.bouton.lancer')));
   majActivite();
 }
 
@@ -2421,14 +2436,19 @@ function appliquerTheme(mode) {
   etat.config.theme = mode;
   const choix = $('#choix-theme');
   if (choix) choix.value = mode;
+  const bouton = $('#btn-theme');
+  if (bouton) {
+    const nom = t(mode === 'auto' ? 'ui.theme.auto' : `ui.theme.${mode}_nom`);
+    bouton.title = t('ui.entete.theme_etat', { theme: nom });
+    bouton.setAttribute('aria-label', bouton.title);
+  }
 }
 
 function themeSuivant() {
-  /* Bascule sur le theme reellement affiche ; « Automatique » se retrouve dans
-     Reglages, Application. */
-  const affiche = document.documentElement.getAttribute('data-theme')
-    || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'sombre' : 'clair');
-  const suivant = affiche === 'sombre' ? 'clair' : 'sombre';
+  /* Comme le systeme, puis sombre, puis clair : les trois choix de Reglages,
+     Application, atteignables depuis l'en-tete. */
+  const ordre = ['auto', 'sombre', 'clair'];
+  const suivant = ordre[(ordre.indexOf(etat.config.theme || 'auto') + 1) % ordre.length];
   appliquerTheme(suivant);
   enregistrer({ theme: suivant });
 }
@@ -2504,6 +2524,8 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   $('#btn-theme').addEventListener('click', themeSuivant);
+  $('#rl-aide').addEventListener('click', ouvrirAide);
+  $('#rl-activite').addEventListener('click', retourPrincipale);
   $('#btn-aide').addEventListener('click', ouvrirAide);
   $('#btn-aide-maj').addEventListener('click', verifierMajDepuisAide);
   $('#btn-ouvrir-app').addEventListener('click', () => pywebview.api.ouvrir_dossier_application());

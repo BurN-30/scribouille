@@ -95,6 +95,10 @@ function majBoutonLiberer() {
   const choisis = selectionEspace();
   const octets = choisis.reduce((s, c) => s + Number(c.dataset.octets || 0), 0);
   const bouton = $('#btn-espace-liberer');
+  // Rien de liberable : une phrase, pas un bouton grise qui donne une consigne.
+  const possibles = $$('#espace-postes input[data-cle]').length;
+  bouton.hidden = !possibles;
+  $('#espace-rien').hidden = !!possibles;
   bouton.disabled = !choisis.length;
   bouton.textContent = choisis.length
     ? t('ui.espace.liberer', { taille: formaterOctets(octets) })

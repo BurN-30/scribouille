@@ -526,21 +526,23 @@ function calculerPoints() {
 
   const choix = $('#rl-categorie');
   const options = [];
-  options.push(lect.points.sansConfiance || !d.compagnon
-    ? `<option value="doute" disabled>${ech(t(d.compagnon ? 'ui.rl.cat.doute_absent' : 'ui.rl.cat.doute_sans_compagnon'))}</option>`
-    : `<option value="doute">${ech(tn('ui.rl.cat.doute', listes.doute.length))}</option>`);
-  options.push(`<option value="remplacement">${ech(tn('ui.rl.cat.remplacement', listes.remplacement.length))}</option>`);
-  options.push(`<option value="silence">${ech(tn('ui.rl.cat.silence', listes.silence.length, { s: SEUIL_SILENCE }))}</option>`);
-  options.push(`<option value="long">${ech(tn('ui.rl.cat.long', listes.long.length, { s: SEUIL_PASSAGE }))}</option>`);
+  if (!lect.points.sansConfiance && d.compagnon && listes.doute.length) {
+    options.push(`<option value="doute">${ech(tn('ui.rl.cat.doute', listes.doute.length))}</option>`);
+  }
+  if (listes.remplacement.length) options.push(`<option value="remplacement">${ech(tn('ui.rl.cat.remplacement', listes.remplacement.length))}</option>`);
+  if (listes.silence.length) options.push(`<option value="silence">${ech(tn('ui.rl.cat.silence', listes.silence.length, { s: SEUIL_SILENCE }))}</option>`);
+  if (listes.long.length) options.push(`<option value="long">${ech(tn('ui.rl.cat.long', listes.long.length, { s: SEUIL_PASSAGE }))}</option>`);
+  if (!options.length) options.push(`<option value="" disabled>${ech(t('ui.rl.rien_a_verifier'))}</option>`);
   choix.innerHTML = options.join('');
   let categorie = lect.points.categorie;
-  const utilisable = (c) => c && !(c === 'doute' && (lect.points.sansConfiance || !d.compagnon));
-  if (!utilisable(categorie) || (!listes[categorie].length && !lect.points.choisieParUtilisateur)) {
-    categorie = ['doute', 'remplacement', 'silence', 'long'].find((c) => utilisable(c) && listes[c].length)
-      || (utilisable('doute') ? 'doute' : 'remplacement');
+  const utilisable = (c) => c && listes[c] && listes[c].length
+    && !(c === 'doute' && (lect.points.sansConfiance || !d.compagnon));
+  if (!utilisable(categorie)) {
+    categorie = ['doute', 'remplacement', 'silence', 'long'].find((c) => utilisable(c)) || '';
   }
   lect.points.categorie = categorie;
   choix.value = categorie;
+  choix.disabled = !categorie;
   lect.points.i = -1;
   majPoint();
 }
@@ -552,7 +554,9 @@ function majPoint() {
     ? t('ui.rl.position_sur', { i: i + 1, n: liste.length }) : '';
   $('#rl-point-prec').disabled = !liste.length;
   $('#rl-point-suiv').disabled = !liste.length;
-  $('#rl-annuler-remplacement').hidden = !(lect.points.categorie === 'remplacement' && i >= 0 && liste[i]);
+  const bouton = $('#rl-annuler-remplacement');
+  bouton.hidden = lect.points.categorie !== 'remplacement';
+  bouton.disabled = !(i >= 0 && liste[i]);
 }
 
 function allerPoint(pas) {

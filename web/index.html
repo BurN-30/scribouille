@@ -193,13 +193,17 @@
       <h1 id="rl-titre" tabindex="-1"></h1>
       <div class="rl-meta" id="rl-meta"></div>
     </div>
+    <button class="activite" id="rl-activite" hidden>
+      <span class="point"></span><span id="rl-activite-texte"></span>
+    </button>
     <span class="pousse"></span>
-    <button class="bouton bouton-discret" id="rl-annuler" hidden>
+    <button class="bouton bouton-discret" id="rl-annuler" hidden data-i18n-aria="ui.rl.annuler">
       <svg class="icone-s icone"><use href="#i-reprise"></use></svg>
       <span data-i18n="ui.rl.annuler"></span>
     </button>
     <div class="menu-conteneur">
-      <button class="bouton" id="rl-exporter" aria-haspopup="menu" aria-expanded="false" aria-controls="rl-menu-export">
+      <button class="bouton" id="rl-exporter" aria-haspopup="menu" aria-expanded="false" aria-controls="rl-menu-export"
+              data-i18n-aria="ui.rl.exporter">
         <svg class="icone-s icone"><use href="#i-export"></use></svg>
         <span data-i18n="ui.rl.exporter"></span>
         <svg class="icone-s icone"><use href="#i-chevron"></use></svg>
@@ -216,9 +220,12 @@
         <button role="menuitem" data-export="original" id="rl-original" hidden data-i18n="ui.rl.export.original"></button>
       </div>
     </div>
-    <button class="bouton bouton-accent" id="btn-copier-ia">
+    <button class="bouton bouton-accent" id="btn-copier-ia" data-i18n-aria="ui.lecture.copier_ia">
       <svg class="icone-s icone"><use href="#i-etincelle"></use></svg>
       <span data-i18n="ui.lecture.copier_ia"></span>
+    </button>
+    <button class="bouton-icone" id="rl-aide" data-i18n-title="ui.entete.aide" data-i18n-aria="ui.entete.aide">
+      <svg class="icone"><use href="#i-aide"></use></svg>
     </button>
   </div>
 
@@ -228,12 +235,8 @@
         <svg class="icone-s icone" id="rl-lire-icone"><use href="#i-lecture"></use></svg>
         <span id="rl-lire-texte" data-i18n="ui.rl.lire"></span>
       </button>
-      <button class="bouton-icone" id="rl-reculer" data-i18n-title="ui.rl.reculer" data-i18n-aria="ui.rl.reculer">
-        <svg class="icone-s icone"><use href="#i-recul"></use></svg>
-      </button>
-      <button class="bouton-icone" id="rl-avancer" data-i18n-title="ui.rl.avancer" data-i18n-aria="ui.rl.avancer">
-        <svg class="icone-s icone"><use href="#i-avance"></use></svg>
-      </button>
+      <button class="bouton-icone rl-saut" id="rl-reculer" data-i18n-title="ui.rl.reculer" data-i18n-aria="ui.rl.reculer">−5 s</button>
+      <button class="bouton-icone rl-saut" id="rl-avancer" data-i18n-title="ui.rl.avancer" data-i18n-aria="ui.rl.avancer">+5 s</button>
       <span class="rl-temps" id="rl-temps">0:00</span>
       <input type="range" id="rl-position" min="0" max="1" step="0.1" value="0" data-i18n-aria="ui.rl.position">
       <select id="rl-vitesse" data-i18n-aria="ui.rl.vitesse" data-i18n-title="ui.rl.vitesse">
@@ -692,6 +695,7 @@
           <div class="espace-postes" id="espace-postes"></div>
           <div class="rangee-boutons">
             <button class="bouton bouton-accent" id="btn-espace-liberer" disabled></button>
+            <span class="aide" id="espace-rien" hidden data-i18n="ui.espace.rien"></span>
             <button class="bouton bouton-discret" id="btn-espace-mesurer">
               <svg class="icone-s icone"><use href="#i-reprise"></use></svg>
               <span data-i18n="ui.espace.mesurer"></span>
@@ -923,8 +927,7 @@
                data-i18n-placeholder="ui.voc2.rechercher" data-i18n-aria="ui.voc2.rechercher">
       </div>
       <div class="voc-outils" id="voc-outils">
-        <label class="case"><input type="checkbox" id="voc-tout"><span data-i18n="ui.voc2.tout"></span></label>
-        <span class="voc-clavier" id="voc-clavier" data-i18n="ui.voc2.clavier"></span>
+        <label class="case" data-i18n-title="ui.voc2.clavier"><input type="checkbox" id="voc-tout"><span data-i18n="ui.voc2.tout"></span></label>
         <span class="pousse"></span>
         <button class="bouton bouton-discret bouton-petit" id="btn-voc-refuser" data-i18n="ui.voc2.refuser_selection"></button>
         <button class="bouton bouton-accent bouton-petit" id="btn-voc-accepter" data-i18n="ui.voc2.accepter_selection"></button>

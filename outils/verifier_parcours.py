@@ -706,7 +706,10 @@ def essai_accessibilite() -> None:
     blocs = [couleurs(b) for b in css.split("}") if re.search(r"--texte-faible:\s*#", b)]
     couples = [("--texte-faible", "--carte-creuse"), ("--texte-doux", "--fond"), ("--ambre", "--ambre-fond"),
                ("--accent", "--accent-doux"), ("--accent-contraste", "--accent"), ("--vert", "--vert-fond"),
-               ("--rouge", "--rouge-fond"), ("--texte", "--lu"), ("--texte", "--trouve")]
+               ("--rouge", "--rouge-fond"), ("--texte", "--lu"), ("--texte", "--trouve"),
+               ("--placeholder", "--carte-creuse")]
+    verifier(sum(1 for bloc in blocs if "--placeholder" in bloc) == 4,
+             "le texte indicatif des champs a sa couleur dans chacun des quatre blocs de thème")
     faibles = []
     for numero, bloc in enumerate(blocs):
         for avant_plan, fond in couples:
@@ -1204,6 +1207,43 @@ def essai_ce_que_l_ecran_affirme(base: Path) -> None:
              "la ligne en attente et le décompte de départ partent du même calcul (lots compris)")
 
 
+def essai_finition() -> None:
+    """Finition de la revue finale : place du texte, barre stable, rien qui clignote."""
+    import re
+
+    titre("Finition : place du texte, barre stable, états vides, rien qui clignote")
+    css = (RACINE / "web" / "styles.css").read_text(encoding="utf-8")
+    js = "\n".join((RACINE / "web" / nom).read_text(encoding="utf-8") for nom in ("app.js", "relecture.js", "espace.js"))
+    passerelle = (RACINE / "transcriber.pyw").read_text(encoding="utf-8")
+    regles = (
+        ("la relecture masque l'en-tête de l'application", 'html[data-vue="relecture"] .entete { display: none; }'),
+        ("barre d'outils en deux rangées fixes", ".rl-lecteur { flex: 1 0 100%; }"),
+        ("compteurs à largeur réservée", "min-width: 9ch;"),
+        ("heure de lecture à largeur fixe", "min-width: 17ch;"),
+        ("aucun saut à l'apparition de la barre de défilement", "scrollbar-gutter: stable;"),
+        ("colonne de lecture tenue en fenêtre étroite", "grid-template-columns: 76px minmax(0, 66ch)"),
+        ("lignes d'aide courtes", "max-width: 70ch;"),
+        ("pas de mot seul en fin de paragraphe", "text-wrap: pretty;"),
+        ("les choix de qualité sont des rangées, plus des cartes dans une carte", "box-shadow: inset 3px 0 0 var(--accent);"),
+    )
+    for constat, preuve in regles:
+        verifier(preuve in css, f"finition : {constat}")
+    point = re.search(r"\.activite \.point \{[^}]*\}", css)
+    verifier(point and "animation" not in point.group(0), "le point d'activité ne clignote plus")
+    for constat, preuve in (
+            ("le thème se règle sur trois états depuis l'en-tête", "const ordre = ['auto', 'sombre', 'clair'];"),
+            ("le retour de la relecture rend le focus au bouton « Relire »", "retourFocus: bouton"),
+            ("« Relire » porte le nom de sa transcription", "ui.ligne.relire_nom"),
+            ("une reprise déjà en file n'a pas de carte en double", "!enFile.has("),
+            ("seules les catégories non vides sont proposées", "ui.rl.rien_a_verifier"),
+            ("file vide masquée, « Arrêter » seulement pendant un calcul", "$('#btn-arreter').hidden = !etat.enCours;"),
+            ("rien à libérer : une phrase, pas un bouton grisé", "$('#espace-rien').hidden"),
+            ("seule la forme risquée est barrée", "Seule la forme risquée est barrée")):
+        verifier(preuve in js, f"finition : {constat}")
+    verifier("_entete_historique" in passerelle,
+             "les transcriptions listées donnent la durée et la date de la réunion, plus la taille du fichier")
+
+
 def essai_passage_libre(base: Path) -> None:
     """Réécrire ou supprimer un passage : même règle d'égalité, même annulation."""
     titre("Passage réécrit ou supprimé : l'écran reste le fichier")
@@ -1280,6 +1320,7 @@ def principal() -> int:
         essai_heures_et_avis(base)
         essai_depot_mele()
         essai_ce_que_l_ecran_affirme(base)
+        essai_finition()
         essai_accessibilite()
         essai_ecrans()
 
