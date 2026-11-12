@@ -350,9 +350,14 @@ class FileTraitement:
 
             libre = materiel_module._memoire()[1]
             nom_moteur = "openvino" if self.materiel.moteur == "openvino" else "ctranslate2"
+            # Le modèle léger n'est proposé que s'il est déjà sur le disque :
+            # jamais de téléchargement que l'utilisateur n'a pas demandé.
+            leger = presets.MODELE_TURBO
+            depot_leger = presets.depot_openvino(leger) if nom_moteur == "openvino" else leger
+            if element.reprise or bool(config.get("mode_avance")) or not moteur.modele_deja_telecharge(depot_leger):
+                leger = ""
             modele, lot, raison = rythme.garde_memoire(
-                choisi, nom_moteur, reglages["modele"], int(reglages.get("lot") or 0), libre,
-                "" if element.reprise or bool(config.get("mode_avance")) else presets.MODELE_TURBO)
+                choisi, nom_moteur, reglages["modele"], int(reglages.get("lot") or 0), libre, leger)
             if raison:
                 journal.attention("Mémoire libre %.1f Go : %s", libre, raison)
                 signaler("attention", langues.t(
