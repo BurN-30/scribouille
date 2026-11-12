@@ -308,11 +308,11 @@ def essai_reglage_propose() -> None:
                  "moteur Intel annoncé plus rapide ici : la phrase donne la durée du moteur habituel", p["phrase"])
         presets.estimer_annonce = annonces(ov=1151.0, habituel=820.0)
         p = adaptation.proposer(mat, P(logiques=16, ram_go=32, openvino_installe=True), None, None, present)
-        verifier("pas annoncé plus rapide" in p["phrase"] and "deux fois" not in p["phrase"],
+        verifier("sans gain de vitesse" in p["phrase"] and "deux fois" not in p["phrase"],
                  "moteur habituel mesuré plus rapide ici : la phrase ne prétend pas le contraire", p["phrase"])
         muette = P(logiques=14, ram_go=32, puce_intel=True, openvino_installe=True, openvino_puce=False)
         p = adaptation.proposer(mat, muette, None, None, present)
-        verifier(p["regle"] == "puce_muette" and "pas annoncé plus rapide" in p["phrase"],
+        verifier(p["regle"] == "puce_muette" and "sans gain de vitesse" in p["phrase"],
                  "puce muette, moteur habituel plus rapide ici : dit tel quel", p["phrase"])
     finally:
         presets.estimer_annonce = vrai

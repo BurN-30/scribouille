@@ -166,7 +166,7 @@ journal.purger()
 journal.silence_bibliotheques()
 if chemins.MIGRATION.get("etat") not in (None, "rien"):
     _m = chemins.MIGRATION
-    journal.info("Données reprises de %s : %s entrée(s) déplacée(s), %s doublon(s) rangé(s) à part, état %s%s",
+    journal.info("Données reprises de %s : déplacées %s, doublons rangés à part %s, état %s%s",
                  chemins.NOM_DOSSIER_ANCIEN, len(_m.get("deplaces") or []), len(_m.get("conflits") or []),
                  _m.get("etat"), (" : " + "; ".join(_m.get("restes") or [])) if _m.get("restes") else "")
     if _m.get("erreur"):

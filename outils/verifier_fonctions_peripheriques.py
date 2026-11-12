@@ -653,9 +653,9 @@ def essai_langues() -> None:
                  stockage.formater_octets(1536))
         verifier(langues.t("cle.qui.nexiste.pas") == "cle.qui.nexiste.pas",
                  "une clé absente se voit au lieu de planter")
-        verifier(langues.tn("lect.remplacements", 1) == "1 replacement in the file.",
+        verifier(langues.tn("lect.remplacements", 1) == "1 place corrected.",
                  "le singulier est choisi", langues.tn("lect.remplacements", 1))
-        verifier(langues.tn("lect.remplacements", 3) == "3 replacements in the file.",
+        verifier(langues.tn("lect.remplacements", 3) == "3 places corrected.",
                  "le pluriel est choisi", langues.tn("lect.remplacements", 3))
         verifier("{" not in langues.t("app.copie_ia", n=42),
                  "toutes les variables nommées sont substituées")

@@ -772,6 +772,13 @@ def essai_ecrans() -> None:
              "la doublure de la passerelle tient dans un fichier et une balise, retirables à la fusion")
     catalogue = (RACINE / "web" / "langues.js").read_text(encoding="utf-8")
     verifier("(s)" not in catalogue, "aucun accord en « (s) » dans les textes de l'interface")
+    textes_py = [v for code in langues.LANGUES for v in langues.TEXTES[code].values()]
+    verifier(not [v for v in textes_py if "(s)" in v], "aucun « (s) » dans les messages de l'application")
+    disparus = ("panneau « Locuteurs »", "section Vitesse de cette machine", "Réglages, Vitesse de cette machine",
+                "section « Modèles »", "panneau « Mes données »", "panneau « Corrections »", "\"Speakers\" panel",
+                "Speed of this machine section")
+    restes = [v[:60] for v in textes_py + [catalogue] if any(d in v for d in disparus)]
+    verifier(not restes, "aucun message ne renvoie à un écran disparu", str(restes[:3]))
 
 
 def essai_relecture_ciblee(base: Path) -> None:

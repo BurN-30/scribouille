@@ -1002,7 +1002,7 @@ function dessinerAccueil(p, definitif) {
   if (p && !p.deja) {
     // Une phrase : le reglage et sa duree. Les raisons sont dans Reglages, Poste ;
     // ce que l'on y perd, s'il y a lieu, est dit ici.
-    const phrase = String(p.phrase || '').split(' : ')[0].replace(/[.\s]+$/, '') + '.';
+    const phrase = String(p.phrase || '').split(/ ?: /)[0].replace(/[.\s]+$/, '') + '.';
     const perte = (p.notes || []).find((n) => /confiance|confidence/i.test(n));
     const rythme = p.rythme ? t('ui.proposition.rythme', { rythme: t('ui.rythme.' + p.rythme) }) : '';
     zone.innerHTML = `<span class="titre-section">${ech(t('ui.proposition.titre'))}</span>

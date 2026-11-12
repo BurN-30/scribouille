@@ -80,6 +80,26 @@ Plus léger, plus vite ouvert, sans rien changer à la justesse.
   vérifiés (le vert des messages de succès passe à 4,8:1), cibles de 24 px au
   moins, disposition étroite qui tient compte du grossissement ; plus aucun
   accord en « (s) » dans l'interface.
+- **Une seule vérité en relecture** : le compagnon est situé à la lettre dans
+  le fichier ; une correction à cheval sur deux segments change l'écran comme
+  le fichier (elle changeait le fichier seul et rendait ensuite les
+  corrections ciblées impossibles). Chaque écriture est contrôlée sur les
+  fichiers relus (écran, `.txt`, compagnon, sous-titres régénérés) et annulée
+  en cas d'écart ; écritures atomiques. Un `.txt` retouché dans un éditeur est
+  relu, dit, et l'écoute mot à mot recalée dessus.
+- **Corriger en série** : l'endroit sélectionné est situé par sa position (un
+  morceau de mot ne corrige plus ailleurs) ; passage réécrit ou supprimé
+  (touche E, Suppr) ; Ctrl+Z sur cinquante niveaux, gardés après fermeture,
+  et retour au texte d'origine ; N reprend après le point courant ; N puis
+  Entrée corrige au clavier seul ; Espace lit quel que soit le dernier bouton
+  cliqué ; vitesse à la virgule et au point-virgule ; position retrouvée à la
+  réouverture. Une correction ne nourrit le vocabulaire que sur demande.
+- **Ce que l'écran affirme** : OpenVINO dit qu'il ne signale pas de mots
+  douteux, quelle que soit la qualité ; durées recalculées après chaque
+  fichier ; progression estimée, dite « environ », quand le moteur ne rend
+  rien avant la fin d'un lot ; plus d'heure « 0:00 » inventée ; fichier non
+  audio déposé parmi d'autres nommé à l'écran ; heure en tête de chaque
+  paragraphe du `.txt` par défaut.
 
 ## 2.4.1
 
