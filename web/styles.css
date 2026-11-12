@@ -113,6 +113,9 @@
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
+/* L'attribut « hidden » doit l'emporter sur l'affichage d'un bouton (.bouton
+   est en inline-flex) : sans cela, un bouton caché restait visible. */
+[hidden] { display: none !important; }
 
 html { height: 100%; }
 /* Le corps est l'element grossi : sa hauteur suit la fenetre reelle, sans quoi il
