@@ -68,6 +68,41 @@ class Rappels:
     file_terminee: Callable[[dict], None] = lambda d: None
 
 
+#: Mémoire libre sous laquelle le modèle est rendu entre deux fichiers, plutôt
+#: que gardé pour le suivant : un poste qui s'essouffle passe avant 4 à 40 s de
+#: chargement épargnées.
+MEMOIRE_LIBRE_MINIMALE_GO = 2.0
+
+
+def memoire_libre_go() -> float:
+    """Mémoire disponible en Go, ou l'infini si elle ne se lit pas (on garde le modèle)."""
+    try:
+        import psutil  # type: ignore
+
+        return psutil.virtual_memory().available / 1024 ** 3
+    except Exception:
+        return float("inf")
+
+
+def garder_le_modele(config: dict, echec: bool) -> tuple[bool, str]:
+    """
+    Faut-il garder le modèle chargé pour le fichier suivant de la file ?
+
+    Non quand la séparation des voix tourne (elle le libère avant de prendre
+    sa propre mémoire), après un échec ou un arrêt (on repart d'un moteur
+    propre), et quand la mémoire libre devient basse. Renvoie la décision et
+    sa raison, pour le journal.
+    """
+    if diarisation.effective(config.get("diarisation")):
+        return False, "séparation des voix"
+    if echec:
+        return False, "échec ou arrêt"
+    libre = memoire_libre_go()
+    if libre < MEMOIRE_LIBRE_MINIMALE_GO:
+        return False, f"mémoire libre basse ({libre:.1f} Go)"
+    return True, ""
+
+
 def fabriquer_moteur(mat: Materiel, reglages: dict):
     """
     Moteur de la file : OpenVINO si le réglage du poste le demande, sinon
@@ -298,10 +333,12 @@ class FileTraitement:
                     # pas commencé restent en attente, prêts pour le prochain
                     # lancement, au lieu de finir « annulés » sans issue.
                     break
+                echec = True
                 try:
                     if self._traiter(element, config, reglages, instance, rappels):
                         sans_voix += 1
                     reussis += 1
+                    echec = False
                 except moteur.Interruption:
                     element.etat = "annule"
                     annules += 1
@@ -318,7 +355,13 @@ class FileTraitement:
                     # Un fichier interrompu garde sa reprise, seul un succès
                     # l'efface : c'est tout l'intérêt de la sauvegarde.
                     self._session.fermer()
-                    instance.liberer()
+                    # Même réglage pour toute la file : le modèle est gardé pour
+                    # le fichier suivant (4 à 40 s de chargement épargnées),
+                    # sauf séparation des voix, échec ou mémoire basse.
+                    garder, raison = garder_le_modele(config, echec)
+                    if not garder:
+                        journal.info("Modèle rendu entre deux fichiers : %s", raison)
+                        instance.liberer()
                     gc.collect()
         finally:
             instance.liberer()
@@ -587,7 +630,10 @@ class FileTraitement:
             )
 
         # 3. Libération AVANT la diarisation : c'est ce qui tient les 16 Go.
-        instance.liberer()
+        # Sans séparation des voix, le modèle reste chargé : la file décide
+        # entre deux fichiers s'il sert au suivant (`garder_le_modele`).
+        if diarisation.effective(config.get("diarisation")):
+            instance.liberer()
 
         # 4. Diarisation, optionnelle et jamais bloquante
         nb_locuteurs = 0

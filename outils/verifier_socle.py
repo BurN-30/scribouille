@@ -183,12 +183,113 @@ def essai_demarrage(base: Path) -> None:
              "motif des NPU : « Input » n'est pas un NPU")
 
 
+# ---------------------------------------------------------------------------
+# 3. File : le modèle gardé d'un fichier à l'autre
+# ---------------------------------------------------------------------------
+
+class _MoteurCompte:
+    """Moteur sans modèle qui compte les vrais chargements (même règle que le vrai)."""
+
+    tokeniseur = None
+    fils = 0
+    proprietes: dict = {}
+
+    def __init__(self, echouer_sur: int = 0):
+        self.charge = ""
+        self.chargements = 0
+        self.liberations = 0
+        self.appels = 0
+        self.echouer_sur = echouer_sur
+
+    def charger(self, modele: str, signaler) -> None:
+        if self.charge == modele:
+            return
+        self.chargements += 1
+        self.charge = modele
+
+    def liberer(self) -> None:
+        if self.charge:
+            self.liberations += 1
+        self.charge = ""
+
+    def transcrire(self, signal, duree, langue, reglages, amorce="", progression=None,
+                   interrompu=None, decalage=0.0, sur_segment=None):
+        from app.moteur import Segment
+
+        self.appels += 1
+        if self.appels == self.echouer_sur:
+            raise RuntimeError("panne simulée du moteur")
+        segments = [Segment(0.0, 2.0, "Bonjour à tous."), Segment(2.5, 4.0, "On commence.")]
+        for s in segments:
+            if sur_segment:
+                sur_segment(s)
+        return segments, {"duree": duree, "langue": langue, "peripherique": "cpu", "type_calcul": "int8"}
+
+
+def _file_de_trois(base: Path, nom: str, moteur_compte: _MoteurCompte, memoire_go: float) -> dict:
+    import copy
+    import threading
+
+    import numpy as np
+
+    from app import audio as audio_module, config as config_module, materiel, traitement
+
+    dossier = base / nom
+    dossier.mkdir()
+    file = traitement.FileTraitement(materiel.detecter_au_demarrage()[0])
+    for rang in range(3):
+        (dossier / f"reunion-{rang}.wav").write_bytes(b"\0" * 64)
+    file.ajouter([str(dossier / f"reunion-{rang}.wav") for rang in range(3)])
+    config = copy.deepcopy(config_module.DEFAUTS)
+    config.update({"dossier_sortie": str(dossier / "sorties"), "sauvegarde_progressive": False,
+                   "utiliser_glossaire": False, "appliquer_corrections": False, "diarisation": False})
+    fini, bilan = threading.Event(), {}
+    rappels = traitement.Rappels(etat=lambda *a: None, progression=lambda *a: None, termine=lambda *a: None,
+                                 journal_ui=lambda *a: None, file_terminee=lambda d: (bilan.update(d), fini.set()))
+    anciens = (traitement.fabriquer_moteur, audio_module.decoder, traitement.memoire_libre_go)
+    traitement.fabriquer_moteur = lambda *_: moteur_compte
+    audio_module.decoder = lambda *_a, **_k: np.zeros(5 * audio_module.FREQUENCE, dtype=np.float32)
+    traitement.memoire_libre_go = lambda: memoire_go
+    try:
+        file.demarrer(config, rappels)
+        fini.wait(120)
+    finally:
+        traitement.fabriquer_moteur, audio_module.decoder, traitement.memoire_libre_go = anciens
+    return bilan
+
+
+def essai_modele_garde(base: Path) -> None:
+    titre("3. File : le modèle gardé d'un fichier à l'autre")
+    from app import diarisation, traitement
+
+    m = _MoteurCompte()
+    bilan = _file_de_trois(base, "garde", m, memoire_go=16.0)
+    verifier(bilan.get("reussis") == 3 and m.chargements == 1 and m.liberations == 1,
+             "trois fichiers, même réglage : un seul chargement, libéré à la fin de la file",
+             f"{bilan} chargements={m.chargements} libérations={m.liberations}")
+    m = _MoteurCompte()
+    _file_de_trois(base, "memoire", m, memoire_go=0.8)
+    verifier(m.chargements == 3, "mémoire libre basse : rendu entre deux fichiers", str(m.chargements))
+    m = _MoteurCompte(echouer_sur=2)
+    bilan = _file_de_trois(base, "panne", m, memoire_go=16.0)
+    verifier(bilan.get("reussis") == 2 and bilan.get("echecs") == 1 and m.chargements == 2,
+             "après un échec, le fichier suivant repart d'un moteur propre", f"{bilan} {m.chargements}")
+    ancien = diarisation.effective
+    try:
+        diarisation.effective = lambda demandee: True
+        garder, raison = traitement.garder_le_modele({"diarisation": True}, False)
+        verifier(not garder and "séparation" in raison, "séparation des voix : le modèle cède sa mémoire")
+    finally:
+        diarisation.effective = ancien
+
+
 def principal() -> int:
     print(f"Vérification du socle de Scribouille\n{'=' * 40}")
     with tempfile.TemporaryDirectory(prefix="scribouille-socle-") as brut:
         base = Path(brut)
         essai_decodage(base)
         essai_demarrage(base)
+        essai_modele_garde(base)
     print(f"\n{'=' * 40}")
     if _echecs:
         print(f"{_reussites} vérifications passées, {len(_echecs)} en échec :")
