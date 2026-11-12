@@ -401,6 +401,9 @@ def essai_veille_et_blocage() -> None:
 
     import psutil
 
+    # Priorité du processus d'essai avant la file : celle qu'il doit garder
+    # (normale pour la fenêtre ; plus basse si l'essai est lancé en arrière-plan).
+    priorite_avant = psutil.Process().nice()
     f = File("rythme", {"segments": 30, "pause_s": 0.1}, config_en_plus={"rythme": "discret"})
     f.demarrer()
     attendre(lambda: f.progressions() >= 3, 30)
@@ -413,8 +416,8 @@ def essai_veille_et_blocage() -> None:
     f.attendre(60)
     verifier(priorite_moteur == psutil.IDLE_PRIORITY_CLASS, "rythme discret : moteur en priorité basse",
              str(priorite_moteur))
-    verifier(priorite_parent == psutil.NORMAL_PRIORITY_CLASS, "la fenêtre garde sa priorité normale",
-             str(priorite_parent))
+    verifier(priorite_parent == priorite_avant, "la fenêtre garde sa priorité",
+             f"{priorite_avant} puis {priorite_parent}")
 
 
 # ---------------------------------------------------------------------------
