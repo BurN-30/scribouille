@@ -742,6 +742,19 @@ textarea { resize: vertical; font-family: var(--police-mono); font-size: 12.5px;
   border-radius: 3px; padding: 0 1px;
 }
 
+/* Apercu d'une correction : les endroits touches, avant d'appliquer. */
+.apercu-correction { margin: 4px 0 12px; font-size: 12.5px; }
+.apercu-correction .apercu-titre { color: var(--texte-doux); margin-bottom: 4px; }
+.apercu-correction ul {
+  margin: 0; padding: 6px 10px; list-style: none; max-height: 150px; overflow-y: auto;
+  background: var(--carte-creuse); border: 1px solid var(--bordure); border-radius: var(--rayon-petit);
+}
+.apercu-correction li { padding: 2px 0; line-height: 1.45; }
+.apercu-correction li.reste { color: var(--texte-doux); }
+.apercu-correction mark {
+  background: var(--ambre-fond); color: var(--ambre); border-radius: 3px; padding: 0 1px;
+}
+
 .lecture-retour { font-size: 12px; color: var(--texte-faible); }
 .lecture-retour.ok { color: var(--vert); }
 .lecture-retour.erreur { color: var(--rouge); }

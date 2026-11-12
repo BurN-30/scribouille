@@ -1365,6 +1365,7 @@ async function chargerLecture(chemin) {
   }
   etat.lecture = d;
   dessinerLecture();
+  majAnnulation();
 }
 
 function dessinerLecture() {
@@ -1497,9 +1498,12 @@ function ouvrirCorrection() {
   if (!etat.selection || !etat.lecture) return;
   $('#correction-source').value = etat.selection;
   $('#correction-cible').value = etat.selection;
-  $('#correction-regle').checked = etat.config.corrections_apprises !== false;
+  // La regle vaut pour toutes les transcriptions a venir : c'est un choix
+  // explicite, jamais coche d'office.
+  $('#correction-regle').checked = false;
   $('#case-regle').style.display = etat.config.corrections_apprises === false ? 'none' : '';
   $('#retour-correction').innerHTML = '';
+  $('#apercu-correction').innerHTML = '';
   majQuestionRegle();
   ouvrirModale('#modale-correction');
   setTimeout(() => { $('#correction-cible').focus(); $('#correction-cible').select(); }, 50);
@@ -1511,6 +1515,40 @@ function majQuestionRegle() {
   $('#correction-question').textContent = t('ui.correction.question_detaillee', {
     source: source, cible: cible || t('ui.correction.attente'),
   });
+  clearTimeout(etat.minuterieApercu);
+  etat.minuterieApercu = setTimeout(majApercuCorrection, 200);
+}
+
+/* Avant d'appliquer : combien d'endroits du fichier changent, et lesquels. */
+async function majApercuCorrection() {
+  const zone = $('#apercu-correction');
+  const source = $('#correction-source').value.trim();
+  const cible = $('#correction-cible').value.trim();
+  if (!etat.lecture || !cible || cible === source) { zone.innerHTML = ''; return; }
+  let r;
+  try {
+    r = await pywebview.api.apercu_correction(etat.lecture.chemin, source, cible);
+  } catch (e) { console.error(e); zone.innerHTML = ''; return; }
+  if ($('#correction-cible').value.trim() !== cible) return;   // saisie depassee
+  if (!r.ok) { zone.innerHTML = encartAttention(r.message); return; }
+  const lignes = (r.extraits || []).map((x) => `<li>${x.debut_coupe ? '…' : ''}${ech(x.avant)}`
+    + `<mark>${ech(x.forme)}</mark>${ech(x.apres)}${x.fin_coupee ? '…' : ''}</li>`);
+  const reste = r.nombre - (r.extraits || []).length;
+  if (reste > 0) lignes.push(`<li class="reste">${ech(tn('ui.correction.autres', reste))}</li>`);
+  zone.innerHTML = `<div class="apercu-titre">${ech(r.message)}</div><ul>${lignes.join('')}</ul>`;
+}
+
+function majAnnulation() {
+  $('#btn-annuler-correction').hidden = !(etat.lecture && etat.lecture.annulable);
+}
+
+async function annulerCorrection() {
+  if (!etat.lecture || !etat.lecture.annulable) return;
+  const r = await pywebview.api.annuler_correction(etat.lecture.chemin);
+  if (r.nb_corrections !== undefined) majCorrections({ nb: r.nb_corrections, erreurs: [] });
+  journaliser(r.ok ? 'ok' : 'attention', r.message);
+  await chargerLecture(etat.lecture.chemin);
+  retourLecture(r.message, r.ok ? 'ok' : 'erreur');
 }
 
 async function appliquerCorrection() {
@@ -2110,6 +2148,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Enter') { e.preventDefault(); appliquerCorrection(); }
   });
   $('#btn-appliquer-correction').addEventListener('click', appliquerCorrection);
+  $('#btn-annuler-correction').addEventListener('click', annulerCorrection);
 
   // Ecoute de l'extrait correspondant au paragraphe clique.
   $('#lecture-texte').addEventListener('click', (e) => {
@@ -2263,6 +2302,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.ctrlKey && e.key === 'Enter') {
       e.preventDefault();
       if (!modaleOuverte && !$('#btn-lancer').disabled) lancer();
+    }
+    // Ctrl+Z dans la relecture : defait la derniere correction, sauf dans un
+    // champ de saisie, ou il garde son sens habituel.
+    if (e.ctrlKey && (e.key === 'z' || e.key === 'Z')
+        && $('#modale-lecture').classList.contains('ouvert')
+        && !$('#modale-correction').classList.contains('ouvert')
+        && !/^(INPUT|TEXTAREA)$/.test((document.activeElement || {}).tagName || '')) {
+      e.preventDefault();
+      annulerCorrection();
+      return;
     }
     if (e.ctrlKey && (e.key === '+' || e.key === '=')) { e.preventDefault(); zoom(0.1); }
     if (e.ctrlKey && e.key === '-') { e.preventDefault(); zoom(-0.1); }

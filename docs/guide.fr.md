@@ -43,7 +43,7 @@ Whisper donne la probabilité de chaque mot qu'il écrit. La vue de lecture **su
 
 Ces valeurs vivent dans un **fichier compagnon `.json`** écrit à côté du texte, quelques dizaines de kilooctets par heure d'audio. Il est facultatif : une transcription plus ancienne, ou produite avec l'option coupée, s'ouvre normalement, simplement sans surlignage.
 
-Sélectionner un mot ou une courte expression propose de le **corriger**. L'application applique le remplacement au texte affiché et au fichier enregistré, met le compagnon à jour, et range la règle dans une section dédiée de `corrections.txt` pour que la même erreur soit corrigée automatiquement ensuite.
+Sélectionner un mot ou une courte expression propose de le **corriger**. Avant d'appliquer, la fenêtre montre combien d'endroits du fichier changeront, et lesquels, avec leur contexte. L'application applique alors le remplacement au texte affiché et au fichier enregistré, et met le compagnon à jour ; **Annuler la correction** (ou Ctrl+Z) remet le fichier dans son état d'avant. Une correction de casse (« gitlab » vers « GitLab ») est acceptée. Si vous cochez la case prévue, décochée par défaut, la règle rejoint aussi une section dédiée de `corrections.txt`, pour que la même erreur soit corrigée automatiquement dans les transcriptions suivantes.
 
 **Copier pour l'IA** met dans le presse-papiers un texte d'instructions, les métadonnées de l'enregistrement et la transcription complète. Le gabarit est un fichier à vous, `gabarit-ia.txt`, créé au premier usage et modifiable depuis les réglages, où `{texte}`, `{fichier}`, `{date}`, `{duree}`, `{locuteurs}` et `{modele}` sont remplacés au moment de la copie.
 

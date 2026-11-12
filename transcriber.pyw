@@ -1737,6 +1737,7 @@ class Passerelle:
         """Contenu structuré d'une transcription, pour la vue de lecture."""
         retour = lecture.charger(chemin)
         retour["lecture_audio"] = bool(self.config.get("lecture_audio"))
+        retour["annulable"] = lecture.correction_annulable(chemin)
         return retour
 
     def copier_pour_ia(self, chemin: str) -> dict:
@@ -1758,13 +1759,25 @@ class Passerelle:
             "message": langues.t("app.copie_ia", n=len(texte)),
         }
 
+    def apercu_correction(self, chemin: str, source: str, cible: str) -> dict:
+        """Endroits que la correction toucherait, avant de l'appliquer."""
+        return lecture.apercu_correction(chemin, source, cible)
+
     def corriger_transcription(self, chemin: str, source: str, cible: str,
-                               ajouter_regle: bool = True) -> dict:
+                               ajouter_regle: bool = False) -> dict:
         """Applique une correction relue au fichier, au compagnon et aux règles."""
         if not self.config.get("corrections_apprises", True):
             ajouter_regle = False
         retour = lecture.appliquer_correction(chemin, source, cible, ajouter_regle)
         if retour.get("regle_ajoutee"):
+            regles, _ = vocabulaire.analyser_corrections()
+            retour["nb_corrections"] = len(regles)
+        return retour
+
+    def annuler_correction(self, chemin: str) -> dict:
+        """Défait la dernière correction de ce fichier, règle ajoutée comprise."""
+        retour = lecture.annuler_correction(chemin)
+        if retour.get("regle_retiree"):
             regles, _ = vocabulaire.analyser_corrections()
             retour["nb_corrections"] = len(regles)
         return retour

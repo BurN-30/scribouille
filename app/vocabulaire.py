@@ -331,9 +331,9 @@ def appliquer(texte: str, regles: list[Correction]) -> tuple[str, int]:
     return texte, total
 
 
-def _remplacer(regle: Correction, texte: str) -> tuple[str, int]:
+def occurrences(regle: Correction, texte: str) -> list[re.Match]:
     """
-    Une règle sur un texte. Ne compte que les changements réels.
+    Les occurrences qu'une règle changerait réellement dans un texte.
 
     Deux garde-fous : une occurrence déjà écrite sous la forme corrigée n'est
     pas réécrite (« gitlab => GitLab » laisse « GitLab » tel quel), et quand la
@@ -346,20 +346,26 @@ def _remplacer(regle: Correction, texte: str) -> tuple[str, int]:
         cible = re.sub(r"\\?\s+", r"\\s+", re.escape(regle.cible))
         motif_cible = re.compile(rf"(?<!\w){cible}(?!\w)", re.IGNORECASE | re.UNICODE)
         proteges = [trouve.span() for trouve in motif_cible.finditer(texte)]
-    nombre = 0
+    return [
+        trouve for trouve in regle.motif.finditer(texte)
+        if trouve.group(0) != regle.cible
+        and not any(debut <= trouve.start() and trouve.end() <= fin for debut, fin in proteges)
+    ]
 
-    def remplacement(trouve: re.Match) -> str:
-        nonlocal nombre
-        if trouve.group(0) == regle.cible:
-            return trouve.group(0)
-        if any(debut <= trouve.start() and trouve.end() <= fin for debut, fin in proteges):
-            return trouve.group(0)
-        nombre += 1
-        return regle.cible
 
-    # Un remplacement par fonction : la forme corrigée est prise à la lettre,
-    # une barre oblique inverse n'y est jamais lue comme un renvoi de motif.
-    return regle.motif.sub(remplacement, texte), nombre
+def _remplacer(regle: Correction, texte: str) -> tuple[str, int]:
+    """Une règle sur un texte. Ne compte que les changements réels."""
+    a_changer = occurrences(regle, texte)
+    # Assemblage par tranches : la forme corrigée est prise à la lettre, une
+    # barre oblique inverse n'y est jamais lue comme un renvoi de motif.
+    morceaux: list[str] = []
+    position = 0
+    for trouve in a_changer:
+        morceaux.append(texte[position:trouve.start()])
+        morceaux.append(regle.cible)
+        position = trouve.end()
+    morceaux.append(texte[position:])
+    return "".join(morceaux), len(a_changer)
 
 
 # ---------------------------------------------------------------------------

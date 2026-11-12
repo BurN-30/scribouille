@@ -424,16 +424,18 @@ def texte_pour_ia(chemin: str | Path) -> dict:
 # Corrections apprises depuis la vue de lecture
 # ---------------------------------------------------------------------------
 
-def appliquer_correction(chemin: str | Path, source: str, cible: str,
-                         ajouter_regle: bool = True) -> dict:
-    """
-    Corrige une forme dans une transcription déjà écrite.
+#: Dernière correction de chaque fichier, de quoi la défaire : contenus du
+#: texte, du compagnon et des règles avant et après. En mémoire seulement, le
+#: temps de la session : annuler vaut pour une erreur que l'on vient de faire.
+_DERNIERES: dict[str, dict] = {}
 
-    Trois écritures, dans cet ordre, chacune indépendante de la suivante :
-    le fichier texte (corps seulement, l'en-tête décrit la production et ne
-    doit pas bouger), le compagnon JSON s'il existe, et enfin `corrections.txt`
-    pour que la même erreur ne revienne plus jamais.
-    """
+#: Contexte affiché autour de chaque endroit touché, et nombre d'endroits montrés.
+_CONTEXTE_APERCU = 40
+_EXTRAITS_APERCU = 6
+
+
+def _preparer_correction(chemin: str | Path, source: str, cible: str) -> dict:
+    """Contrôles communs à l'aperçu et à l'application d'une correction."""
     fichier = Path(chemin or "")
     source = " ".join((source or "").split())
     cible = " ".join((cible or "").split())
@@ -452,6 +454,72 @@ def appliquer_correction(chemin: str | Path, source: str, cible: str,
         contenu = fichier.read_text(encoding="utf-8")
     except OSError:
         return {"ok": False, "message": langues.t("lect.illisible")}
+    return {"ok": True, "fichier": fichier, "source": source, "cible": cible,
+            "regles": regles, "contenu": contenu}
+
+
+def apercu_correction(chemin: str | Path, source: str, cible: str) -> dict:
+    """
+    Ce qu'une correction changerait, avant de l'appliquer : le nombre
+    d'endroits du fichier touchés, et chacun avec un peu de contexte.
+    """
+    prepa = _preparer_correction(chemin, source, cible)
+    if not prepa["ok"]:
+        return prepa
+    corps = separer_entete(prepa["contenu"])[1]
+    trouves = vocabulaire.occurrences(prepa["regles"][0], corps)
+    if not trouves:
+        return {"ok": False, "nombre": 0, "message": _rien_a_changer(prepa, corps)}
+    extraits = []
+    for trouve in trouves[:_EXTRAITS_APERCU]:
+        avant = corps[max(0, trouve.start() - _CONTEXTE_APERCU):trouve.start()]
+        apres = corps[trouve.end():trouve.end() + _CONTEXTE_APERCU]
+        extraits.append({
+            "avant": " ".join(avant.split()) + (" " if avant[-1:].isspace() else ""),
+            "forme": trouve.group(0),
+            "apres": (" " if apres[:1].isspace() else "") + " ".join(apres.split()),
+            "debut_coupe": trouve.start() > _CONTEXTE_APERCU,
+            "fin_coupee": trouve.end() + _CONTEXTE_APERCU < len(corps),
+        })
+    return {
+        "ok": True,
+        "nombre": len(trouves),
+        "extraits": extraits,
+        "message": langues.tn("lect.apercu", len(trouves)),
+    }
+
+
+def _rien_a_changer(prepa: dict, corps: str) -> str:
+    """Forme absente, ou déjà écrite comme on la veut partout : ce n'est pas pareil."""
+    if prepa["regles"][0].motif.search(corps):
+        return langues.t("lect.deja_corrige", cible=prepa["cible"])
+    return langues.t("lect.non_retrouve", source=prepa["source"])
+
+
+def _lire_ou_rien(chemin: Path) -> str | None:
+    try:
+        return chemin.read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+
+def appliquer_correction(chemin: str | Path, source: str, cible: str,
+                         ajouter_regle: bool = False) -> dict:
+    """
+    Corrige une forme dans une transcription déjà écrite.
+
+    Trois écritures, dans cet ordre, chacune indépendante de la suivante :
+    le fichier texte (corps seulement, l'en-tête décrit la production et ne
+    doit pas bouger), le compagnon JSON s'il existe, et enfin `corrections.txt`
+    quand l'utilisateur demande que la règle vaille pour les transcriptions
+    suivantes. L'état d'avant est gardé : `annuler_correction` le remet.
+    """
+    prepa = _preparer_correction(chemin, source, cible)
+    if not prepa["ok"]:
+        return prepa
+    fichier, source, cible = prepa["fichier"], prepa["source"], prepa["cible"]
+    regles, contenu = prepa["regles"], prepa["contenu"]
+    json_avant = _lire_ou_rien(compagnon.chemin_pour(fichier))
 
     entete, corps = separer_entete(contenu)
     # `separer_entete` retire les sauts de ligne entre l'en-tête et le corps :
@@ -460,10 +528,11 @@ def appliquer_correction(chemin: str | Path, source: str, cible: str,
     separation = contenu[len(entete):len(contenu) - len(corps)]
     corps_corrige, remplacements = vocabulaire.appliquer(corps, regles)
     if not remplacements:
-        return {"ok": False, "message": langues.t("lect.non_retrouve", source=source)}
+        return {"ok": False, "message": _rien_a_changer(prepa, corps)}
 
+    nouveau = entete + separation + corps_corrige
     try:
-        fichier.write_text(entete + separation + corps_corrige, encoding="utf-8")
+        fichier.write_text(nouveau, encoding="utf-8")
     except OSError as exc:
         journal.attention("Correction non écrite dans %s : %s", fichier, exc)
         return {"ok": False, "message": langues.t("lect.non_reecrit")}
@@ -481,10 +550,20 @@ def appliquer_correction(chemin: str | Path, source: str, cible: str,
 
     regle_ajoutee = False
     message_regle = ""
+    regles_avant = regles_apres = None
     if ajouter_regle:
+        regles_avant = vocabulaire.lire_corrections()
         retour = vocabulaire.ajouter_correction_apprise(source, cible)
         regle_ajoutee = bool(retour.get("ajoutee"))
         message_regle = retour.get("message", "")
+        if regle_ajoutee:
+            regles_apres = vocabulaire.lire_corrections()
+
+    _DERNIERES[str(fichier.resolve())] = {
+        "txt_avant": contenu, "txt_apres": nouveau,
+        "json_avant": json_avant, "json_apres": _lire_ou_rien(compagnon.chemin_pour(fichier)),
+        "regles_avant": regles_avant if regle_ajoutee else None, "regles_apres": regles_apres,
+    }
 
     journal.info(
         "Correction appliquée dans %s : « %s » vers « %s », %s remplacement(s)%s",
@@ -495,8 +574,47 @@ def appliquer_correction(chemin: str | Path, source: str, cible: str,
         "ok": True,
         "remplacements": remplacements,
         "regle_ajoutee": regle_ajoutee,
+        "annulable": True,
         "message": (
             langues.tn("lect.remplacements", remplacements)
             + (" " + message_regle if message_regle else "")
         ),
     }
+
+
+def correction_annulable(chemin: str | Path) -> bool:
+    return str(Path(chemin or "").resolve()) in _DERNIERES
+
+
+def annuler_correction(chemin: str | Path) -> dict:
+    """
+    Défait la dernière correction appliquée à ce fichier : texte, compagnon et,
+    si elle avait été ajoutée, la règle. Rien n'est touché si le fichier a été
+    modifié entre-temps, par un éditeur par exemple : on écraserait ce travail.
+    """
+    fichier = Path(chemin or "")
+    cle = str(fichier.resolve())
+    derniere = _DERNIERES.get(cle)
+    if not derniere:
+        return {"ok": False, "message": langues.t("lect.annulation.aucune")}
+    if _lire_ou_rien(fichier) != derniere["txt_apres"]:
+        _DERNIERES.pop(cle, None)
+        return {"ok": False, "message": langues.t("lect.annulation.modifie")}
+    try:
+        fichier.write_text(derniere["txt_avant"], encoding="utf-8")
+        cible_json = compagnon.chemin_pour(fichier)
+        if derniere["json_avant"] is not None and _lire_ou_rien(cible_json) == derniere["json_apres"]:
+            cible_json.write_text(derniere["json_avant"], encoding="utf-8")
+    except OSError as exc:
+        journal.attention("Correction non annulée dans %s : %s", fichier, exc)
+        return {"ok": False, "message": langues.t("lect.non_reecrit")}
+    _DERNIERES.pop(cle, None)
+
+    message = langues.t("lect.annulation.faite")
+    regle_retiree = False
+    if derniere["regles_avant"] is not None and vocabulaire.lire_corrections() == derniere["regles_apres"]:
+        vocabulaire.ecrire_corrections(derniere["regles_avant"])
+        regle_retiree = True
+        message += " " + langues.t("lect.annulation.regle")
+    journal.info("Correction annulée dans %s%s", fichier.name, ", règle retirée" if regle_retiree else "")
+    return {"ok": True, "message": message, "regle_retiree": regle_retiree}

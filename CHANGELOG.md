@@ -55,6 +55,11 @@ Corrections issues d'une revue d'usage de l'application réelle (vérifiées par
   aucun doublon quand la forme corrigée prolonge la forme entendue
   (« réseaux » vers « réseaux sociaux » ne produit plus « réseaux sociaux
   sociaux ») ; seuls les changements réels sont comptés.
+- **Corriger en confiance** : avant d'appliquer, la fenêtre de correction
+  montre le nombre d'endroits touchés et chacun dans son contexte ; la
+  dernière correction s'annule (bouton ou Ctrl+Z), règle ajoutée comprise ; la
+  règle pour les transcriptions suivantes n'est plus cochée d'office ; une
+  forme déjà juste partout est dite comme telle.
 - **Correction depuis la relecture** : l'en-tête du fichier texte reste séparé
   du corps ; la barre de fin d'en-tête et la première phrase ne se retrouvent
   plus sur la même ligne.

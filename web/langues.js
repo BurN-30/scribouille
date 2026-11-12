@@ -454,6 +454,7 @@ fr: {
   'ui.lecture.exemple': 'mot',
   'ui.lecture.ouvrir': 'Ouvrir le fichier',
   'ui.lecture.copier': 'Copier le texte',
+  'ui.lecture.annuler_correction': 'Annuler la correction',
   'ui.lecture.copier_ia': "Copier pour l'IA",
   'ui.lecture.chargement': 'Chargement...',
   'ui.lecture.non_lue': "Cette transcription n'a pas pu être lue.",
@@ -480,7 +481,10 @@ fr: {
   'ui.correction.source': 'Forme entendue',
   'ui.correction.cible': 'Forme corrigée',
   'ui.correction.aide': 'La correction est appliquée au texte affiché et au fichier '
-    + "enregistré, partout où cette expression apparaît, sans toucher à l'en-tête.",
+    + "enregistré, aux endroits listés ci-dessous, sans toucher à l'en-tête. Elle peut être "
+    + 'annulée ensuite.',
+  'ui.correction.autres.un': 'et {n} autre endroit.',
+  'ui.correction.autres.autres': 'et {n} autres endroits.',
   'ui.correction.question': 'Ajouter la règle aux corrections ?',
   'ui.correction.question_detaillee': 'Ajouter la règle « {source} » vers « {cible} » aux '
     + 'corrections ?',
@@ -989,6 +993,7 @@ en: {
   'ui.lecture.exemple': 'word',
   'ui.lecture.ouvrir': 'Open the file',
   'ui.lecture.copier': 'Copy the text',
+  'ui.lecture.annuler_correction': 'Undo the correction',
   'ui.lecture.copier_ia': 'Copy for AI',
   'ui.lecture.chargement': 'Loading...',
   'ui.lecture.non_lue': 'This transcript could not be read.',
@@ -1014,7 +1019,9 @@ en: {
   'ui.correction.source': 'Transcribed form',
   'ui.correction.cible': 'Corrected form',
   'ui.correction.aide': 'The correction is applied to the text shown and to the saved file, '
-    + 'everywhere this phrase appears, without touching the header.',
+    + 'at the places listed below, without touching the header. It can be undone afterwards.',
+  'ui.correction.autres.un': 'and {n} other place.',
+  'ui.correction.autres.autres': 'and {n} other places.',
   'ui.correction.question': 'Add the rule to your corrections?',
   'ui.correction.question_detaillee': 'Add the rule "{source}" to "{cible}" to your '
     + 'corrections?',

@@ -874,6 +874,10 @@
       </button>
       <span class="pousse"></span>
       <span class="lecture-retour" id="lecture-retour"></span>
+      <button class="bouton bouton-discret" id="btn-annuler-correction" hidden>
+        <svg class="icone-s icone"><use href="#i-reprise"></use></svg>
+        <span data-i18n="ui.lecture.annuler_correction"></span>
+      </button>
       <button class="bouton" id="btn-copier-lecture">
         <svg class="icone-s icone"><use href="#i-copie"></use></svg>
         <span data-i18n="ui.lecture.copier"></span>
@@ -909,8 +913,9 @@
         <input type="text" id="correction-cible" spellcheck="false">
         <span class="aide" data-i18n="ui.correction.aide"></span>
       </div>
+      <div class="apercu-correction" id="apercu-correction" aria-live="polite"></div>
       <label class="case" id="case-regle">
-        <input type="checkbox" id="correction-regle" checked>
+        <input type="checkbox" id="correction-regle">
         <span id="correction-question" data-i18n="ui.correction.question"></span>
       </label>
       <div id="retour-correction" style="margin-top:12px"></div>

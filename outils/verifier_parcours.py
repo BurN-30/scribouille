@@ -160,6 +160,60 @@ def essai_casse_et_doublons(base: Path) -> None:
              "la relecture corrige la casse dans le fichier", str(retour))
 
 
+def essai_apercu_et_annulation(base: Path) -> None:
+    titre("Corrections : aperçu des endroits touchés, annulation, règle sur demande")
+    dossier = base / "apercu"
+    dossier.mkdir()
+    txt = ecrire(dossier, [
+        segment(0.0, 4.0, jetons("Les réseaux sociaux, ça va.")),
+        segment(4.5, 9.0, jetons("Mais les réseaux, je ne les comprends pas, les réseaux.")),
+    ])
+    avant = txt.read_text(encoding="utf-8")
+    json_avant = (txt.with_suffix(".json")).read_text(encoding="utf-8")
+    regles_avant = vocabulaire.lire_corrections()
+
+    apercu = lecture.apercu_correction(txt, "réseaux", "réseaux sociaux")
+    verifier(apercu.get("ok") is True and apercu.get("nombre") == 2,
+             "l'aperçu compte les seuls endroits qui changeront", str(apercu))
+    extraits = apercu.get("extraits") or []
+    verifier(len(extraits) == 2 and all(x["forme"] == "réseaux" for x in extraits)
+             and extraits[0]["avant"].endswith("Mais les ") and extraits[0]["apres"].startswith(", je"),
+             "chaque endroit est montré avec son contexte", str(extraits[:1]))
+    verifier(txt.read_text(encoding="utf-8") == avant, "l'aperçu n'écrit rien")
+    absent = lecture.apercu_correction(txt, "GAFAM", "Gafam")
+    verifier(absent.get("ok") is False and "retrouvé" in absent.get("message", ""),
+             "une forme absente est dite avant d'appliquer")
+    deja = lecture.apercu_correction(txt, "les", "Les")
+    verifier(deja.get("ok") is True and deja.get("nombre") == 3,
+             "seules les formes à changer apparaissent dans l'aperçu", str(deja.get("nombre")))
+    deja = lecture.apercu_correction(txt, "mais", "Mais")
+    verifier(deja.get("ok") is False and "déjà écrit" in deja.get("message", ""),
+             "une forme déjà juste partout est dite comme telle", deja.get("message", ""))
+
+    sans_regle = lecture.appliquer_correction.__defaults__
+    verifier(sans_regle == (False,), "par défaut, la correction ne crée pas de règle globale",
+             str(sans_regle))
+    retour = lecture.appliquer_correction(txt, "réseaux", "réseaux sociaux", ajouter_regle=True)
+    verifier(retour.get("ok") and retour.get("remplacements") == 2 and retour.get("regle_ajoutee"),
+             "correction appliquée, règle ajoutée à la demande", str(retour))
+    verifier(lecture.correction_annulable(txt), "la correction est annulable")
+    annule = lecture.annuler_correction(txt)
+    verifier(annule.get("ok") is True and annule.get("regle_retiree") is True,
+             "annulation faite, règle retirée", str(annule))
+    verifier(txt.read_text(encoding="utf-8") == avant
+             and txt.with_suffix(".json").read_text(encoding="utf-8") == json_avant,
+             "texte et compagnon reviennent à l'octet près")
+    verifier(vocabulaire.lire_corrections().strip() == regles_avant.strip(),
+             "les corrections reviennent à leur état d'avant")
+    verifier(lecture.annuler_correction(txt).get("ok") is False, "rien à annuler une seconde fois")
+
+    lecture.appliquer_correction(txt, "comprends", "comprenais")
+    txt.write_text(txt.read_text(encoding="utf-8") + "ajout à la main\n", encoding="utf-8")
+    verifier(lecture.annuler_correction(txt).get("ok") is False
+             and "ajout à la main" in txt.read_text(encoding="utf-8"),
+             "un fichier modifié depuis n'est pas écrasé par l'annulation")
+
+
 def principal() -> int:
     print(f"Vérification du parcours de l'utilisateur\n{'=' * 42}")
     with tempfile.TemporaryDirectory(prefix="scribouille-parcours-") as brut:
@@ -170,6 +224,7 @@ def principal() -> int:
         essai_entete_apres_correction(base)
         essai_vue_egale_fichier(base)
         essai_casse_et_doublons(base)
+        essai_apercu_et_annulation(base)
 
     print(f"\n{'=' * 42}")
     if _echecs:

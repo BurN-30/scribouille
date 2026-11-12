@@ -43,7 +43,7 @@ Whisper gives a probability for every word it writes. The reading view **highlig
 
 These values live in a **companion `.json` file** written next to the text, a few tens of kilobytes per hour of audio. It is optional: an older transcript, or one produced with the option off, opens normally without highlighting.
 
-Selecting a word or a short phrase offers to **correct it**. The app applies the replacement to the text on screen and to the saved file, updates the companion, and adds the rule to a dedicated section of `corrections.txt` so the same mistake is fixed automatically from then on.
+Selecting a word or a short phrase offers to **correct it**. Before applying, the window shows how many places in the file will change, and which ones, with their context. The app then applies the replacement to the text on screen and to the saved file, and updates the companion; **Undo the correction** (or Ctrl+Z) puts the file back as it was. A case correction ("gitlab" to "GitLab") is accepted. If you tick the box provided, unticked by default, the rule also goes into a dedicated section of `corrections.txt`, so the same mistake is fixed automatically in later transcripts.
 
 **Copy for AI** puts an instruction template, the recording metadata and the full transcript on the clipboard. The template is your own file, `gabarit-ia.txt`, created on first use and editable from the settings, with `{texte}`, `{fichier}`, `{date}`, `{duree}`, `{locuteurs}` and `{modele}` replaced at copy time.
 

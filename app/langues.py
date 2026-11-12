@@ -754,6 +754,15 @@ _FR: dict[str, str] = {
     "lect.non_reecrit": "Le fichier n'a pas pu être réécrit.",
     "lect.remplacements.un": "{n} remplacement dans le fichier.",
     "lect.remplacements.autres": "{n} remplacements dans le fichier.",
+    "lect.apercu.un": "{n} endroit du fichier sera modifié :",
+    "lect.deja_corrige": "« {cible} » est déjà écrit ainsi partout dans ce texte.",
+    "lect.apercu.autres": "{n} endroits du fichier seront modifiés :",
+    "lect.annulation.aucune": "Aucune correction à annuler pour ce fichier.",
+    "lect.annulation.modifie": (
+        "Le fichier a été modifié depuis la correction : elle n'a pas été annulée, "
+        "pour ne pas écraser ces changements."),
+    "lect.annulation.faite": "Correction annulée, le fichier est revenu à son état précédent.",
+    "lect.annulation.regle": "La règle ajoutée a été retirée des corrections.",
 
     # -- espace occupé (app/stockage.py) -----------------------------------
     "stock.modeles.libelle": "Modèles de transcription",
@@ -2116,6 +2125,15 @@ _EN: dict[str, str] = {
     "lect.non_reecrit": "The file could not be written back.",
     "lect.remplacements.un": "{n} replacement in the file.",
     "lect.remplacements.autres": "{n} replacements in the file.",
+    "lect.apercu.un": "{n} place in the file will be changed:",
+    "lect.deja_corrige": "\"{cible}\" is already written this way throughout this text.",
+    "lect.apercu.autres": "{n} places in the file will be changed:",
+    "lect.annulation.aucune": "No correction to undo for this file.",
+    "lect.annulation.modifie": (
+        "The file has changed since the correction: it was not undone, so as not to "
+        "overwrite those changes."),
+    "lect.annulation.faite": "Correction undone, the file is back to its previous state.",
+    "lect.annulation.regle": "The rule that was added has been removed from your corrections.",
 
     "stock.modeles.libelle": "Transcription models",
     "stock.modeles.detail": (
