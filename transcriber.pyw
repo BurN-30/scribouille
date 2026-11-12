@@ -32,6 +32,12 @@ Campagne de mesure des réglages sur un corpus public avec référence (voir `ap
 Épreuve d'endurance du réglage retenu (voir `app/endurance.py`) :
 
     transcriber.pyw --endurance [--passages 30] [--pression] [--reglage CLE]
+
+Réglage proposé pour ce poste (voir `app/adaptation.py`), et banc des rythmes
+« je travaille en même temps » (voir `app/banc_rythmes.py`) :
+
+    transcriber.pyw --reconnaitre [--appliquer]
+    transcriber.pyw --banc --modes [--rythmes vitesse,equilibre,discret] [--peripherique GPU]
 """
 
 from __future__ import annotations
@@ -107,6 +113,16 @@ if "--comparer" in sys.argv[1:] or "--comparer-essai" in sys.argv[1:]:
         journal.demarrer()
     journal.silence_bibliotheques()
     sys.exit(_comparaison.principal_cli(sys.argv[1:]))
+
+# Choix du réglage selon le poste (voir `app/adaptation.py`) : décrit le poste
+# et propose un réglage ; « --appliquer » l'enregistre. Rien n'est téléchargé
+# ni installé. Version installée : « scribouille-verifier.exe --reconnaitre ».
+if "--reconnaitre" in sys.argv[1:]:
+    from app import adaptation as _adaptation
+
+    journal.demarrer()
+    journal.silence_bibliotheques()
+    sys.exit(_adaptation.principal_cli(sys.argv[1:]))
 
 journal.demarrer()
 journal.purger()
@@ -302,7 +318,7 @@ from webview.dom import DOMEventHandler  # noqa: E402
 from app import audio as audio_module  # noqa: E402
 from app import config as config_module  # noqa: E402
 from app import barre_taches, diarisation, donnees, gabarit, lecture, maj  # noqa: E402
-from app import banc, materiel, nommage, presets, reglage_machine, reprise, stockage  # noqa: E402
+from app import banc, materiel, nommage, presets, reglage_machine, reprise, rythme, stockage  # noqa: E402
 from app import surveillance, traitement, vocabulaire  # noqa: E402
 
 _SANS_FENETRE = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
@@ -317,7 +333,16 @@ class Passerelle:
 
     def __init__(self):
         self._fenetre = None
+        #: Premier lancement : pas encore de configuration. La fenêtre propose
+        #: alors un réglage pour ce poste (voir `app/adaptation.py`).
+        self._premier_lancement = not chemins.FICHIER_CONFIG.exists()
         self.config = config_module.charger()
+        # Rythme équilibré ou discret : les fils de CTranslate2 attendent sans
+        # tourner à vide (OpenMP lit cette variable une fois, au premier calcul,
+        # d'où sa place ici, avant tout chargement ; voir app/rythme.py).
+        if rythme.normaliser(self.config.get("rythme")) != "vitesse":
+            os.environ.setdefault("OMP_WAIT_POLICY", "PASSIVE")
+        self._proposition: dict = {}
         # Glossaire et corrections d'une installation ancienne restés tels que
         # livrés, exemples fictifs actifs : remplacés par les modèles actuels.
         # Seulement à l'ouverture de la fenêtre, jamais depuis la ligne de
@@ -478,7 +503,86 @@ class Passerelle:
             "version_installee": chemins.EST_GELE,
             "avertissements": self._avertissements(),
             "vitesse": self.etat_vitesse(),
+            "rythme": self.etat_rythme(),
+            "proposition": self._proposition_au_demarrage(),
         }
+
+    # -- rythme et réglage proposé pour le poste ----------------------------
+
+    def etat_rythme(self) -> dict:
+        """Rythme choisi, adaptation, et durée pour une heure dans chaque rythme."""
+        choisi = rythme.normaliser(self.config.get("rythme"))
+        base = presets.estimer_secondes(3600, self.config.get("preset", "qualite"), self.materiel)
+        courant = __import__("app.energie", fromlist=["alimentation"]).alimentation()
+        return {
+            "choisi": choisi,
+            "auto": bool(self.config.get("rythme_auto")),
+            "batterie": bool(courant["batterie"] and not courant["secteur"]),
+            "pour_une_heure": {
+                nom: presets.formater_duree(base * rythme.coefficient(nom, self.materiel.cle_calcul))
+                for nom in rythme.RYTHMES},
+        }
+
+    def _proposition_au_demarrage(self) -> dict | None:
+        """
+        La proposition ne s'affiche d'elle-même qu'au tout premier lancement, et
+        tant qu'elle n'a été ni appliquée ni écartée ; sinon, sur demande.
+        """
+        if not self._premier_lancement or self._proposition.get("_vue"):
+            return None
+        try:
+            from app import adaptation
+
+            proposition = adaptation.proposition_du_poste(self.materiel)
+            if adaptation.deja_en_place(proposition, self.config, self.materiel):
+                return None
+            self._proposition = {**proposition, "_vue": True}
+            return proposition
+        except Exception as exc:
+            journal.exception("Proposition du poste impossible", exc)
+            return None
+
+    def proposer_reglage(self) -> dict:
+        """Bouton « Reconnaître ce poste » : la proposition, jamais appliquée d'office."""
+        from app import adaptation
+
+        if not self.file.occupee:
+            # Le matériel a pu changer depuis l'ouverture (station d'accueil,
+            # pilote réinstallé) : il est relu, sauf pendant une transcription.
+            try:
+                self.materiel = materiel.detecter(forcer=True)
+                self.file.materiel = self.materiel
+            except Exception as exc:
+                journal.exception("Nouvelle détection du matériel impossible", exc)
+            self._effet_reglage = reglage_machine.appliquer_au_materiel(self.config, self.materiel)
+        try:
+            from app import moteur_openvino
+
+            moteur_openvino.peripheriques_disponibles(forcer=True)
+        except Exception:
+            pass
+        proposition = adaptation.proposition_du_poste(self.materiel)
+        proposition["deja"] = adaptation.deja_en_place(proposition, self.config, self.materiel)
+        self._proposition = {**proposition, "_vue": True}
+        journal.info("Proposition du poste : %s (%s)", proposition["regle"], proposition["source"])
+        return proposition
+
+    def appliquer_proposition(self) -> dict:
+        from app import adaptation
+
+        if self.file.occupee:
+            return {"ok": False, "message": langues.t("app.banc.file_occupee")}
+        proposition = self._proposition or adaptation.proposition_du_poste(self.materiel)
+        adaptation.appliquer(self.config, self.materiel, proposition)
+        config_module.sauver(self.config)
+        self._effet_reglage = reglage_machine.appliquer_au_materiel(self.config, self.materiel)
+        return {"ok": True, "message": langues.t("adapt.applique", phrase=proposition["phrase"])}
+
+    def ecarter_proposition(self) -> dict:
+        self.config["proposition_ecartee"] = __import__(
+            "app.calibration", fromlist=["signature_machine"]).signature_machine(self.materiel)
+        config_module.sauver(self.config)
+        return {"ok": True}
 
     def _avertissements(self) -> list[str]:
         """Garde-fous matériels, plus l'annonce du téléchargement à venir."""
@@ -1375,10 +1479,13 @@ class Passerelle:
         # dans la clé des mesures relevées sur le poste, elle doit donc être dite.
         beam = int(self.config.get("beam_size") or 0) \
             if self.config.get("mode_avance") else 0
+        # Rythme équilibré ou discret : plus long, et l'annonce le dit (en
+        # adaptation automatique, la durée du rythme choisi, la plus longue).
+        coefficient = rythme.coefficient(self.config.get("rythme"), self.materiel.cle_calcul)
         return presets.formater_duree(
-            presets.estimer_secondes(duree_secs, cle_preset, self.materiel,
-                                     bool(diarisation_active), modele_avance or "",
-                                     beam=beam)
+            coefficient * presets.estimer_secondes(duree_secs, cle_preset, self.materiel,
+                                                   bool(diarisation_active), modele_avance or "",
+                                                   beam=beam)
         )
 
     # -- fichiers ----------------------------------------------------------
@@ -1483,6 +1590,12 @@ class Passerelle:
         if self._banc is not None or self._comparaison is not None:
             return {"ok": False, "message": langues.t("app.banc.en_cours")}
         self._effet_reglage = reglage_machine.appliquer_au_materiel(self.config, self.materiel)
+        if self._effet_reglage.get("indisponible"):
+            # Puce graphique absente, pilote en panne, OpenVINO retiré : le
+            # repli sur le moteur habituel est dit au moment où il joue.
+            self._sur_journal("attention", langues.t(
+                "app.repli_materiel_plantage" if self._effet_reglage.get("plantage")
+                else "app.repli_materiel"))
         if not audio_module.ffmpeg_present():
             return {
                 "ok": False,
@@ -1807,6 +1920,29 @@ def _au_demarrage(passerelle: Passerelle, fenetre) -> None:
     passerelle.verifier_maj()
 
 
+def _avant_fermeture(passerelle: Passerelle, fenetre):
+    """
+    Fermer la fenêtre pendant une transcription : on demande d'abord.
+
+    Le travail déjà fait n'est pas perdu (sauvegarde progressive, reprise
+    proposée au lancement suivant), mais une fermeture par mégarde coûte le
+    calcul en cours. Toute erreur ici laisse fermer : la fenêtre ne doit jamais
+    rester bloquée ouverte.
+    """
+    try:
+        if not passerelle.file.occupee:
+            return None
+        if fenetre.create_confirmation_dialog(
+                NOM_APPLICATION, langues.t("app.fermer_pendant_transcription")):
+            passerelle.file.arreter()
+            journal.info("Fenêtre fermée pendant une transcription, reprise possible au lancement suivant")
+            return None
+        return False
+    except Exception as exc:
+        journal.debug("Confirmation de fermeture impossible : %s", exc)
+        return None
+
+
 def principal() -> None:
     journal.info("%s v%s", NOM_APPLICATION, VERSION)
     passerelle = Passerelle()
@@ -1821,6 +1957,7 @@ def principal() -> None:
     )
     passerelle._fenetre = fenetre
     fenetre.events.loaded += lambda: _au_demarrage(passerelle, fenetre)
+    fenetre.events.closing += lambda: _avant_fermeture(passerelle, fenetre)
 
     try:
         webview.start(debug=bool(os.environ.get("TRANSCRIPTEUR_DEBUG")))

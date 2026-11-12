@@ -360,6 +360,35 @@ button, input, select, textarea { font: inherit; color: inherit; }
   padding: 1px 7px; border-radius: 999px; margin-left: auto;
 }
 
+/* Rythme : trois positions côte à côte, une seule active. */
+.rythmes {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  border: 1px solid var(--bordure); border-radius: var(--rayon);
+  background: var(--carte-creuse); overflow: hidden;
+}
+.rythme {
+  border: none; border-right: 1px solid var(--bordure); background: transparent;
+  padding: 8px 4px; font-size: 12.5px; font-weight: 600; color: var(--texte-doux);
+  cursor: pointer; line-height: 1.25;
+  transition: background var(--vitesse) ease, color var(--vitesse) ease;
+}
+.rythme:last-child { border-right: none; }
+.rythme:hover { background: var(--carte); color: var(--texte); }
+.rythme[aria-checked="true"] {
+  background: var(--accent-doux); color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.rythme-desc { font-size: 12px; color: var(--texte-doux); margin-top: 8px; }
+#rythme-retour .encart { margin-top: 8px; }
+
+/* Réglage proposé pour le poste, sous la fiche matériel. */
+.proposition { padding: 14px 16px; border-color: color-mix(in srgb, var(--accent) 35%, var(--bordure)); }
+.proposition-titre { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 650; color: var(--accent); }
+.proposition-phrase { font-size: 13px; margin: 8px 0 4px; }
+.proposition .sous-libelle { font-size: 12px; color: var(--texte-doux); }
+#proposition-notes .encart { margin-top: 8px; }
+.proposition-actions { display: flex; gap: 8px; margin-top: 12px; }
+
 /* Dossier des modèles : le chemin peut être long, il ne doit jamais déborder. */
 .bloc-reglage > .sous-libelle { font-size: 11.5px; color: var(--texte-faible); }
 .bloc-reglage > .aide { display: block; font-size: 11.5px; color: var(--texte-faible); margin-top: 8px; }

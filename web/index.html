@@ -101,6 +101,28 @@
       <div class="materiel-detail" id="materiel-detail"></div>
     </div>
 
+    <!-- Reglage propose pour ce poste (app/adaptation.py) : au premier
+         lancement, ou sur le bouton « Reconnaitre ce poste ». Rien ne change
+         sans un clic sur « Appliquer ». -->
+    <div class="carte proposition" id="bloc-proposition" style="display:none">
+      <div class="proposition-titre">
+        <svg class="icone-s icone"><use href="#i-etincelle"></use></svg>
+        <span data-i18n="ui.proposition.titre"></span>
+      </div>
+      <p class="proposition-phrase" id="proposition-phrase"></p>
+      <p class="sous-libelle" id="proposition-rythme"></p>
+      <div id="proposition-notes"></div>
+      <div class="proposition-actions">
+        <button class="bouton bouton-accent" id="btn-proposition-appliquer">
+          <svg class="icone-s icone"><use href="#i-coche"></use></svg>
+          <span data-i18n="ui.proposition.appliquer"></span>
+        </button>
+        <button class="bouton bouton-discret" id="btn-proposition-plus-tard">
+          <span data-i18n="ui.proposition.plus_tard"></span>
+        </button>
+      </div>
+    </div>
+
     <!-- Depot -->
     <div class="zone-depot" id="zone-depot" role="button" tabindex="0">
       <svg class="icone" style="width:32px;height:32px"><use href="#i-depot"></use></svg>
@@ -140,6 +162,30 @@
       <span class="titre-section" data-i18n="ui.section.qualite"></span>
       <div class="presets" id="presets"></div>
       <div id="avertissements" style="margin-top:10px"></div>
+    </div>
+
+    <!-- Rythme : ce que la transcription prend au poste pendant que l'on
+         travaille a cote (voir app/rythme.py). Vitesse maximale par defaut. -->
+    <div class="bloc-reglage" id="bloc-rythme">
+      <span class="titre-section" data-i18n="ui.section.rythme"></span>
+      <div class="rythmes" role="radiogroup" data-i18n-aria="ui.section.rythme">
+        <button class="rythme" data-rythme="vitesse" role="radio" aria-checked="true">
+          <span data-i18n="ui.rythme.vitesse"></span></button>
+        <button class="rythme" data-rythme="equilibre" role="radio" aria-checked="false">
+          <span data-i18n="ui.rythme.equilibre"></span></button>
+        <button class="rythme" data-rythme="discret" role="radio" aria-checked="false">
+          <span data-i18n="ui.rythme.discret"></span></button>
+      </div>
+      <div class="rythme-desc" id="rythme-desc">--</div>
+      <label class="bascule" style="margin-top:10px">
+        <input type="checkbox" id="opt-rythme-auto">
+        <span class="piste"></span>
+        <span>
+          <span class="libelle" data-i18n="ui.rythme.auto"></span><br>
+          <span class="sous-libelle" id="rythme-auto-aide"></span>
+        </span>
+      </label>
+      <div id="rythme-retour"></div>
     </div>
 
     <div class="bloc-reglage">
@@ -369,6 +415,10 @@
       <span class="titre-section" data-i18n="ui.section.vitesse"></span>
       <div class="sous-libelle" id="vitesse-reglage">--</div>
       <div id="vitesse-alerte"></div>
+      <button class="bouton" id="btn-reconnaitre" style="width:100%;margin-top:8px">
+        <svg class="icone-s icone"><use href="#i-puce"></use></svg>
+        <span data-i18n="ui.vitesse.reconnaitre"></span>
+      </button>
 
       <div id="ov-bloc" class="etape-extension" style="margin-top:10px">
         <div class="sous-libelle" id="ov-etat">--</div>

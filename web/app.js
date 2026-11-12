@@ -18,6 +18,7 @@ const etat = {
   diarisation: { disponible: false, jeton_present: false, guide: {}, extension: {} },
   extensionEnCours: false,   // installation de la separation des locuteurs en cours
   vitesse: {},               // moteur OpenVINO, reglage de vitesse, banc d'essai
+  rythme: {},                // vitesse maximale, equilibre ou discret, adaptation
   ovEnCours: false,          // installation d'OpenVINO en cours
   bancEnCours: false,        // banc d'essai en cours
   modeles: { dossier: '', presets: [] },
@@ -69,6 +70,7 @@ function initialiser(d, silencieux) {
   etat.surveillance = d.surveillance || etat.surveillance;
   etat.versionInstallee = !!d.version_installee;
   etat.vitesse = d.vitesse || etat.vitesse;
+  etat.rythme = d.rythme || etat.rythme;
 
   // Python fait autorite sur la langue : il l'a detectee au premier lancement
   // et l'a rangee dans la configuration. La langue provisoire posee au
@@ -90,6 +92,8 @@ function initialiser(d, silencieux) {
   majCorrections(d.corrections || {});
   majDiarisation();
   majVitesse();
+  majRythme();
+  if (d.proposition) afficherProposition(d.proposition);
   majModeles();
   majSurveillance();
   majQualiteLangue();
@@ -680,6 +684,80 @@ function onFinComparaison(bilan) {
     $('#comp-retour').innerHTML = encartInfo(t('ui.comp.fichiers', { fichier: bilan.fichier }));
   }
   journaliser(bilan.annule ? 'attention' : 'ok', t(bilan.annule ? 'ui.comp.arrete' : 'ui.comp.fini'));
+}
+
+/* ------------------------------------------------ Rythme de la transcription
+
+   Trois positions (vitesse maximale par defaut) et l'adaptation automatique.
+   Le choix vaut pour la prochaine file : les fils et les lots se fixent au
+   chargement du modele. Voir app/rythme.py. */
+
+function majRythme() {
+  const r = etat.rythme || {};
+  const choisi = r.choisi || 'vitesse';
+  $$('#bloc-rythme .rythme').forEach((b) => {
+    b.setAttribute('aria-checked', b.dataset.rythme === choisi ? 'true' : 'false');
+  });
+  const duree = (r.pour_une_heure || {})[choisi] || '--';
+  $('#rythme-desc').textContent = t('ui.rythme.desc.' + choisi, { duree });
+  const auto = $('#opt-rythme-auto');
+  auto.checked = !!r.auto && choisi !== 'vitesse';
+  auto.disabled = choisi === 'vitesse';
+  $('#rythme-auto-aide').textContent = t(choisi === 'vitesse' ? 'ui.rythme.auto_inutile' : 'ui.rythme.auto_aide');
+  const notes = [];
+  if (r.auto && r.batterie && choisi !== 'vitesse') notes.push(encartInfo(t('ui.rythme.batterie')));
+  if (etat.enCours) notes.push(encartInfo(t('ui.rythme.prochaine')));
+  $('#rythme-retour').innerHTML = notes.join('');
+}
+
+async function rafraichirRythme(partiel) {
+  await enregistrer(partiel);
+  try {
+    etat.rythme = await pywebview.api.etat_rythme();
+  } catch (e) { console.error(e); }
+  majRythme();
+  rafraichirEstimations();
+}
+
+/* Reglage propose pour ce poste : au premier lancement, ou sur demande. */
+
+function afficherProposition(p) {
+  const bloc = $('#bloc-proposition');
+  if (!p) { bloc.style.display = 'none'; return; }
+  $('#proposition-phrase').textContent = p.phrase || '';
+  $('#proposition-rythme').textContent = t('ui.proposition.rythme', {
+    rythme: t('ui.rythme.' + (p.rythme || 'equilibre')),
+  });
+  const notes = (p.notes || []).map((n) => encartInfo(n));
+  if (p.deja) notes.unshift(encartSucces(t('ui.proposition.deja')));
+  $('#proposition-notes').innerHTML = notes.join('');
+  $('#btn-proposition-appliquer').style.display = p.deja ? 'none' : '';
+  bloc.style.display = 'block';
+}
+
+async function reconnaitrePoste() {
+  const bouton = $('#btn-reconnaitre');
+  bouton.disabled = true;
+  $('#banc-retour').innerHTML = encartInfo(t('ui.proposition.recherche'));
+  try {
+    const p = await pywebview.api.proposer_reglage();
+    $('#banc-retour').innerHTML = '';
+    afficherProposition(p);
+    $('#bloc-proposition').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (e) {
+    console.error(e);
+    $('#banc-retour').innerHTML = encartAttention(t('ui.ext.echec_lancement'));
+  }
+  bouton.disabled = false;
+}
+
+async function appliquerProposition() {
+  const r = await pywebview.api.appliquer_proposition();
+  journaliser(r.ok ? 'ok' : 'attention', r.message);
+  if (!r.ok) return;
+  afficherProposition(null);
+  const d = await pywebview.api.etat_initial();
+  initialiser(d, true);
 }
 
 async function appliquerBanc() {
@@ -2084,6 +2162,17 @@ document.addEventListener('DOMContentLoaded', () => {
     journaliser('ok', t('ui.banc.copie'));
   });
   $('#btn-reglage-auto').addEventListener('click', revenirReglageAuto);
+  $('#btn-reconnaitre').addEventListener('click', reconnaitrePoste);
+  $('#btn-proposition-appliquer').addEventListener('click', appliquerProposition);
+  $('#btn-proposition-plus-tard').addEventListener('click', () => {
+    afficherProposition(null);
+    pywebview.api.ecarter_proposition();
+  });
+  $$('#bloc-rythme .rythme').forEach((b) => {
+    b.addEventListener('click', () => rafraichirRythme({ rythme: b.dataset.rythme }));
+  });
+  $('#opt-rythme-auto').addEventListener('change', (e) =>
+    rafraichirRythme({ rythme_auto: e.target.checked }));
   $('#btn-comp-fichier').addEventListener('click', () => pywebview.api.choisir_fichier_comparaison('audio'));
   $('#btn-comp-reference').addEventListener('click', () => pywebview.api.choisir_fichier_comparaison('reference'));
   $('#btn-comp-lancer').addEventListener('click', lancerComparaison);
