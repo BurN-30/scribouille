@@ -72,6 +72,7 @@ from __future__ import annotations
 
 import gc
 import importlib.util
+import time
 import zlib
 from pathlib import Path
 from types import SimpleNamespace
@@ -602,11 +603,24 @@ class MoteurAvecRepli:
 
     Un pilote graphique trop ancien, un NPU qui ne compile pas le modèle, un
     dépôt OpenVINO que le pare-feu bloque, un périphérique perdu en cours de
-    route : aucune de ces pannes ne doit coûter une transcription. Au
-    chargement, on bascule sur CTranslate2 et on le dit. En cours de
-    transcription, les segments déjà sortis sont gardés et CTranslate2 reprend
-    à la fin du dernier, comme après une coupure.
+    route : aucune de ces pannes ne doit coûter une transcription.
+
+    Un raté isolé ne doit pas non plus coûter la vitesse : à la première erreur,
+    à l'ouverture comme en cours de transcription, le pipeline est libéré,
+    recréé après une courte pause, et le travail repris sur le même
+    périphérique (en cours de transcription : à la fin du dernier segment
+    sorti, donc la fenêtre en cours est rejouée, rien de ce qui est déjà
+    transcrit n'est refait ni perdu). Si l'erreur revient, on bascule sur
+    CTranslate2, qui reprend au même endroit, et on le dit. Un seul rejeu par
+    ouverture et par fichier : une panne qui se répète n'est pas un raté.
+
+    `incidents` garde la trace de chaque erreur, sans texte transcrit, pour
+    l'épreuve d'endurance (`app/endurance.py`).
     """
+
+    #: Pause entre la libération du pipeline et sa recréation, le temps que le
+    #: pilote graphique rende la mémoire du pipeline tombé.
+    PAUSE_RECREATION_S = 3.0
 
     def __init__(self, mat: Materiel, peripherique: str):
         self.materiel = mat
@@ -616,6 +630,7 @@ class MoteurAvecRepli:
         self._actif = self._ov
         self._modele = ""
         self._signaler: Callable[[str, str], None] | None = None
+        self.incidents: list[dict] = []
 
     @property
     def peripherique(self) -> str:
@@ -637,6 +652,10 @@ class MoteurAvecRepli:
     def sur_openvino(self) -> bool:
         return self._actif is self._ov
 
+    def _noter(self, phase: str, cause: BaseException, issue: str) -> None:
+        self.incidents.append({"phase": phase, "issue": issue,
+                               "erreur": f"{type(cause).__name__}: {cause}"[:300]})
+
     def _basculer(self, cause: BaseException) -> None:
         journal.attention("Repli sur CTranslate2 : %s: %s", type(cause).__name__, cause)
         if self._signaler:
@@ -646,23 +665,43 @@ class MoteurAvecRepli:
         self._actif = self._ct2
         self._ct2.charger(self._modele, self._signaler)
 
+    def _adouci(self, niveau: str, texte: str) -> None:
+        # Une panne d'OpenVINO n'est pas une erreur du fichier : le rejeu, puis
+        # le repli, prennent le relais juste après.
+        if self._signaler:
+            self._signaler("attention" if niveau == "erreur" else niveau, texte)
+
+    def _rouvrir(self) -> None:
+        """Libère le pipeline OpenVINO, laisse le pilote souffler, le recrée."""
+        self._ov.liberer()
+        gc.collect()
+        if self.PAUSE_RECREATION_S > 0:
+            time.sleep(self.PAUSE_RECREATION_S)
+        self._ov.charger(self._modele, self._adouci)
+
     def charger(self, modele: str, signaler: Callable[[str, str], None] | None = None) -> None:
         self._modele = modele
         self._signaler = signaler
         if self._actif is self._ct2:
             self._ct2.charger(modele, signaler)
             return
-
-        def adouci(niveau: str, texte: str) -> None:
-            # Une panne d'OpenVINO n'est pas une erreur du fichier : le repli
-            # prend le relais juste après.
-            if signaler:
-                signaler("attention" if niveau == "erreur" else niveau, texte)
-
         try:
-            self._ov.charger(modele, adouci)
+            self._ov.charger(modele, self._adouci)
+            return
         except Exception as exc:
+            premiere = exc
+        journal.exception("Ouverture OpenVINO en échec, nouvel essai après une pause", premiere)
+        try:
+            self._rouvrir()
+        except Exception as exc:
+            self._noter("ouverture", premiere, "repli")
             self._basculer(exc)
+            return
+        self._noter("ouverture", premiere, "rejeu_reussi")
+        journal.info("Ouverture OpenVINO réussie au second essai")
+        if signaler:
+            signaler("info", langues.t("ov.rejeu_ouverture",
+                                       peripherique=nom_peripherique(self._ov.peripherique_ov)))
 
     def liberer(self) -> None:
         self._ov.liberer()
@@ -680,17 +719,47 @@ class MoteurAvecRepli:
             if sur_segment is not None:
                 sur_segment(segment)
 
-        try:
-            return self._ov.transcrire(signal, duree_totale, langue, reglages, amorce,
-                                       progression, interrompu, decalage, relais)
-        except Interruption:
-            raise
-        except Exception as exc:
-            journal.exception("OpenVINO a échoué en cours de transcription", exc)
-            self._basculer(exc)
-            reprise = recus[-1].fin if recus else decalage
-            debut = max(0, int(round((reprise - decalage) * FREQUENCE)))
-            suite, details = self._ct2.transcrire(
-                signal[debut:], duree_totale, langue, reglages, amorce,
-                progression, interrompu, reprise, sur_segment)
-            return recus + suite, details
+        rejoue = False
+        position = decalage
+        while True:
+            debut = max(0, int(round((position - decalage) * FREQUENCE)))
+            try:
+                _segments, details = self._ov.transcrire(
+                    signal[debut:], duree_totale, langue, reglages, amorce,
+                    progression, interrompu, position, relais)
+                details["rejeux_openvino"] = int(rejoue)
+                if rejoue and self.incidents:
+                    self.incidents[-1]["issue"] = "rejeu_reussi"
+                return list(recus), details
+            except Interruption:
+                raise
+            except Exception as exc:
+                cause = exc
+            journal.exception("OpenVINO a échoué en cours de transcription", cause)
+            position = recus[-1].fin if recus else decalage
+            if rejoue:
+                self._noter("transcription", cause, "repli")
+                break
+            rejoue = True
+            journal.attention("Pipeline OpenVINO recréé, reprise à %.1f s sur %s",
+                              position, self._ov.peripherique_ov)
+            if self._signaler:
+                self._signaler("attention", langues.t(
+                    "ov.rejeu", peripherique=nom_peripherique(self._ov.peripherique_ov),
+                    position=presets.formater_duree(position)))
+            try:
+                self._rouvrir()
+            except Exception as exc:
+                self._noter("transcription", cause, "repli")
+                cause = exc
+                break
+            self._noter("transcription", cause, "rejeu")
+
+        self._basculer(cause)
+        debut = max(0, int(round((position - decalage) * FREQUENCE)))
+        suite, details = self._ct2.transcrire(
+            signal[debut:], duree_totale, langue, reglages, amorce,
+            progression, interrompu, position, sur_segment)
+        details["rejeux_openvino"] = int(rejoue)
+        details["repli_ctranslate2"] = True
+        return recus + suite, details

@@ -62,7 +62,8 @@ ce soit et **sans le moindre appel réseau** :
       (annotations, chevauchements, empreintes), rapport sans texte ni chemin,
       exemples anciens du glossaire, application du verdict, veille suspendue ;
   27. OpenVINO sur la puce graphique : faisceau non pris en charge (campagne,
-      réglage du poste), garde-fou des répétitions à température.
+      réglage du poste), garde-fou des répétitions à température, filet de la
+      transcription (rejeu puis repli) sur un moteur simulé.
 
 Rien de ce que fait ce script ne touche à l'installation : tout se passe dans
 un dossier temporaire, effacé à la fin.
@@ -2262,6 +2263,122 @@ def essai_openvino_faisceau() -> None:
         mo.decouper = decouper_reel
 
 
+def essai_filet_openvino() -> None:
+    """Rejeu sur la puce graphique après un raté, repli sur CTranslate2 s'il se répète."""
+    titre("OpenVINO : filet de la transcription (moteur simulé)")
+    import numpy as np
+
+    from app import moteur, moteur_openvino as mo
+    from app.moteur import Segment
+
+    class FauxMoteur:
+        def __init__(self, nom: str, echecs_fenetres=(), echecs_ouverture: int = 0):
+            self.nom, self.peripherique_ov = nom, "GPU"
+            self.peripherique, self.type_calcul, self.tokeniseur = f"{nom}-x", "int8", None
+            self.echecs_fenetres = list(echecs_fenetres)
+            self.echecs_ouverture = echecs_ouverture
+            self.ouvertures = self.liberations = 0
+            self.departs: list[float] = []
+
+        def charger(self, modele, signaler=None):
+            self.ouvertures += 1
+            if self.echecs_ouverture > 0:
+                self.echecs_ouverture -= 1
+                raise RuntimeError("compilation du modèle impossible")
+
+        def liberer(self):
+            self.liberations += 1
+
+        def transcrire(self, signal, duree_totale, langue, reglages, amorce="", progression=None,
+                       interrompu=None, decalage=0.0, sur_segment=None):
+            self.departs.append(round(decalage, 3))
+            sortis, duree, t = [], signal.size / 16000, 0.0
+            while t < duree - 1e-6:
+                debut = round(decalage + t, 3)
+                if self.echecs_fenetres and abs(self.echecs_fenetres[0] - debut) < 1e-6:
+                    self.echecs_fenetres.pop(0)
+                    if self.nom == "stop":
+                        raise moteur.Interruption()
+                    raise RuntimeError(_ERREUR_GPU)
+                segment = Segment(debut=debut, fin=min(debut + 10.0, decalage + duree),
+                                  texte=f"{self.nom}", mots=[])
+                sortis.append(segment)
+                if sur_segment is not None:
+                    sur_segment(segment)
+                t += 10.0
+            return sortis, {"moteur": self.nom}
+
+    mat = materiel.detecter()
+    pause = mo.MoteurAvecRepli.PAUSE_RECREATION_S
+    mo.MoteurAvecRepli.PAUSE_RECREATION_S = 0.0
+    signal = np.zeros(16000 * 60, dtype=np.float32)
+
+    def monter(ov: FauxMoteur, ct2: FauxMoteur):
+        filet = mo.MoteurAvecRepli(mat, "GPU")
+        filet._ov, filet._ct2, filet._actif = ov, ct2, ov
+        lignes: list[tuple[str, str]] = []
+        filet.charger("turbo", lambda niveau, texte: lignes.append((niveau, texte)))
+        return filet, lignes
+
+    def jouer(filet):
+        sauves: list = []
+        segments, details = filet.transcrire(signal, 60.0, "fr", {}, sur_segment=sauves.append)
+        return segments, details, sauves
+
+    try:
+        ov, ct2 = FauxMoteur("ov", echecs_fenetres=[20.0]), FauxMoteur("ct2")
+        filet, lignes = monter(ov, ct2)
+        segments, details, sauves = jouer(filet)
+        verifier([s.debut for s in segments] == [0, 10, 20, 30, 40, 50] and segments == sauves
+                 and all(s.texte == "ov" for s in segments),
+                 "un raté : la fenêtre en cours est rejouée sur la puce graphique, rien n'est perdu ni doublé")
+        verifier(ov.ouvertures == 2 and ov.liberations >= 1 and ov.departs == [0.0, 20.0]
+                 and ct2.ouvertures == 0 and filet.sur_openvino and details["rejeux_openvino"] == 1,
+                 "pipeline libéré puis recréé, CTranslate2 jamais sollicité")
+        verifier([(i["phase"], i["issue"]) for i in filet.incidents] == [("transcription", "rejeu_reussi")]
+                 and "Not Implemented" in filet.incidents[0]["erreur"],
+                 "incident noté avec son erreur exacte, sans texte")
+        verifier(any(n == "attention" and "reprise à" in t for n, t in lignes)
+                 and not any("moteur habituel" in t for _n, t in lignes),
+                 "une ligne sobre dans l'interface : modèle rouvert, reprise")
+
+        ov, ct2 = FauxMoteur("ov", echecs_fenetres=[20.0, 20.0]), FauxMoteur("ct2")
+        filet, lignes = monter(ov, ct2)
+        segments, details, sauves = jouer(filet)
+        verifier([s.debut for s in segments] == [0, 10, 20, 30, 40, 50] and segments == sauves
+                 and [s.texte for s in segments] == ["ov", "ov", "ct2", "ct2", "ct2", "ct2"],
+                 "deux ratés : repli sur CTranslate2 à la fin du dernier segment, rien de perdu")
+        verifier(ov.ouvertures == 2 and ct2.ouvertures == 1 and ct2.departs == [20.0]
+                 and not filet.sur_openvino and details.get("repli_ctranslate2"),
+                 "un seul rejeu sur la puce graphique, puis CTranslate2")
+        verifier([i["issue"] for i in filet.incidents] == ["rejeu", "repli"]
+                 and any("moteur habituel" in t for _n, t in lignes),
+                 "le repli est noté et dit dans l'interface")
+
+        ov, ct2 = FauxMoteur("ov", echecs_ouverture=1), FauxMoteur("ct2")
+        filet, lignes = monter(ov, ct2)
+        verifier(filet.sur_openvino and ov.ouvertures == 2 and ct2.ouvertures == 0
+                 and [(i["phase"], i["issue"]) for i in filet.incidents] == [("ouverture", "rejeu_reussi")],
+                 "ouverture ratée une fois : pipeline recréé après une pause, la puce graphique reste")
+        ov, ct2 = FauxMoteur("ov", echecs_ouverture=2), FauxMoteur("ct2")
+        filet, lignes = monter(ov, ct2)
+        verifier(not filet.sur_openvino and ct2.ouvertures == 1
+                 and [i["issue"] for i in filet.incidents] == ["repli"],
+                 "ouverture ratée deux fois : repli sur CTranslate2")
+
+        ov, ct2 = FauxMoteur("stop", echecs_fenetres=[20.0]), FauxMoteur("ct2")
+        filet, _lignes = monter(ov, ct2)
+        try:
+            jouer(filet)
+            arretee = False
+        except moteur.Interruption:
+            arretee = True
+        verifier(arretee and ov.ouvertures == 1 and not filet.incidents,
+                 "une annulation n'est pas un raté : ni rejeu, ni repli")
+    finally:
+        mo.MoteurAvecRepli.PAUSE_RECREATION_S = pause
+
+
 def principal() -> int:
     print(f"Vérification des fonctions périphériques de Scribouille\n{'=' * 54}")
     with tempfile.TemporaryDirectory(prefix="scribouille-verif-") as brut:
@@ -2295,6 +2412,7 @@ def principal() -> int:
         essai_campagne(base)
         essai_campagne_limites(base)
         essai_openvino_faisceau()
+        essai_filet_openvino()
 
     print(f"\n{'=' * 54}")
     if _echecs:

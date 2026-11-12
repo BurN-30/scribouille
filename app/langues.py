@@ -304,6 +304,8 @@ _FR: dict[str, str] = {
         "OpenVINO n'a pas pu travailler sur {peripherique} : la transcription continue "
         "avec le moteur habituel, sur le processeur. Le détail est dans le journal."
     ),
+    "ov.rejeu": "Raté sur {peripherique} : modèle rouvert, reprise à {position}.",
+    "ov.rejeu_ouverture": "Ouverture sur {peripherique} réussie au second essai.",
 
     # -- banc d'essai (app/banc.py) --------------------------------------
     "banc.titre": "Banc d'essai {nom} {version}, {date}",
@@ -1477,6 +1479,8 @@ _EN: dict[str, str] = {
         "OpenVINO could not run on {peripherique}: transcription carries on with the "
         "usual engine, on the CPU. Details are in the log."
     ),
+    "ov.rejeu": "Glitch on {peripherique}: model reopened, resuming at {position}.",
+    "ov.rejeu_ouverture": "Opening on {peripherique} succeeded on the second try.",
 
     # -- benchmark (app/banc.py) -------------------------------------------
     "banc.titre": "{nom} {version} benchmark, {date}",
