@@ -76,14 +76,15 @@ import time
 import zlib
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Callable
-
-import numpy as np
+from typing import TYPE_CHECKING, Callable
 
 from . import chemins, journal, langues, moteur, presets
 from .journal import ErreurLisible
 from .materiel import Materiel
 from .moteur import Interruption, Mot, Segment
+
+if TYPE_CHECKING:
+    import numpy as np
 
 FREQUENCE = 16000
 
@@ -149,6 +150,36 @@ def effacer_temoin() -> None:
         pass
 
 _peripheriques_vus: list[str] | None = None
+#: Version gardée par la détection de fond (`materiel.json`), pour que la
+#: fenêtre n'ait pas à importer OpenVINO pour l'afficher.
+_version_vue: str | None = None
+#: Premier lancement avec OpenVINO posé, rien de gardé : les périphériques sont
+#: supposés tous présents le temps que la détection de fond les confirme (une
+#: à deux secondes). Un réglage OpenVINO reste ainsi en place sans que la
+#: fenêtre charge OpenVINO ; s'il n'est pas tenable, le rafraîchissement le
+#: retire, et le repli vers CTranslate2 couvre une file lancée entre-temps.
+_supposes = False
+
+
+def amorcer(version_gardee: str, peripheriques: list[str]) -> None:
+    """
+    Reprend la version et les périphériques vus au lancement précédent (voir
+    `materiel.detecter_au_demarrage`). Une détection forcée les remplace.
+    """
+    global _peripheriques_vus, _version_vue, _supposes
+    _peripheriques_vus = [str(p).upper() for p in peripheriques if str(p).upper() in PERIPHERIQUES]
+    _version_vue = version_gardee or None
+    _supposes = False
+
+
+def amorcer_provisoire() -> None:
+    """Rien de gardé : périphériques supposés, en attendant la détection de fond."""
+    global _peripheriques_vus, _version_vue, _supposes
+    _peripheriques_vus, _version_vue, _supposes = None, None, True
+
+
+def peripheriques_confirmes() -> bool:
+    return not _supposes
 
 
 def installe() -> bool:
@@ -157,6 +188,10 @@ def installe() -> bool:
 
 
 def version() -> str:
+    if _version_vue:
+        return _version_vue
+    if _supposes:
+        return ""
     try:
         import openvino_genai as ov_genai  # type: ignore
 
@@ -172,9 +207,12 @@ def peripheriques_disponibles(forcer: bool = False) -> list[str]:
     Liste vide si OpenVINO n'est pas installé. Le résultat est gardé : la
     question coûte une seconde ou deux à la première ouverture des pilotes.
     """
-    global _peripheriques_vus
+    global _peripheriques_vus, _supposes
     if _peripheriques_vus is not None and not forcer:
         return list(_peripheriques_vus)
+    if _supposes and not forcer:
+        return list(PERIPHERIQUES)
+    _supposes = False
     trouves: list[str] = []
     if installe():
         try:
@@ -475,6 +513,8 @@ class MoteurOpenVINO:
             raise ErreurLisible(langues.t("moteur.non_charge.titre"),
                                 langues.t("moteur.non_charge.msg"))
         import openvino_genai as ov_genai  # type: ignore
+
+        import numpy as np
 
         signal = np.ascontiguousarray(signal, dtype=np.float32)
         demande = int(reglages.get("faisceau_openvino") or 1)

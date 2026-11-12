@@ -102,11 +102,93 @@ def essai_decodage(base: Path) -> None:
     verifier(audio.ffmpeg_present() and audio.decodeur_present(), "décodeur présent")
 
 
+# ---------------------------------------------------------------------------
+# 2. Démarrage : rien de lourd avant la fenêtre, matériel gardé sur disque
+# ---------------------------------------------------------------------------
+
+#: Modules qui ne doivent pas être chargés tant qu'aucune file ne tourne.
+LOURDS = ("numpy", "ctranslate2", "faster_whisper", "av", "tokenizers", "huggingface_hub",
+          "onnxruntime", "openvino", "openvino_genai", "torch")
+
+_SONDE_IMPORTS = """
+import json, sys
+sys.path.insert(0, sys.argv[1])
+from app import adaptation, audio, banc, campagne, diarisation, lecture, materiel  # noqa
+from app import moteur, moteur_openvino, presets, reprise, traitement, vocabulaire  # noqa
+moteur.identifiant_depot("large-v3"); moteur.identifiant_depot("Systran/faster-whisper-large-v3")
+campagne.dossier_publique(); campagne.dernier_verdict()
+print(json.dumps(sorted(m for m in {lourds} if m in sys.modules)))
+"""
+
+
+def essai_demarrage(base: Path) -> None:
+    titre("2. Démarrage sans détection bloquante ni import lourd")
+    import json
+    import subprocess
+
+    from app import chemins, materiel, moteur, moteur_openvino
+
+    sortie = subprocess.run([sys.executable, "-c", _SONDE_IMPORTS.replace("{lourds}", repr(LOURDS)), str(RACINE)],
+                            capture_output=True, text=True, timeout=120)
+    charges = json.loads((sortie.stdout or "[]").strip().splitlines()[-1] if sortie.stdout else "[]")
+    verifier(sortie.returncode == 0 and charges == [],
+             "modules de la fenêtre importés sans numpy, CTranslate2, PyAV ni OpenVINO",
+             f"{charges} {sortie.stderr[-300:]}")
+    verifier(moteur.identifiant_depot("turbo") == "mobiuslabsgmbh/faster-whisper-large-v3-turbo"
+             and moteur.identifiant_depot("deepdml/x") == "deepdml/x", "noms de dépôts sans faster-whisper")
+
+    ancienne_racine = chemins.RACINE
+    ancien = (moteur_openvino._peripheriques_vus, moteur_openvino._version_vue, materiel._CACHE)
+    try:
+        chemins.RACINE = base / "donnees"
+        mat, provisoire = materiel.detecter_au_demarrage()
+        verifier(provisoire and not mat.gpus and mat.coeurs_logiques > 0 and mat.ram_go > 0,
+                 "premier lancement : processeur et mémoire lus, cartes en attente (provisoire)")
+        if moteur_openvino.installe():
+            deja_charge = "openvino" in sys.modules
+            verifier(not moteur_openvino.peripheriques_confirmes()
+                     and moteur_openvino.peripheriques_disponibles() == list(moteur_openvino.PERIPHERIQUES)
+                     and moteur_openvino.version() == "" and ("openvino" in sys.modules) == deja_charge,
+                     "premier lancement avec OpenVINO : périphériques supposés, OpenVINO non chargé")
+        lent = {"gpus": [{"nom": "Intel(R) Graphics", "vendeur": "intel", "memoire_mo": 0, "accelere": False,
+                          "pilote": "32.0.101.8801", "note_cle": "gpu.note.intel"}],
+                "npus": [{"nom": "Intel(R) AI Boost", "genre": "npu", "note_cle": "npu.note.intel"}],
+                "a_nvidia": False, "cuda_disponible": False,
+                "openvino": {"installe": moteur_openvino.installe(), "version": "2099.1",
+                             "peripheriques": ["CPU", "GPU", "XYZ"]}}
+        materiel.ecrire_cache(lent)
+        mat, provisoire = materiel.detecter_au_demarrage()
+        verifier(not provisoire and mat.a_graphique_intel() and mat.npus and mat.npus[0].nom == "Intel(R) AI Boost",
+                 "lancement suivant : cartes et NPU repris de materiel.json")
+        verifier(moteur_openvino.peripheriques_disponibles() == ["CPU", "GPU"]
+                 and moteur_openvino.version() == "2099.1",
+                 "périphériques et version d'OpenVINO repris sans charger OpenVINO",
+                 str(moteur_openvino.peripheriques_disponibles()))
+        verifier(materiel.signature(lent) == materiel.signature(materiel.lire_cache())
+                 and materiel.signature({**lent, "a_nvidia": True}) != materiel.signature(lent),
+                 "signature : un changement de matériel se voit")
+        (base / "donnees" / materiel.NOM_CACHE_DISQUE).write_text("{abîmé", encoding="utf-8")
+        verifier(materiel.lire_cache() is None and materiel.detecter_au_demarrage()[1],
+                 "cache illisible : ignoré, matériel provisoire")
+        commande, _dossier = materiel._commande_detection()
+        verifier(commande[-1] == "--detecter-materiel", "détection lente : processus de fond dédié", str(commande))
+    finally:
+        chemins.RACINE = ancienne_racine
+        moteur_openvino._peripheriques_vus, moteur_openvino._version_vue, materiel._CACHE = ancien
+
+    noms = materiel._noms_peripheriques_presents() if sys.platform == "win32" else ["x"]
+    verifier(len(noms) > 5 and all(isinstance(n, str) for n in noms),
+             "SetupAPI : périphériques présents lus sans PowerShell", str(len(noms)))
+    verifier(materiel._MOTIF_NPU.search("Intel(R) AI Boost") and not materiel._MOTIF_NPU.search("USB Input Device"),
+             "motif des NPU : « Input » n'est pas un NPU")
+
+
 def principal() -> int:
     print(f"Vérification du socle de Scribouille\n{'=' * 40}")
     with tempfile.TemporaryDirectory(prefix="scribouille-socle-") as brut:
         base = Path(brut)
         essai_decodage(base)
+        essai_demarrage(base)
     print(f"\n{'=' * 40}")
     if _echecs:
         print(f"{_reussites} vérifications passées, {len(_echecs)} en échec :")

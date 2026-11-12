@@ -15,13 +15,14 @@ from __future__ import annotations
 import gc
 import inspect
 import os
-from typing import Callable
-
-import numpy as np
+from typing import TYPE_CHECKING, Callable
 
 from . import URL_PROJET as _URL_DEPOT
 from . import chemins, journal, langues
 from .journal import ErreurLisible
+
+if TYPE_CHECKING:
+    import numpy as np
 
 # Dépôts essayés dans l'ordre. « community-1 » (pyannote.audio 4, licence
 # CC-BY-4.0, septembre 2025) passe en tête : sa fiche le donne meilleur que 3.1
@@ -214,6 +215,8 @@ def diariser(
             journal.info("Diarisation sur GPU NVIDIA")
     except Exception as exc:
         journal.debug("Bascule GPU impossible pour la diarisation : %s", exc)
+
+    import numpy as np
 
     forme_onde = torch.from_numpy(np.ascontiguousarray(signal, dtype=np.float32)).unsqueeze(0)
     entree = {"waveform": forme_onde, "sample_rate": frequence}

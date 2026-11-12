@@ -19,6 +19,17 @@ et au banc d'essai.
 
 Aucune dependance obligatoire : psutil est utilise s'il est present, sinon on
 retombe sur la bibliotheque standard et sur l'API Windows via ctypes.
+
+Démarrage
+---------
+Ce qui se lit en quelques millisecondes (processeur, cœurs, mémoire, batterie)
+est relu à chaque lancement. Le reste (cartes graphiques, NPU, CUDA,
+périphériques d'OpenVINO) coûtait une à deux secondes avant d'ouvrir la
+fenêtre : il est gardé dans `materiel.json`, servi tel quel au lancement, et
+rafraîchi après l'affichage par un processus de fond (`--detecter-materiel`),
+qui charge OpenVINO à la place de la fenêtre. Les cartes se lisent par WMI dans
+le processus (module `_wmi` de Python), les NPU par SetupAPI : plus de
+PowerShell, ni sa minute d'analyse antivirus sur un poste d'entreprise.
 """
 
 from __future__ import annotations
@@ -31,10 +42,15 @@ import struct
 import subprocess
 import sys
 from dataclasses import dataclass, field, asdict
+from pathlib import Path
 
-from . import journal, langues
+from . import chemins, journal, langues
 
 _CACHE: "Materiel | None" = None
+
+#: Ce que la détection lente a trouvé, gardé d'un lancement à l'autre.
+NOM_CACHE_DISQUE = "materiel.json"
+VERSION_CACHE = 1
 
 _SANS_FENETRE = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
@@ -532,29 +548,59 @@ def _rang_carte(carte: Gpu) -> tuple:
     return (priorite, -carte.memoire_mo)
 
 
-def _cartes_graphiques() -> list[Gpu]:
-    cartes: list[Gpu] = []
-    if sys.platform != "win32":
-        return cartes
+def _requete_wmi(requete: str) -> list[dict]:
+    """
+    Requête WMI dans le processus (module `_wmi` de CPython 3.12), sans
+    PowerShell. Lève une exception si le module manque : on se rabat alors sur
+    PowerShell.
+    """
+    import _wmi  # type: ignore
 
+    lignes = []
+    for bloc in _wmi.exec_query(requete).split("\0\0"):
+        ligne = {}
+        for champ in bloc.split("\0"):
+            cle, egal, valeur = champ.partition("=")
+            if egal:
+                ligne[cle] = valeur
+        if ligne:
+            lignes.append(ligne)
+    return lignes
+
+
+def _cartes_wmi() -> list[dict]:
+    try:
+        return _requete_wmi(
+            "SELECT Name,AdapterCompatibility,AdapterRAM,DriverVersion FROM Win32_VideoController")
+    except Exception as exc:
+        journal.debug("WMI indisponible pour les cartes graphiques (%s), repli sur PowerShell", exc)
     commande = [
         "powershell", "-NoProfile", "-NonInteractive", "-Command",
         "Get-CimInstance Win32_VideoController | "
         "Select-Object Name,AdapterCompatibility,AdapterRAM,DriverVersion | "
         "ConvertTo-Json -Compress",
     ]
-    try:
-        resultat = subprocess.run(
-            commande, capture_output=True, text=True, timeout=20,
-            creationflags=_SANS_FENETRE,
-        )
-        sortie = (resultat.stdout or "").strip()
-        if sortie:
-            import json
+    resultat = subprocess.run(
+        commande, capture_output=True, text=True, timeout=20,
+        creationflags=_SANS_FENETRE,
+    )
+    sortie = (resultat.stdout or "").strip()
+    if not sortie:
+        return []
+    import json
 
-            donnees = json.loads(sortie)
-            if isinstance(donnees, dict):
-                donnees = [donnees]
+    donnees = json.loads(sortie)
+    return [donnees] if isinstance(donnees, dict) else list(donnees)
+
+
+def _cartes_graphiques() -> list[Gpu]:
+    cartes: list[Gpu] = []
+    if sys.platform != "win32":
+        return cartes
+
+    try:
+        donnees = _cartes_wmi()
+        if donnees:
             registre = _memoires_registre()
             for entree in donnees:
                 nom = (entree.get("Name") or "").strip()
@@ -566,7 +612,10 @@ def _cartes_graphiques() -> list[Gpu]:
                 fabricant = (entree.get("AdapterCompatibility") or "").strip()
                 ram = entree.get("AdapterRAM") or 0
                 try:
-                    memoire_mo = max(0, int(ram) // (1024 * 1024))
+                    # WMI dans le processus rend cet entier non signé de 32 bits
+                    # avec son signe : on le remet tel que PowerShell le montrait.
+                    octets = int(ram)
+                    memoire_mo = max(0, (octets + 2 ** 32 if octets < 0 else octets) // (1024 * 1024))
                 except (TypeError, ValueError):
                     memoire_mo = 0
                 if registre.get(nom):
@@ -584,6 +633,70 @@ def _cartes_graphiques() -> list[Gpu]:
     return cartes
 
 
+#: Motif volontairement strict : un « NPU » non délimité attrape « Input ».
+_MOTIF_NPU = re.compile(r"AI Boost|Neural Processor|\bNPU\b|XDNA|Hexagon NPU")
+
+
+def _noms_peripheriques_presents() -> list[str]:
+    """
+    Noms de tous les périphériques présents, comme `Win32_PnPEntity.Name` :
+    le nom convivial s'il existe, la description sinon. Lu par SetupAPI, dans
+    le processus, en quelques dizaines de millisecondes.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    class _InfoPeripherique(ctypes.Structure):
+        _fields_ = [("cbSize", wintypes.DWORD), ("ClassGuid", ctypes.c_byte * 16),
+                    ("DevInst", wintypes.DWORD), ("Reserved", ctypes.c_void_p)]
+
+    setupapi = ctypes.WinDLL("setupapi", use_last_error=True)
+    setupapi.SetupDiGetClassDevsW.restype = ctypes.c_void_p
+    setupapi.SetupDiGetClassDevsW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR, wintypes.HWND, wintypes.DWORD]
+    setupapi.SetupDiEnumDeviceInfo.argtypes = [ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(_InfoPeripherique)]
+    setupapi.SetupDiGetDeviceRegistryPropertyW.argtypes = [
+        ctypes.c_void_p, ctypes.POINTER(_InfoPeripherique), wintypes.DWORD, ctypes.POINTER(wintypes.DWORD),
+        ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+    setupapi.SetupDiDestroyDeviceInfoList.argtypes = [ctypes.c_void_p]
+    presents_toutes_classes = 0x2 | 0x4          # DIGCF_PRESENT | DIGCF_ALLCLASSES
+    nom_convivial, description = 0x0C, 0x00      # SPDRP_FRIENDLYNAME, SPDRP_DEVICEDESC
+    liste = setupapi.SetupDiGetClassDevsW(None, None, None, presents_toutes_classes)
+    if not liste or liste == ctypes.c_void_p(-1).value:
+        raise OSError(ctypes.get_last_error(), "SetupDiGetClassDevsW")
+    noms: list[str] = []
+    tampon = ctypes.create_unicode_buffer(512)
+    try:
+        rang = 0
+        while True:
+            info = _InfoPeripherique()
+            info.cbSize = ctypes.sizeof(_InfoPeripherique)
+            if not setupapi.SetupDiEnumDeviceInfo(liste, rang, ctypes.byref(info)):
+                break
+            rang += 1
+            for propriete in (nom_convivial, description):
+                if setupapi.SetupDiGetDeviceRegistryPropertyW(
+                        liste, ctypes.byref(info), propriete, None, tampon, ctypes.sizeof(tampon), None):
+                    noms.append(tampon.value.strip())
+                    break
+    finally:
+        setupapi.SetupDiDestroyDeviceInfoList(liste)
+    return noms
+
+
+def _noms_npu_powershell() -> list[str]:
+    commande = [
+        "powershell", "-NoProfile", "-NonInteractive", "-Command",
+        "Get-CimInstance Win32_PnPEntity | "
+        "Where-Object { $_.Name -match 'AI Boost|Neural Processor|\\bNPU\\b|XDNA|Hexagon NPU' } | "
+        "Select-Object -ExpandProperty Name -Unique",
+    ]
+    resultat = subprocess.run(
+        commande, capture_output=True, text=True, timeout=25,
+        creationflags=_SANS_FENETRE,
+    )
+    return [ligne.strip() for ligne in (resultat.stdout or "").splitlines() if ligne.strip()]
+
+
 def _accelerateurs_neuronaux() -> list[Accelerateur]:
     """
     Repère un NPU (Intel AI Boost des Core Ultra, AMD XDNA, Qualcomm Hexagon).
@@ -595,20 +708,13 @@ def _accelerateurs_neuronaux() -> list[Accelerateur]:
     if sys.platform != "win32":
         return trouves
 
-    commande = [
-        "powershell", "-NoProfile", "-NonInteractive", "-Command",
-        "Get-CimInstance Win32_PnPEntity | "
-        # Motif volontairement strict : un « NPU » non délimité attrape « Input ».
-        "Where-Object { $_.Name -match 'AI Boost|Neural Processor|\\bNPU\\b|XDNA|Hexagon NPU' } | "
-        "Select-Object -ExpandProperty Name -Unique",
-    ]
     try:
-        resultat = subprocess.run(
-            commande, capture_output=True, text=True, timeout=25,
-            creationflags=_SANS_FENETRE,
-        )
-        for ligne in (resultat.stdout or "").splitlines():
-            nom = ligne.strip()
+        try:
+            noms = [n for n in dict.fromkeys(_noms_peripheriques_presents()) if _MOTIF_NPU.search(n)]
+        except Exception as exc:
+            journal.debug("SetupAPI indisponible (%s), repli sur PowerShell", exc)
+            noms = _noms_npu_powershell()
+        for nom in noms:
             if not nom:
                 continue
             intel = "intel" in nom.lower() or "ai boost" in nom.lower()
@@ -643,14 +749,11 @@ def _cuda_utilisable() -> bool:
         return False
 
 
-def detecter(forcer: bool = False) -> Materiel:
-    global _CACHE
-    if _CACHE is not None and not forcer:
-        return _CACHE
-
-    physiques, logiques = _coeurs()
-    topologie = _topologie()
-    total, libre = _memoire()
+def detection_lente() -> dict:
+    """
+    Ce qui coûte : cartes graphiques, NPU, NVIDIA et CUDA. Renvoie un
+    dictionnaire tel qu'il est gardé dans `materiel.json`.
+    """
     cartes = _cartes_graphiques()
     neuronaux = _accelerateurs_neuronaux()
     nvidia = any(c.vendeur == "nvidia" for c in cartes) or _nvidia_present()
@@ -666,9 +769,17 @@ def detecter(forcer: bool = False) -> Materiel:
             carte.note_cle = "gpu.note.intel"
         else:
             carte.note_cle = "gpu.note.autre"
+    return {"gpus": [asdict(c) for c in cartes], "npus": [asdict(n) for n in neuronaux],
+            "a_nvidia": nvidia, "cuda_disponible": cuda}
 
+
+def _assembler(lent: dict) -> Materiel:
+    """La partie rapide, lue maintenant, plus la partie lente donnée."""
+    physiques, logiques = _coeurs()
+    topologie = _topologie()
+    total, libre = _memoire()
     nom_cpu = _nom_cpu()
-    _CACHE = Materiel(
+    return Materiel(
         cpu_nom=nom_cpu,
         coeurs_physiques=physiques,
         coeurs_logiques=logiques,
@@ -677,20 +788,166 @@ def detecter(forcer: bool = False) -> Materiel:
         portable=_portable(),
         ram_go=total,
         ram_libre_go=libre,
-        gpus=cartes,
-        npus=neuronaux,
-        a_nvidia=nvidia,
-        cuda_disponible=cuda,
+        gpus=[Gpu(**g) for g in lent.get("gpus") or []],
+        npus=[Accelerateur(**n) for n in lent.get("npus") or []],
+        a_nvidia=bool(lent.get("a_nvidia")),
+        cuda_disponible=bool(lent.get("cuda_disponible")),
         systeme=f"{platform.system()} {platform.release()}",
     )
 
-    journal.info("Matériel : %s", _CACHE.resume())
+
+def detecter(forcer: bool = False) -> Materiel:
+    """Détection complète, dans ce processus (outils de mesure, ligne de commande)."""
+    global _CACHE
+    if _CACHE is not None and not forcer:
+        return _CACHE
+    _CACHE = _assembler(detection_lente())
+    _journaliser(_CACHE)
+    return _CACHE
+
+
+def _journaliser(mat: Materiel) -> None:
+    topologie = mat.topologie
+    journal.info("Matériel : %s", mat.resume())
     if topologie.hybride:
         journal.info(
             "Processeur hybride : %s performants, %s efficaces, %s basse consommation",
             topologie.performants, topologie.efficaces, topologie.basse_consommation)
     journal.info(
         "Profil retenu : périphérique=%s, type de calcul=%s, fils=%s",
-        _CACHE.peripherique, _CACHE.type_calcul, _CACHE.fils_calcul,
+        mat.peripherique, mat.type_calcul, mat.fils_calcul,
     )
-    return _CACHE
+
+
+# ---------------------------------------------------------------------------
+# Démarrage de la fenêtre : la détection lente gardée sur disque
+# ---------------------------------------------------------------------------
+
+def fichier_cache() -> Path:
+    return chemins.RACINE / NOM_CACHE_DISQUE
+
+
+def lire_cache() -> dict | None:
+    """Le dernier résultat de la détection lente, ou None s'il manque ou ne se lit pas."""
+    import json
+
+    try:
+        donnees = json.loads(fichier_cache().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(donnees, dict) or donnees.get("version") != VERSION_CACHE:
+        return None
+    return donnees
+
+
+def ecrire_cache(lent: dict) -> None:
+    import json
+
+    cible = fichier_cache()
+    temporaire = cible.with_name(cible.name + ".tmp")
+    try:
+        cible.parent.mkdir(parents=True, exist_ok=True)
+        temporaire.write_text(json.dumps({"version": VERSION_CACHE, **lent}, ensure_ascii=False, indent=1),
+                              encoding="utf-8")
+        os.replace(temporaire, cible)
+    except OSError as exc:
+        journal.debug("Cache du matériel non écrit : %s", exc)
+
+
+def detection_complete_pour_cache() -> dict:
+    """Détection lente, plus les périphériques d'OpenVINO s'il est installé."""
+    lent = detection_lente()
+    ov = {"installe": False, "version": "", "peripheriques": []}
+    try:
+        from . import moteur_openvino
+
+        if moteur_openvino.installe():
+            ov = {"installe": True, "version": moteur_openvino.version(),
+                  "peripheriques": moteur_openvino.peripheriques_disponibles(forcer=True)}
+    except Exception as exc:  # pragma: no cover - dépend du poste
+        journal.debug("OpenVINO non interrogé : %s", exc)
+    lent["openvino"] = ov
+    return lent
+
+
+def detecter_au_demarrage() -> tuple[Materiel, bool]:
+    """
+    Matériel pour ouvrir la fenêtre sans attendre : la partie rapide lue
+    maintenant, la partie lente reprise du dernier lancement. Renvoie aussi
+    vrai si rien n'était gardé (premier lancement) : le matériel est alors
+    provisoire, sans cartes ni NPU, jusqu'au rafraîchissement de fond.
+
+    Les périphériques d'OpenVINO gardés sont confiés au moteur, s'ils valent
+    pour l'installation présente : la fenêtre n'a pas à charger OpenVINO.
+    """
+    global _CACHE
+    lent = lire_cache()
+    _CACHE = _assembler(lent or {})
+    ov_connu = True
+    try:
+        from . import moteur_openvino
+
+        ov = (lent or {}).get("openvino") or {}
+        if lent and bool(ov.get("installe")) == moteur_openvino.installe():
+            moteur_openvino.amorcer(str(ov.get("version") or ""), list(ov.get("peripheriques") or []))
+        elif moteur_openvino.installe():
+            moteur_openvino.amorcer_provisoire()
+            ov_connu = False
+    except Exception:
+        pass
+    _journaliser(_CACHE)
+    return _CACHE, lent is None or not ov_connu
+
+
+def signature(lent: dict | None) -> str:
+    """Ce qui, dans la détection lente, change l'affichage ou le réglage."""
+    import json
+
+    if not lent:
+        return ""
+    return json.dumps({k: lent.get(k) for k in ("gpus", "npus", "a_nvidia", "cuda_disponible", "openvino")},
+                      sort_keys=True, ensure_ascii=False)
+
+
+def _commande_detection() -> tuple[list[str], str]:
+    from .extensions import commande_travailleur
+
+    if chemins.EST_GELE:
+        return commande_travailleur(["--detecter-materiel"])
+    racine = Path(__file__).resolve().parent.parent
+    commande, dossier = commande_travailleur([])
+    return [commande[0], "-m", "app.materiel", "--detecter-materiel"], str(racine)
+
+
+def rafraichir(delai_max: float = 120.0) -> dict | None:
+    """
+    Détection lente dans un processus à part, en priorité basse : il charge
+    OpenVINO et les pilotes à la place de la fenêtre, puis s'en va. Renvoie le
+    nouveau résultat (aussi écrit dans `materiel.json`), ou None en cas d'échec.
+    """
+    commande, dossier = _commande_detection()
+    priorite = 0x00004000 if sys.platform == "win32" else 0   # BELOW_NORMAL_PRIORITY_CLASS
+    try:
+        resultat = subprocess.run(commande, cwd=dossier, capture_output=True, timeout=delai_max,
+                                  creationflags=_SANS_FENETRE | priorite)
+    except Exception as exc:
+        journal.attention("Détection du matériel en arrière-plan impossible : %s", exc)
+        return None
+    if resultat.returncode != 0:
+        detail = (resultat.stderr or b"").decode("utf-8", "replace").strip().splitlines()[-1:] or [""]
+        journal.attention("Détection du matériel en arrière-plan en échec (%s) : %s",
+                          resultat.returncode, detail[0][:300])
+        return None
+    return lire_cache()
+
+
+def principal_detection() -> int:
+    """`--detecter-materiel` : détection lente, résultat dans `materiel.json`."""
+    lent = detection_complete_pour_cache()
+    ecrire_cache(lent)
+    return 0
+
+
+if __name__ == "__main__":
+    if "--detecter-materiel" in sys.argv[1:]:
+        sys.exit(principal_detection())

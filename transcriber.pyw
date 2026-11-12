@@ -76,6 +76,13 @@ extensions.activer()
 if extensions.options_reconnues(sys.argv[1:]):
     sys.exit(extensions.principal_cli(sys.argv[1:]))
 
+# Détection lente du matériel (cartes, NPU, CUDA, périphériques d'OpenVINO),
+# lancée par la fenêtre après son affichage : résultat dans « materiel.json ».
+if "--detecter-materiel" in sys.argv[1:]:
+    from app import materiel as _materiel
+
+    sys.exit(_materiel.principal_detection())
+
 # Banc d'essai de vitesse, en ligne de commande. « --banc-essai » est le
 # processus travailleur d'un essai, lancé par le banc lui-même : comme pour les
 # extensions, il n'écrit pas dans le journal de la fenêtre. Dans la version
@@ -380,7 +387,10 @@ class Passerelle:
         # Seulement à l'ouverture de la fenêtre, jamais depuis la ligne de
         # commande (banc, comparaison, campagne ne modifient rien).
         vocabulaire.retirer_exemples_anciens()
-        self.materiel = materiel.detecter()
+        # Matériel gardé du lancement précédent : la fenêtre s'ouvre sans
+        # attendre les pilotes. La détection lente est relancée en arrière-plan
+        # une fois la page chargée (`rafraichir_materiel_en_fond`).
+        self.materiel, self._materiel_provisoire = materiel.detecter_au_demarrage()
         # Réglage de vitesse mesuré par le banc d'essai et accepté sur ce poste.
         self._effet_reglage = reglage_machine.appliquer_au_materiel(self.config, self.materiel)
         self.file = traitement.FileTraitement(self.materiel)
@@ -519,18 +529,7 @@ class Passerelle:
             "config": self.config,
             "materiel": self.materiel.en_dict(),
             "recommandation": presets.recommandation(self.materiel, proposition, rythme_choisi),
-            "presets": [
-                {
-                    "cle": p["cle"],
-                    "nom": presets.nom_preset(p["cle"]),
-                    "resume": presets.resume_preset(p["cle"]),
-                    "modele": moteur_nom_court(p["modele"]),
-                    "telechargement": langues.octets(p["telechargement_go"] * 1024 ** 3),
-                    "facteur": presets.facteur_temps_reel(p["cle"], self.materiel),
-                    "pour_une_heure": presets.pour_une_heure(p["cle"], self.materiel, rythme_choisi),
-                }
-                for p in presets.PRESETS.values()
-            ],
+            "presets": self._presets_affiches(rythme_choisi),
             "modeles_avances": presets.modeles_avances(),
             "langues_interface": langues.liste_langues(),
             "glossaire": {
@@ -567,6 +566,73 @@ class Passerelle:
             "proposition": self._proposition_au_demarrage(proposition),
         }
 
+    # -- matériel rafraîchi après l'affichage --------------------------------
+
+    def _etat_materiel(self) -> dict:
+        """Ce qui, à l'écran, dépend du matériel : renvoyé quand il change."""
+        rythme_choisi = rythme.normaliser(self.config.get("rythme"))
+        proposition = self._proposition_du_poste()
+        return {
+            "materiel": self.materiel.en_dict(),
+            "recommandation": presets.recommandation(self.materiel, proposition, rythme_choisi),
+            "presets": self._presets_affiches(rythme_choisi),
+            "avertissements": self._avertissements(),
+            "vitesse": self.etat_vitesse(),
+            "rythme": self.etat_rythme(),
+            "proposition": self._proposition_au_demarrage(proposition),
+        }
+
+    def rafraichir_materiel_en_fond(self) -> None:
+        """
+        Détection lente dans un processus de fond, après l'affichage. Si elle
+        trouve autre chose que ce qui était gardé (premier lancement, station
+        d'accueil, pilote changé), l'écran est mis à jour ; pendant une
+        transcription, le matériel en cours n'est pas remplacé (le résultat
+        servira au lancement suivant).
+        """
+        def travail() -> None:
+            try:
+                rafraichir()
+            except Exception as exc:
+                journal.exception("Matériel non relu en arrière-plan", exc)
+
+        def rafraichir() -> None:
+            avant = materiel.signature(materiel.lire_cache())
+            lent = materiel.rafraichir()
+            if lent is None:
+                return
+            if materiel.signature(lent) == avant and not self._materiel_provisoire:
+                return
+            if self.file.occupee:
+                journal.info("Matériel changé : pris en compte au prochain lancement")
+                return
+            from app import moteur_openvino
+
+            ov = lent.get("openvino") or {}
+            if bool(ov.get("installe")) == moteur_openvino.installe():
+                moteur_openvino.amorcer(str(ov.get("version") or ""), list(ov.get("peripheriques") or []))
+            self.materiel, self._materiel_provisoire = materiel.detecter_au_demarrage()
+            self.file.materiel = self.materiel
+            self._effet_reglage = reglage_machine.appliquer_au_materiel(self.config, self.materiel)
+            journal.info("Matériel relu en arrière-plan : %s", self.materiel.resume())
+            self._js(f"onMateriel({_json(self._etat_materiel())})")
+
+        self._fond(travail)
+
+    def _presets_affiches(self, rythme_choisi: str) -> list[dict]:
+        return [
+            {
+                "cle": p["cle"],
+                "nom": presets.nom_preset(p["cle"]),
+                "resume": presets.resume_preset(p["cle"]),
+                "modele": moteur_nom_court(p["modele"]),
+                "telechargement": langues.octets(p["telechargement_go"] * 1024 ** 3),
+                "facteur": presets.facteur_temps_reel(p["cle"], self.materiel),
+                "pour_une_heure": presets.pour_une_heure(p["cle"], self.materiel, rythme_choisi),
+            }
+            for p in presets.PRESETS.values()
+        ]
+
     # -- rythme et réglage proposé pour le poste ----------------------------
 
     def etat_rythme(self) -> dict:
@@ -598,9 +664,11 @@ class Passerelle:
     def _proposition_au_demarrage(self, proposition: dict | None) -> dict | None:
         """
         La proposition ne s'affiche d'elle-même qu'au tout premier lancement, et
-        tant qu'elle n'a été ni appliquée ni écartée ; sinon, sur demande.
+        tant qu'elle n'a été ni appliquée ni écartée ; sinon, sur demande. Tant
+        que le matériel est provisoire (cartes pas encore lues), elle attend :
+        elle arrive avec le matériel, quelques secondes plus tard.
         """
-        if not self._premier_lancement or self._proposition.get("_vue"):
+        if not self._premier_lancement or self._proposition.get("_vue") or self._materiel_provisoire:
             return None
         if not proposition or proposition.get("deja"):
             return None
@@ -613,19 +681,22 @@ class Passerelle:
 
         if not self.file.occupee:
             # Le matériel a pu changer depuis l'ouverture (station d'accueil,
-            # pilote réinstallé) : il est relu, sauf pendant une transcription.
+            # pilote réinstallé) : il est relu, sauf pendant une transcription,
+            # par le processus de fond (OpenVINO compris), pas dans la fenêtre.
             try:
-                self.materiel = materiel.detecter(forcer=True)
-                self.file.materiel = self.materiel
+                lent = materiel.rafraichir()
+                if lent is not None:
+                    from app import moteur_openvino
+
+                    ov = lent.get("openvino") or {}
+                    if bool(ov.get("installe")) == moteur_openvino.installe():
+                        moteur_openvino.amorcer(str(ov.get("version") or ""),
+                                                list(ov.get("peripheriques") or []))
+                    self.materiel, self._materiel_provisoire = materiel.detecter_au_demarrage()
+                    self.file.materiel = self.materiel
             except Exception as exc:
                 journal.exception("Nouvelle détection du matériel impossible", exc)
             self._effet_reglage = reglage_machine.appliquer_au_materiel(self.config, self.materiel)
-        try:
-            from app import moteur_openvino
-
-            moteur_openvino.peripheriques_disponibles(forcer=True)
-        except Exception:
-            pass
         proposition = adaptation.proposition_du_poste(self.materiel)
         proposition["deja"] = adaptation.deja_en_place(proposition, self.config, self.materiel)
         self._proposition = {**proposition, "_vue": True}
@@ -1081,8 +1152,9 @@ class Passerelle:
         ov = ext_module.etat_openvino()
         ov["en_cours"] = self._installation_openvino is not None
         ov["version"] = moteur_openvino.version() if ov["installee"] else ""
+        # Rien d'affiché tant que la détection de fond ne les a pas confirmés.
         ov["peripheriques"] = (moteur_openvino.peripheriques_disponibles()
-                               if ov["installee"] else [])
+                               if ov["installee"] and moteur_openvino.peripheriques_confirmes() else [])
         ov["utile"] = bool(self.materiel.a_graphique_intel()
                            or any("intel" in n.nom.lower() for n in self.materiel.npus)
                            or "intel" in (self.materiel.cpu_nom or "").lower()
@@ -1189,6 +1261,7 @@ class Passerelle:
 
         importlib.invalidate_caches()
         moteur_openvino.peripheriques_disponibles(forcer=True)
+        self.rafraichir_materiel_en_fond()
         journal.info("OpenVINO installé : %s", detail[0])
         conclure({"etat": "installee", "message": langues.t("ov.installe")})
 
@@ -2055,6 +2128,8 @@ def _installer_depot(passerelle: Passerelle, fenetre) -> None:
 def _au_demarrage(passerelle: Passerelle, fenetre) -> None:
     _installer_depot(passerelle, fenetre)
     passerelle.charger_historique()
+    # Détection lente du matériel, après l'affichage et hors de la fenêtre.
+    passerelle.rafraichir_materiel_en_fond()
     # Traces de reprise devenues sans objet : fichier source disparu, ou plus
     # vieilles que la rétention. Rien de visible, juste du ménage.
     passerelle._fond(reprise.purger)

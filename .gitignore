@@ -39,6 +39,9 @@ rapports-banc/
 # Comparaisons des moteurs : contiennent des transcriptions, jamais dans le dépôt.
 comparaisons/
 maj-etat.json
+# Matériel détecté (cartes, NPU, périphériques d'OpenVINO), propre au poste.
+materiel.json
+materiel.json.tmp
 surveillance-vus.json
 calibration.json
 _ffmpeg/

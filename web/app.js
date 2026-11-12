@@ -114,6 +114,22 @@ function initialiser(d, silencieux) {
   pywebview.api.charger_historique();
 }
 
+/* Materiel relu en arriere-plan apres l'ouverture (premier lancement, station
+   d'accueil, pilote change) : seules les parties qui en dependent sont
+   redessinees, le reste de l'ecran ne bouge pas. */
+function onMateriel(d) {
+  if (!d) return;
+  etat.presets = d.presets || etat.presets;
+  etat.vitesse = d.vitesse || etat.vitesse;
+  etat.rythme = d.rythme || etat.rythme;
+  dessinerMateriel(d.materiel, d.recommandation);
+  dessinerPresets(d.recommandation);
+  majVitesse();
+  majRythme();
+  afficherAvertissements(d.avertissements || []);
+  if (d.proposition) afficherProposition(d.proposition);
+}
+
 /* --------------------------------------------------- Langue de l'interface
 
    Sans rapport avec la langue parlee : celle-ci pilote le moteur de

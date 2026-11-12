@@ -74,9 +74,23 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-import numpy as np
-
 from . import NOM_APPLICATION, VERSION, chemins, journal, langues, materiel, moteur, presets
+
+
+class _NumpyAuBesoin:
+    """
+    numpy chargé au premier calcul seulement : la fenêtre lit le verdict de la
+    campagne au démarrage (`dernier_verdict`) sans avoir besoin de numpy.
+    """
+
+    def __getattr__(self, nom: str):
+        import numpy
+
+        globals()["np"] = numpy
+        return getattr(numpy, nom)
+
+
+np = _NumpyAuBesoin()
 
 MARQUE = "SCRIBOUILLE-CAMPAGNE|"
 DOSSIER_CAMPAGNES = chemins.RACINE / "campagnes"
@@ -951,9 +965,10 @@ def _textes(dossier: Path, cle: str) -> dict:
 
 
 def dossier_publique() -> Path:
-    from .corpus import VERSION_CORPUS
+    # Le manifeste seul : `corpus` charge numpy, la fenêtre lit ce dossier au démarrage.
+    from .corpus_manifeste import MANIFESTE
 
-    return DOSSIER_CAMPAGNES / f"publique-v{VERSION_CORPUS}"
+    return DOSSIER_CAMPAGNES / f"publique-v{int(MANIFESTE['version'])}"
 
 
 def lire_proprietes(texte: str) -> dict:
