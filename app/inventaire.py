@@ -520,7 +520,7 @@ def liberer(cles: list[str], config: dict | None = None) -> dict:
             bilan["inconnus"].append(cle)
             continue
         octets = 0
-        for chemin in poste.chemins:
+        for chemin in _a_liberer(poste):
             liberes, erreur = _supprimer(chemin, permises)
             octets += liberes
             if erreur:
@@ -529,6 +529,29 @@ def liberer(cles: list[str], config: dict | None = None) -> dict:
         bilan["octets"] += octets
     _ranger_dossiers_vides()
     return bilan
+
+
+def _a_liberer(poste: Poste) -> list[Path]:
+    """
+    Ce que « libérer » supprime d'un poste. Les journaux : tous sauf celui de
+    la session en cours, que ce processus tient ouvert (le supprimer échouait
+    et l'écran annonçait un élément « non supprimé »).
+    """
+    if poste.cle != "journaux":
+        return list(poste.chemins)
+    from . import journal
+
+    try:
+        courant = journal.fichier().resolve()
+    except Exception:
+        courant = None
+    fichiers: list[Path] = []
+    for dossier in poste.chemins:
+        if dossier.is_dir():
+            fichiers += [f for f in dossier.iterdir() if courant is None or f.resolve() != courant]
+        else:
+            fichiers.append(dossier)
+    return fichiers
 
 
 def _ranger_dossiers_vides(complet: bool = False) -> None:

@@ -1059,7 +1059,7 @@ class Passerelle:
     def usage_instantane(self) -> dict:
         fenetre = self._sonde_fenetre.releve()
         moteur_releve = self.moteur.usage()
-        affichage = {"processus": 0, "memoire_octets": 0}
+        affichage = {"processus": 0, "memoire_octets": 0, "prive_octets": 0}
         try:
             import psutil  # type: ignore
 
@@ -1069,7 +1069,9 @@ class Passerelle:
                     continue
                 if "webview" in (enfant.name() or "").lower():
                     affichage["processus"] += 1
-                    affichage["memoire_octets"] += int(enfant.memory_info().rss)
+                    infos = enfant.memory_info()
+                    affichage["memoire_octets"] += int(infos.rss)
+                    affichage["prive_octets"] += int(getattr(infos, "private", 0) or 0)
         except Exception:
             pass
         total = sum(int((r or {}).get("memoire_octets") or 0) for r in (fenetre, moteur_releve))

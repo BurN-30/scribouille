@@ -142,14 +142,17 @@ async function majRessources() {
   bloc.hidden = false;
   const carte = (titre, valeur) => `<div class="ressource"><div class="titre">${ech(titre)}</div>
     <div class="valeur">${ech(valeur)}</div></div>`;
+  // Memoire privee (celle que le processus engage pour lui seul) : la meme
+  // mesure que les chiffres de la documentation ; la memoire de travail compte
+  // aussi les pages partagees avec d'autres processus.
   const mesure = (u) => t('ui.espace.mesure_ressource', {
-    memoire: formaterOctets(u.memoire_octets || 0),
+    memoire: formaterOctets(u.prive_octets || u.memoire_octets || 0),
     processeur: nombreLocal(u.processeur_pct || 0, 0),
   });
   const cartes = [];
   if (usage.fenetre) cartes.push(carte(t('ui.espace.fenetre'), mesure(usage.fenetre)));
   if (usage.affichage && usage.affichage.processus) {
-    cartes.push(carte(t('ui.espace.affichage'), formaterOctets(usage.affichage.memoire_octets || 0)));
+    cartes.push(carte(t('ui.espace.affichage'), formaterOctets(usage.affichage.prive_octets || usage.affichage.memoire_octets || 0)));
   }
   const etatMoteur = t('ui.moteur.' + ((moteur && moteur.etat) || 'arrete'));
   cartes.push(carte(t('ui.espace.moteur') + (moteur && moteur.modele ? ` (${moteur.modele})` : ''),
