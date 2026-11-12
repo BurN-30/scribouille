@@ -88,7 +88,7 @@ jobs:
           # Le mode « --verifier » contrôle les imports, FFmpeg et l'écriture des
           # dossiers de travail. Son code de retour arrête la chaîne si quelque
           # chose manque, avant que le programme d'installation ne soit fabriqué.
-          & .\dist\Scribouille\scribouille-verifier.exe
+          & .\dist\Scribouille\scribouille.com --verifier
           if ($LASTEXITCODE -ne 0) {
             Write-Error "La verification de l'executable a echoue."
             exit 1
