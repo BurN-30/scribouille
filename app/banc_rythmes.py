@@ -17,8 +17,9 @@ application de l'utilisateur. On relève :
     prise par la transcription en moyenne ;
   - la gêne : durée du calcul témoin rapportée à sa durée sur un poste au repos
     (médiane et 95e centile), et retard du réveil du témoin (95e centile, ms) ;
-  - le taux d'erreur sur l'extrait, pour vérifier qu'aucun rythme ne change le
-    texte (les rythmes ne touchent ni au modèle ni au décodage).
+  - le taux d'erreur sur l'extrait : les rythmes ne touchent ni au modèle ni au
+    faisceau, mais le passage un à un du mode discret décode autrement que les
+    lots (quelques mots d'écart sur l'extrait, au niveau du bruit de mesure).
 
 Ligne de commande :
 
@@ -266,7 +267,7 @@ def rediger(mat, moteur_voulu: str, peripherique: str, repos: dict, resultats: l
             memoire=n(r.get("memoire_go", 0), 1), libre=n(r.get("libre_pct", 0), 0),
             med=n(g["median"], 2), p95=n(g["p95"], 2), reveil=n(g["reveil_p95_ms"], 1),
             wer=n(r.get("wer", 0), 1), fils=r.get("fils_rythme") or r.get("fils") or "-",
-            lot=r.get("lot", "-"), priorite=r.get("priorite", "?")))
+            lot=r.get("lot", "-"), priorite=t(f"rbanc.priorite.{r.get('priorite', 'normale')}")))
     if coef:
         lignes += ["", t("rbanc.section.coefficients")]
         for nom, valeur in coef.items():

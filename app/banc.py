@@ -224,7 +224,9 @@ def executer_essai(parametres: dict) -> dict:
         regulateur = rythme_module.Regulateur(mat, bornes.rythme, False)
         regulateur.sur_puce = sur_puce
         reglages["frein"] = rythme_module.Frein(regulateur)
-        resultat.update({"lot": reglages["lot"], "fils_rythme": getattr(instance, "fils_effectifs", 0)})
+        fils_ov = (getattr(instance, "proprietes", {}) or {}).get("INFERENCE_NUM_THREADS") if not sur_puce else 0
+        resultat.update({"lot": reglages["lot"],
+                         "fils_rythme": getattr(instance, "fils_effectifs", 0) or fils_ov or "auto"})
     temps_cpu = sum(processus.cpu_times()[:2]) if processus is not None else 0.0
     debut = time.perf_counter()
     segments, _ = instance.transcrire(signal, duree, "fr", reglages)
