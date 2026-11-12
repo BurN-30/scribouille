@@ -20,10 +20,15 @@ Huit contrôles :
      gabarit de ce poste. Ce qu'une archive ne transporte pas, elle ne le
      remplace pas.
   6. ARCHIVE DE FORMAT 2 SANS GABARIT : même règle.
-  7. FORMAT TROP RÉCENT : une archive de format 3 est refusée, avec le message
+  7. FORMAT TROP RÉCENT : une archive de format 4 est refusée, avec le message
      prévu pour cela.
   8. FILET : la sauvegarde automatique écrite avant un import emporte bien le
      gabarit courant, sans quoi le retour en arrière serait incomplet.
+  9. ALLER-RETOUR : tout ce que l'utilisateur a produit ou réglé (vocabulaire
+     du format 2, propositions apprises, glossaire, corrections, gabarit,
+     réglages) part dans l'archive et revient à l'identique, octet pour
+     octet, sur un poste vidé ; un vocabulaire illisible est refusé avant
+     toute écriture.
 
 Rien n'est touché en dehors d'un dossier temporaire : les fichiers personnels
 du poste qui exécute ce contrôle ne sont ni lus ni écrits.
@@ -47,7 +52,7 @@ RACINE = Path(__file__).resolve().parent.parent
 if str(RACINE) not in sys.path:
     sys.path.insert(0, str(RACINE))
 
-from app import NOM_APPLICATION, VERSION, chemins, donnees, langues  # noqa: E402
+from app import NOM_APPLICATION, VERSION, chemins, donnees, langues, vocabulaire_v2  # noqa: E402
 
 _echecs: list[str] = []
 _reussites = 0
@@ -83,6 +88,7 @@ def installer_bac(bac: Path) -> None:
     chemins.FICHIER_VOCABULAIRE = bac / "vocabulaire.txt"
     chemins.FICHIER_CORRECTIONS = bac / "corrections.txt"
     chemins.FICHIER_GABARIT_IA = bac / "gabarit-ia.txt"
+    vocabulaire_v2.FICHIER_PERSONNEL = bac / "vocabulaire.toml"
     # Les messages comparés sont ceux du catalogue français : la langue de
     # Windows sur le poste qui exécute ce contrôle ne doit pas les changer.
     langues.definir("fr")
@@ -154,7 +160,7 @@ def essai_export(bac: Path) -> Path:
     )
 
     manifeste = manifeste_de(cible)
-    verifier(manifeste.get("format") == 2, "manifeste en format 2",
+    verifier(manifeste.get("format") == 3, "manifeste en format 3",
              str(manifeste.get("format")))
     verifier(donnees.FICHIER_GABARIT in manifeste.get("fichiers", []),
              "gabarit déclaré dans le manifeste")
@@ -174,7 +180,7 @@ def essai_export_sans_gabarit(bac: Path) -> Path:
     verifier(donnees.FICHIER_GABARIT not in dedans, "aucun gabarit joint",
              ", ".join(dedans))
     manifeste = manifeste_de(cible)
-    verifier(manifeste.get("format") == 2, "manifeste en format 2 malgré tout")
+    verifier(manifeste.get("format") == 3, "manifeste en format 3 malgré tout")
     verifier(donnees.FICHIER_GABARIT not in manifeste.get("fichiers", []),
              "gabarit absent du manifeste")
 
@@ -297,14 +303,14 @@ def essai_archive_ancien_nom(bac: Path) -> None:
 
 
 def essai_format_trop_recent(bac: Path) -> None:
-    titre("[8] Archive de format 3, refusée")
+    titre("[8] Archive de format 4, refusée")
 
-    archive = fabriquer_archive(bac / "format-3.zip", 3, {
+    archive = fabriquer_archive(bac / "format-4.zip", 4, {
         "vocabulaire.txt": "Terme venu du futur\n",
     })
     resultat = donnees.analyser(archive)
-    verifier(resultat.get("ok") is False, "archive de format 3 refusée")
-    attendu = langues.t("arch.format_recent", application=NOM_APPLICATION, format=3,
+    verifier(resultat.get("ok") is False, "archive de format 4 refusée")
+    attendu = langues.t("arch.format_recent", application=NOM_APPLICATION, format=4,
                         lu=donnees.FORMAT_ARCHIVE)
     verifier(resultat.get("message") == attendu, "message de refus inchangé",
              str(resultat.get("message")))
@@ -345,6 +351,106 @@ def essai_filet(bac: Path) -> None:
              "la sauvegarde se réimporte et restitue le gabarit")
 
 
+VOCABULAIRE_TOML = """# Vocabulaire personnel de Scribouille
+format = "scribouille-vocabulaire"
+version = 1
+portee = "personnel"
+langue = "fr"
+
+[[terme]]
+forme = "L'astreinte"
+categorie = "metier"
+fautes = [{forme = "la streinte"}]
+origine = "appris"
+etat = "actif"
+
+[[terme]]
+forme = "Kubernetes"
+categorie = "produit"
+fautes = [{forme = "cube air nettesse"}]
+origine = "saisi"
+etat = "actif"
+
+[[terme]]
+forme = "Bérénice"
+categorie = "personne"
+origine = "appris"
+etat = "propose"
+
+[[terme]]
+forme = "Glorpf"
+categorie = "autre"
+origine = "appris"
+etat = "refuse"
+"""
+
+
+def _fichiers_utilisateur(bac: Path) -> dict[str, bytes]:
+    """Tout ce que l'utilisateur a produit ou réglé, octet pour octet."""
+    noms = ["config.json", "vocabulaire.txt", "corrections.txt", "gabarit-ia.txt", "vocabulaire.toml"]
+    noms += sorted(p.name for p in bac.glob("vocabulaire-propositions-*.toml"))
+    return {n: (bac / n).read_bytes() for n in noms if (bac / n).is_file()}
+
+
+def essai_aller_retour(bac: Path) -> None:
+    titre("[10] Aller-retour : tout ce que l'utilisateur a produit ou réglé revient à l'identique")
+    from app import config as config_module
+
+    poser_donnees()
+    vocabulaire_v2.FICHIER_PERSONNEL.write_text(VOCABULAIRE_TOML, encoding="utf-8")
+    (bac / "vocabulaire-propositions-20261112-1530.toml").write_text(
+        VOCABULAIRE_TOML.replace("personnel", "personnel").replace('etat = "actif"', 'etat = "propose"'),
+        encoding="utf-8")
+    sortie = bac / "Mes transcriptions"
+    sortie.mkdir(exist_ok=True)
+    config = config_module.charger()
+    config.update({"preset": "rapide", "rythme": "discret", "langue": "en", "dossier_sortie": str(sortie),
+                   "formats": {"txt": True, "srt": True, "vtt": False, "horodatage": False}, "theme": "sombre"})
+    config_module.sauver(config)
+    avant = _fichiers_utilisateur(bac)
+    archive = bac / "aller-retour.zip"
+    resultat = donnees.exporter(archive)
+    dedans = membres(archive)
+    verifier(resultat.get("ok") and {"vocabulaire.toml", "vocabulaire-propositions-20261112-1530.toml"} <= set(dedans),
+             "le vocabulaire du format 2 et les propositions sont dans l'archive", ", ".join(dedans))
+    verifier("4 termes" in str(resultat.get("message")) or "7 termes" in str(resultat.get("message")),
+             "le message compte les termes du vocabulaire", str(resultat.get("message")))
+    apercu = donnees.analyser(archive)
+    verifier((apercu.get("vocabulaire") or {}).get("nb") == 4 and (apercu.get("vocabulaire") or {}).get("propositions") == 1,
+             "l'aperçu annonce le vocabulaire (4 termes) et les propositions", str(apercu.get("vocabulaire")))
+
+    # Poste vidé : rien de l'utilisateur ne reste.
+    for nom in avant:
+        (bac / nom).unlink()
+    resultat = donnees.importer(archive)
+    apres = _fichiers_utilisateur(bac)
+    verifier(resultat.get("ok") is True, "import sur un poste vidé", str(resultat.get("message")))
+    differents = sorted(n for n in set(avant) | set(apres) if avant.get(n) != apres.get(n))
+    verifier(not differents, "chaque fichier revient à l'identique, octet pour octet", ", ".join(differents))
+    voc = vocabulaire_v2.lire(vocabulaire_v2.FICHIER_PERSONNEL)[0]
+    verifier(sorted((e.forme, e.etat) for e in voc.entrees) == sorted([
+        ("L'astreinte", "actif"), ("Kubernetes", "actif"), ("Bérénice", "propose"), ("Glorpf", "refuse")]),
+        "termes actifs, à relire et refusés rétablis")
+
+    # Une archive ancienne (format 2, sans vocabulaire.toml) ne l'efface pas.
+    ancienne = fabriquer_archive(bac / "format-2-sans-toml.zip", 2, {"vocabulaire.txt": "Autre\n"})
+    donnees.importer(ancienne)
+    verifier(vocabulaire_v2.FICHIER_PERSONNEL.read_text(encoding="utf-8") == VOCABULAIRE_TOML,
+             "une archive qui ne porte pas le vocabulaire le laisse en place")
+
+    # Vocabulaire illisible : refusé avant toute écriture.
+    abime = fabriquer_archive(bac / "vocabulaire-abime.zip", 3, {"vocabulaire.toml": "format = [[[ oups\n",
+                                                                  "vocabulaire.txt": "Rien\n"})
+    refus = donnees.importer(abime)
+    verifier(refus.get("ok") is False and "vocabulaire" in str(refus.get("message")).lower()
+             and vocabulaire_v2.FICHIER_PERSONNEL.read_text(encoding="utf-8") == VOCABULAIRE_TOML
+             and (bac / "vocabulaire.txt").read_text(encoding="utf-8") == "Autre\n",
+             "vocabulaire illisible : archive refusée, rien d'écrit", str(refus.get("message")))
+    intrus = fabriquer_archive(bac / "proposition-mal-nommee.zip", 3,
+                               {"vocabulaire-propositions-../x.toml": VOCABULAIRE_TOML})
+    verifier(donnees.analyser(intrus).get("ok") is False, "un nom de propositions hors motif est refusé")
+
+
 # ---------------------------------------------------------------------------
 
 def principal() -> int:
@@ -363,6 +469,7 @@ def principal() -> int:
         essai_archive_ancien_nom(bac)
         essai_format_trop_recent(bac)
         essai_filet(bac)
+        essai_aller_retour(bac)
 
     print(f"\n{'=' * 50}")
     if _echecs:

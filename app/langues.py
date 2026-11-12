@@ -850,7 +850,7 @@ _FR: dict[str, str] = {
     "arch.type": "Archive de données Scribouille (*.zip)",
     "arch.tous_fichiers": "Tous les fichiers (*.*)",
     "arch.aucun_emplacement": "Aucun emplacement d'enregistrement choisi.",
-    "arch.export_message": "Glossaire ({termes} termes), corrections ({regles} règles) et réglages enregistrés dans « {chemin} ». Ni le jeton Hugging Face, ni les journaux, ni les modèles n'y sont.",
+    "arch.export_message": "Vocabulaire ({termes} termes), corrections ({regles} règles), gabarit et réglages enregistrés dans « {chemin} ». Ni le jeton Hugging Face, ni les journaux, ni les modèles n'y sont.",
     "arch.membre_inattendu": (
         "L'archive contient un élément inattendu (« {nom} »). Ce n'est pas un export "
         "Scribouille, ou il a été modifié."
@@ -900,6 +900,7 @@ _FR: dict[str, str] = {
     "arch.declare_absent": "Le manifeste annonce « {nom} », mais l'archive ne le contient pas.",
     "arch.config_illisible": "Les réglages de cette archive (config.json) sont illisibles.",
     "arch.config_forme": "Les réglages de cette archive n'ont pas la forme attendue.",
+    "arch.vocabulaire_illisible": "Le vocabulaire « {nom} » de cette archive est illisible ({erreur}) : rien n'a été importé.",
     "arch.sauvegarde_echouee": (
         "La sauvegarde de vos données actuelles a échoué, l'import est annulé pour ne "
         "rien écraser. {detail}"
@@ -912,7 +913,7 @@ _FR: dict[str, str] = {
         "{libelle} : « {valeur} » n'existe pas sur ce poste, votre réglage actuel est "
         "conservé."
     ),
-    "arch.import_message": "Import terminé : glossaire ({termes} termes), corrections ({regles} règles) et réglages remplacés.",
+    "arch.import_message": "Import terminé : vocabulaire ({termes} termes), corrections ({regles} règles) et réglages remplacés.",
     "arch.message_sauvegarde": (
         "Vos données d'avant l'import ont été enregistrées dans « {chemin} ». Ce fichier "
         "se réimporte de la même façon si vous voulez revenir en arrière."
@@ -2261,7 +2262,7 @@ _EN: dict[str, str] = {
     "arch.type": "Scribouille data archive (*.zip)",
     "arch.tous_fichiers": "All files (*.*)",
     "arch.aucun_emplacement": "No save location was chosen.",
-    "arch.export_message": "Glossary ({termes} terms), corrections ({regles} rules) and settings saved to \"{chemin}\". Neither the Hugging Face token, the logs nor the models are in it.",
+    "arch.export_message": "Vocabulary ({termes} terms), corrections ({regles} rules), template and settings saved to \"{chemin}\". Neither the Hugging Face token, the logs nor the models are in it.",
     "arch.membre_inattendu": (
         "The archive contains an unexpected item (\"{nom}\"). This is not a Scribouille "
         "export, or it has been modified."
@@ -2309,6 +2310,7 @@ _EN: dict[str, str] = {
     "arch.declare_absent": "The manifest announces \"{nom}\", but the archive does not contain it.",
     "arch.config_illisible": "The settings in this archive (config.json) cannot be read.",
     "arch.config_forme": "The settings in this archive do not have the expected shape.",
+    "arch.vocabulaire_illisible": "The vocabulary \"{nom}\" in this archive cannot be read ({erreur}): nothing was imported.",
     "arch.sauvegarde_echouee": (
         "Backing up your current data failed, so the import was cancelled rather than "
         "overwrite anything. {detail}"
@@ -2321,7 +2323,7 @@ _EN: dict[str, str] = {
         "{libelle}: \"{valeur}\" does not exist on this machine, your current setting is "
         "kept."
     ),
-    "arch.import_message": "Import finished: glossary ({termes} terms), corrections ({regles} rules) and settings replaced.",
+    "arch.import_message": "Import finished: vocabulary ({termes} terms), corrections ({regles} rules) and settings replaced.",
     "arch.message_sauvegarde": (
         "Your data from before the import has been saved to \"{chemin}\". That file can be "
         "imported the same way if you want to go back."

@@ -1312,6 +1312,14 @@ function apercuImportHTML(d) {
       <span class="valeur">${ech(valeur)}</span></div>`;
 
   bloc.push(`<h3>${ech(t('ui.import.contenu'))}</h3>`);
+  /* Le vocabulaire (format 2) n'est annoncé que s'il voyage dans l'archive. */
+  if (d.vocabulaire && d.vocabulaire.present) {
+    bloc.push(ligne(t('ui.import.vocabulaire'),
+      tn('ui.import.termes', d.vocabulaire.nb, { actuel: d.vocabulaire.nb_actuel })));
+  }
+  if (d.vocabulaire && d.vocabulaire.propositions) {
+    bloc.push(encartInfo(tn('ui.import.propositions', d.vocabulaire.propositions)));
+  }
   bloc.push(ligne(t('ui.import.glossaire'),
     tn('ui.import.termes', d.glossaire.nb, { actuel: d.glossaire.nb_actuel })));
   bloc.push(ligne(t('ui.import.corrections'),

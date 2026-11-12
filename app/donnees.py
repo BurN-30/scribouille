@@ -6,12 +6,16 @@ sauvegarder, sans passer par un dépôt Git. Un dépôt privé rendrait le servi
 mais il faut un compte, un client, une convention de branches, et surtout le
 glossaire d'une entreprise n'a rien à faire en ligne. Un fichier suffit.
 
-Ce qui part dans l'archive :
+Ce qui part dans l'archive : tout ce que l'utilisateur a produit ou réglé
+et qui vaut d'un poste à l'autre.
 
-  - `vocabulaire.txt`  : le glossaire ;
-  - `corrections.txt`  : la table de corrections ;
+  - `vocabulaire.toml` : le vocabulaire (format 2, depuis la 3.0), termes
+    actifs, à relire et refusés ;
+  - `vocabulaire-propositions-*.toml` : les propositions apprises, s'il y en a ;
+  - `vocabulaire.txt`  : le glossaire du format 1 ;
+  - `corrections.txt`  : la table de corrections du format 1 ;
   - `gabarit-ia.txt`   : le gabarit d'instructions pour l'IA, s'il existe ;
-  - `config.json`      : les réglages ;
+  - `config.json`      : les réglages (dont le réglage de chaque poste) ;
   - `manifeste.json`   : version de l'application, date, liste des fichiers.
 
 Ce qui n'y va JAMAIS :
@@ -23,7 +27,12 @@ Ce qui n'y va JAMAIS :
     gigaoctets de bibliothèques compilées pour un processeur donné : les
     transporter d'un poste à l'autre n'aurait aucun sens, et l'application sait
     les reposer d'un bouton ;
-  - les journaux, qui ne décrivent que la machine où ils ont été écrits.
+  - les journaux, qui ne décrivent que la machine où ils ont été écrits ;
+  - la relecture (pile d'annulation, positions, empreintes des exports) :
+    elle tient aux fichiers de transcription de ce poste, par leur chemin, et
+    la pile garde du texte de réunion, qui n'a pas à voyager dans un zip ;
+  - les mesures (campagnes, banc, calibration) et le matériel détecté, propres
+    à la machine, refaits sur le poste d'arrivée.
 
 L'archive se construit sur une liste blanche de membres, pas sur une liste
 d'exclusions : ce qui n'est pas nommé ici ne peut pas y entrer, quoi qu'on ajoute
@@ -37,6 +46,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -56,16 +66,24 @@ NOMS_APPLICATION_LUS = (NOM_APPLICATION.lower(), "whiscribe")
 #:
 #: Format 1 : glossaire, corrections, réglages. Format 2 : le gabarit
 #: d'instructions pour l'IA en plus, et seulement s'il existe sur le poste de
-#: départ. Les deux se relisent. Une archive de format 1 n'efface donc jamais
-#: le gabarit en place ici : ce qu'elle ne transporte pas, elle ne le remplace
-#: pas.
-FORMAT_ARCHIVE = 2
+#: départ. Format 3 (3.0.1) : le vocabulaire du format 2 (`vocabulaire.toml`)
+#: et les propositions apprises. Tous se relisent. Une archive ancienne
+#: n'efface jamais ce qu'elle ne transporte pas : ce qu'elle ne transporte
+#: pas, elle ne le remplace pas.
+FORMAT_ARCHIVE = 3
 
 #: Les seuls membres acceptés dans une archive. Tout le reste la fait rejeter.
 FICHIER_GABARIT = "gabarit-ia.txt"
-FICHIERS_TEXTE = ("vocabulaire.txt", "corrections.txt", FICHIER_GABARIT)
+FICHIER_VOCABULAIRE_V2 = "vocabulaire.toml"
+FICHIERS_TEXTE = ("vocabulaire.txt", "corrections.txt", FICHIER_GABARIT, FICHIER_VOCABULAIRE_V2)
 FICHIER_CONFIG = "config.json"
 MEMBRES_AUTORISES = (NOM_MANIFESTE, FICHIER_CONFIG, *FICHIERS_TEXTE)
+#: Propositions apprises (`app/apprentissage.py`), nom contrôlé.
+MOTIF_PROPOSITIONS = re.compile(r"vocabulaire-propositions-[A-Za-z0-9_-]{1,80}\.toml")
+
+
+def membre_autorise(nom: str) -> bool:
+    return nom in MEMBRES_AUTORISES or bool(MOTIF_PROPOSITIONS.fullmatch(nom))
 
 #: Bornes de sécurité. Ces fichiers pèsent quelques kilooctets : au-delà de ces
 #: seuils, on a affaire à autre chose qu'un export Scribouille.
@@ -137,6 +155,25 @@ def _ecrire_atomique(fichier: Path, contenu: str) -> None:
     os.replace(str(provisoire), str(fichier))
 
 
+def _lire_brut(fichier: Path) -> str:
+    """Le texte exact d'un fichier (fins de ligne comprises), ou chaîne vide."""
+    try:
+        with open(fichier, encoding="utf-8", newline="") as flux:
+            return flux.read()
+    except (OSError, UnicodeDecodeError) as exc:
+        journal.attention("Lecture impossible de %s : %s", fichier, exc)
+        return ""
+
+
+def _ecrire_brut(fichier: Path, contenu: str) -> None:
+    """Comme `_ecrire_atomique`, sans retoucher le contenu (ni fin de ligne, ni conversion)."""
+    fichier.parent.mkdir(parents=True, exist_ok=True)
+    provisoire = fichier.with_suffix(fichier.suffix + ".tmp-import")
+    with open(provisoire, "w", encoding="utf-8", newline="") as flux:
+        flux.write(contenu)
+    os.replace(str(provisoire), str(fichier))
+
+
 def _config_courante() -> dict:
     from . import config as config_module
 
@@ -179,6 +216,8 @@ def _contenu_a_exporter() -> tuple[dict, dict]:
     doit rien créer sur le poste de départ, et une archive sans gabarit reste
     parfaitement valide.
     """
+    from . import vocabulaire_v2
+
     fichiers = {
         "vocabulaire.txt": _lire_texte(chemins.FICHIER_VOCABULAIRE),
         "corrections.txt": _lire_texte(chemins.FICHIER_CORRECTIONS),
@@ -188,6 +227,13 @@ def _contenu_a_exporter() -> tuple[dict, dict]:
         gabarit_courant = _lire_texte(chemins.FICHIER_GABARIT_IA)
         if gabarit_courant.strip():
             fichiers[FICHIER_GABARIT] = gabarit_courant
+    # Le vocabulaire du format 2, tel quel (octet pour octet), et les
+    # propositions apprises : l'import les rétablit à l'identique.
+    if vocabulaire_v2.FICHIER_PERSONNEL.is_file():
+        fichiers[FICHIER_VOCABULAIRE_V2] = _lire_brut(vocabulaire_v2.FICHIER_PERSONNEL)
+    for chemin in sorted(chemins.RACINE.glob("vocabulaire-propositions-*.toml")):
+        if chemin.is_file() and MOTIF_PROPOSITIONS.fullmatch(chemin.name):
+            fichiers[chemin.name] = _lire_brut(chemin)
     manifeste = {
         "application": NOM_APPLICATION,
         "format": FORMAT_ARCHIVE,
@@ -198,7 +244,8 @@ def _contenu_a_exporter() -> tuple[dict, dict]:
         # partagé avec le programme d'installation. Il n'est repris à l'import
         # que s'il existe sur le poste d'arrivée.
         "dossier_modeles": str(chemins.DOSSIER_MODELES),
-        "exclus": ["jeton_hf.txt", "logs", "modeles", "extensions", "cache-pip"],
+        "exclus": ["jeton_hf.txt", "logs", "modeles", "extensions", "cache-pip", "historique-relecture",
+                   "relecture-positions.json", "exports.json", "campagnes", "calibration.json", "materiel.json"],
     }
     return fichiers, manifeste
 
@@ -241,10 +288,11 @@ def exporter(destination: str | Path) -> dict:
             "message": langues.t("format.titre_message", titre=titre, message=message),
         }
 
-    resume = vocabulaire.termes(fichiers["vocabulaire.txt"])
+    nb_termes = len(vocabulaire.termes(fichiers["vocabulaire.txt"])) + _nb_termes_v2(
+        fichiers.get(FICHIER_VOCABULAIRE_V2, ""))
     regles, _ = vocabulaire.analyser_corrections(fichiers["corrections.txt"])
     journal.info(
-        "Export des données vers %s (%s termes, %s règles)", cible, len(resume), len(regles)
+        "Export des données vers %s (%s termes, %s règles)", cible, nb_termes, len(regles)
     )
     return {
         "ok": True,
@@ -252,7 +300,7 @@ def exporter(destination: str | Path) -> dict:
         "fichiers": manifeste["fichiers"],
         "message": langues.t(
             "arch.export_message",
-            termes=len(resume), regles=len(regles), chemin=cible,
+            termes=nb_termes, regles=len(regles), chemin=cible,
         ),
     }
 
@@ -261,9 +309,21 @@ def exporter(destination: str | Path) -> dict:
 # Lecture et validation d'une archive
 # ---------------------------------------------------------------------------
 
+def _nb_termes_v2(texte: str) -> int:
+    """Termes d'un vocabulaire du format 2 (tous états), 0 s'il est vide ou illisible."""
+    from . import vocabulaire_v2
+
+    if not texte.strip():
+        return 0
+    try:
+        return len(vocabulaire_v2.lire_texte(texte)[0].entrees)
+    except (vocabulaire_v2.ErreurFormat, ValueError):
+        return 0
+
+
 def _verifier_nom_membre(nom: str) -> None:
     """Refuse tout ce qui ressemble à une sortie de l'archive."""
-    if nom not in MEMBRES_AUTORISES:
+    if not membre_autorise(nom):
         raise ErreurArchive(langues.t("arch.membre_inattendu", nom=nom))
     if nom.endswith("/") or "\\" in nom or ".." in Path(nom).parts or Path(nom).is_absolute():
         raise ErreurArchive(langues.t("arch.chemin_invalide"))
@@ -362,7 +422,7 @@ def _ouvrir_archive(chemin: str | Path) -> tuple[dict, dict]:
     if not isinstance(declares, list) or not declares:
         raise ErreurArchive(langues.t("arch.aucun_declare"))
     for nom in declares:
-        if not isinstance(nom, str) or nom not in MEMBRES_AUTORISES:
+        if not isinstance(nom, str) or not membre_autorise(nom):
             raise ErreurArchive(langues.t("arch.declare_inattendu", nom=nom))
         if nom not in membres:
             raise ErreurArchive(langues.t("arch.declare_absent", nom=nom))
@@ -374,6 +434,17 @@ def _ouvrir_archive(chemin: str | Path) -> tuple[dict, dict]:
             raise ErreurArchive(langues.t("arch.config_illisible")) from exc
         if not isinstance(valeur, dict):
             raise ErreurArchive(langues.t("arch.config_forme"))
+
+    # Un vocabulaire illisible ferait perdre le vocabulaire en place : refusé
+    # avant toute écriture, comme une configuration illisible.
+    from . import vocabulaire_v2
+
+    for nom, contenu in membres.items():
+        if (nom == FICHIER_VOCABULAIRE_V2 or MOTIF_PROPOSITIONS.fullmatch(nom)) and contenu.strip():
+            try:
+                vocabulaire_v2.lire_texte(contenu, nom)
+            except (vocabulaire_v2.ErreurFormat, ValueError) as exc:
+                raise ErreurArchive(langues.t("arch.vocabulaire_illisible", nom=nom, erreur=exc)) from exc
 
     return membres, manifeste
 
@@ -404,6 +475,15 @@ def analyser(chemin: str | Path) -> dict:
     regles_actuelles, _ = vocabulaire.analyser_corrections(
         _lire_texte(chemins.FICHIER_CORRECTIONS)
     )
+
+    from . import vocabulaire_v2
+
+    vocabulaire_v2_import = {
+        "present": FICHIER_VOCABULAIRE_V2 in membres,
+        "nb": _nb_termes_v2(membres.get(FICHIER_VOCABULAIRE_V2, "")),
+        "nb_actuel": _nb_termes_v2(_lire_texte(vocabulaire_v2.FICHIER_PERSONNEL)),
+        "propositions": sum(1 for nom in membres if MOTIF_PROPOSITIONS.fullmatch(nom)),
+    }
 
     config_actuelle = _config_courante()
     config_import: dict = json.loads(membres[FICHIER_CONFIG]) if FICHIER_CONFIG in membres else {}
@@ -436,6 +516,7 @@ def analyser(chemin: str | Path) -> dict:
             "fichiers": manifeste.get("fichiers", []),
         },
         "glossaire": {"nb": len(termes_import), "nb_actuel": len(termes_actuels)},
+        "vocabulaire": vocabulaire_v2_import,
         "corrections": {
             "nb": len(regles_import),
             "nb_actuel": len(regles_actuelles),
@@ -557,6 +638,15 @@ def importer(chemin: str | Path) -> dict:
             _ecrire_atomique(
                 chemins.FICHIER_CORRECTIONS, membres["corrections.txt"].rstrip() + "\n"
             )
+        # Vocabulaire du format 2 et propositions : à l'identique, octet pour
+        # octet. Une archive qui ne les porte pas laisse ceux du poste.
+        from . import vocabulaire_v2
+
+        if FICHIER_VOCABULAIRE_V2 in membres:
+            _ecrire_brut(vocabulaire_v2.FICHIER_PERSONNEL, membres[FICHIER_VOCABULAIRE_V2])
+        for nom, contenu in membres.items():
+            if MOTIF_PROPOSITIONS.fullmatch(nom):
+                _ecrire_brut(chemins.RACINE / nom, contenu)
         # Archive de format 1, ou archive de format 2 sans gabarit : le gabarit
         # déjà en place reste tel quel. Il appartient à l'utilisateur.
         if membres.get(FICHIER_GABARIT, "").strip():
@@ -622,23 +712,24 @@ def importer(chemin: str | Path) -> dict:
             "sauvegarde": str(sauvegarde),
         }
 
-    termes_importes = vocabulaire.termes(membres.get("vocabulaire.txt", ""))
+    nb_termes = len(vocabulaire.termes(membres.get("vocabulaire.txt", ""))) + _nb_termes_v2(
+        membres.get(FICHIER_VOCABULAIRE_V2, ""))
     regles_importees, _ = vocabulaire.analyser_corrections(membres.get("corrections.txt", ""))
     journal.info(
         "Import depuis %s : %s termes, %s règles, sauvegarde préalable %s",
-        chemin, len(termes_importes), len(regles_importees), sauvegarde,
+        chemin, nb_termes, len(regles_importees), sauvegarde,
     )
 
     return {
         "ok": True,
         "message": langues.t(
             "arch.import_message",
-            termes=len(termes_importes), regles=len(regles_importees),
+            termes=nb_termes, regles=len(regles_importees),
         ),
         "sauvegarde": str(sauvegarde),
         "message_sauvegarde": langues.t(
             "arch.message_sauvegarde", chemin=sauvegarde),
         "notes": notes,
-        "glossaire": len(termes_importes),
+        "glossaire": nb_termes,
         "corrections": len(regles_importees),
     }
