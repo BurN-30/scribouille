@@ -1538,6 +1538,16 @@ function voixEchouees_(it) {
    lot), une estimation tiree du temps ecoule et du reste annonce, dite
    « environ » et jamais au-dela de 95 %. */
 function progressionAffichee(it) {
+  const r = progressionCalculee(it);
+  // Jamais de recul a l'ecran dans une meme phase : une estimation « environ
+  // 7 % » suivie du releve reel « 5 % » restait affichee a 7 (recette du 12/11).
+  const vu = it.pctAffiche && it.pctAffiche.etat === it.etat ? it.pctAffiche.pct : 0;
+  if (!r.indetermine && r.pct < vu) return { pct: vu, estimee: r.estimee, indetermine: false };
+  if (!r.indetermine) it.pctAffiche = { etat: it.etat, pct: r.pct };
+  return r;
+}
+
+function progressionCalculee(it) {
   const brute = { pct: it.pct || 0, estimee: false, indetermine: !!it.indetermine };
   // Pas de reste annonce (chargement du modele) : la barre reste indeterminee.
   if (typeof it.restant_s !== 'number' || !it.restant_recu || it.restant_s <= 0) return brute;

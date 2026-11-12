@@ -1246,6 +1246,9 @@ def essai_heures_et_avis(base: Path) -> None:
     verifier("app.modele.confirmer" in controle and "create_confirmation_dialog" in controle
              and "app.modele.refuse" in controle,
              "« Lancer » avec un modèle absent : le téléchargement (plusieurs Go) est demandé, refusable")
+    progression = appjs[appjs.index("function progressionAffichee(it)"):][:600]
+    verifier("r.pct < vu" in progression and "it.pctAffiche = { etat: it.etat" in progression,
+             "progression : le pourcentage affiché ne recule pas dans une même phase")
 
 
 def essai_depot_mele() -> None:
