@@ -461,6 +461,10 @@ class Passerelle:
         #: alors un réglage pour ce poste (voir `app/adaptation.py`).
         self._premier_lancement = not chemins.FICHIER_CONFIG.exists()
         self.config = config_module.charger()
+        import copy
+
+        #: Réglages tels que lus : la base de `_enregistrer_config`.
+        self._config_lue = copy.deepcopy(self.config)
         self._proposition: dict = {}
         #: Serveur local de l'audio pour la relecture (voir app/ecoute.py) :
         #: un seul fichier servi à la fois, démarré au premier besoin.
@@ -544,19 +548,29 @@ class Passerelle:
 
     def _signaler_fin(self, donnees: dict) -> None:
         """
-        Fin de file, quand on regarde ailleurs : le titre de la fenêtre le dit
-        et son bouton clignote dans la barre des tâches (rien de plus : une
-        notification Windows demanderait d'enregistrer l'application auprès du
-        système). Le titre revient à la normale au retour sur la fenêtre.
+        Fin de file (pas de chaque fichier), quand on regarde ailleurs : le
+        titre de la fenêtre le dit, son bouton clignote dans la barre des
+        tâches, et une notification Windows sans son l'annonce (icône de la
+        zone de notification : ni installation ni enregistrement). Rien si la
+        fenêtre est au premier plan, ni si « Prévenir à la fin » est coupé.
+        Le titre revient à la normale au retour sur la fenêtre.
         """
         reussis = int(donnees.get("reussis") or 0)
-        if not reussis or self._fenetre is None:
+        echecs = int(donnees.get("echecs") or 0)
+        if not (reussis or echecs) or self._fenetre is None or not self.config.get("prevenir_fin", True):
             return
+        if barre_taches.au_premier_plan():
+            return
+        titre = langues.tn("app.titre_fin", reussis, nom=NOM_APPLICATION)
         try:
-            self._fenetre.set_title(langues.tn("app.titre_fin", reussis, nom=NOM_APPLICATION))
+            self._fenetre.set_title(titre)
         except Exception as exc:
             journal.debug("Titre de fin non posé : %s", exc)
         barre_taches.clignoter()
+        texte = (langues.tn("app.notif.reussies", reussis) if not echecs
+                 else langues.t("app.notif.bilan", reussies=langues.tn("app.notif.reussies", reussis),
+                                echecs=langues.tn("app.notif.echecs", echecs)))
+        barre_taches.notifier(titre, texte)
 
     def titre_normal(self) -> None:
         """Appelé par l'interface quand la fenêtre reprend la main."""
@@ -818,14 +832,14 @@ class Passerelle:
             return {"ok": False, "message": langues.t("app.banc.file_occupee")}
         proposition = self._proposition or adaptation.proposition_du_poste(self.materiel)
         adaptation.appliquer(self.config, self.materiel, proposition)
-        config_module.sauver(self.config)
+        self._enregistrer_config()
         self._effet_reglage = reglage_machine.appliquer_au_materiel(self.config, self.materiel)
         return {"ok": True, "message": langues.t("adapt.applique", phrase=proposition["phrase"])}
 
     def ecarter_proposition(self) -> dict:
         self.config["proposition_ecartee"] = __import__(
             "app.calibration", fromlist=["signature_machine"]).signature_machine(self.materiel)
-        config_module.sauver(self.config)
+        self._enregistrer_config()
         return {"ok": True}
 
     def _avertissements(self) -> list[str]:
@@ -1078,7 +1092,7 @@ class Passerelle:
         if probleme:
             return {"ok": False, "message": probleme, "motif": self.config.get("motif_sortie", "")}
         self.config["motif_sortie"] = texte
-        config_module.sauver(self.config)
+        self._enregistrer_config()
         journal.info("Nom des fichiers produits : %s", texte or nommage.MOTIF_DEFAUT)
         return {
             "ok": True,
@@ -1109,7 +1123,7 @@ class Passerelle:
 
         self.config["dossier_surveille"] = chemin
         self.config["surveillance"] = actif
-        config_module.sauver(self.config)
+        self._enregistrer_config()
         etat = self.surveillant.configurer(chemin, actif)
         journal.info("Surveillance %s : %s", "active" if actif else "coupée", chemin or "--")
         return {
@@ -1204,6 +1218,28 @@ class Passerelle:
 
     # -- réglages ----------------------------------------------------------
 
+    def _enregistrer_config(self) -> None:
+        """
+        Écrit les réglages de la fenêtre sans effacer ceux qu'une commande
+        `scribouille reglages definir` a posés entre-temps : seules les clés
+        changées ici depuis la dernière lecture sont reportées sur le fichier
+        relu du disque.
+        """
+        import copy
+
+        lus = getattr(self, "_config_lue", None)
+        if lus is None:
+            config_module.sauver(self.config)
+        else:
+            disque = config_module.charger()
+            for cle, valeur in self.config.items():
+                if lus.get(cle) != valeur:
+                    disque[cle] = valeur
+            self.config.clear()
+            self.config.update(disque)
+            config_module.sauver(self.config)
+        self._config_lue = copy.deepcopy(self.config)
+
     def sauver_config(self, partiel: dict) -> dict:
         for cle, valeur in (partiel or {}).items():
             if cle not in config_module.DEFAUTS:
@@ -1218,7 +1254,7 @@ class Passerelle:
             retenue = langues.definir(self.config.get("langue_interface"))
             self.config["langue_interface"] = retenue
             journal.info("Langue d'interface : %s", retenue)
-        config_module.sauver(self.config)
+        self._enregistrer_config()
         return {
             "config": self.config,
             "avertissements": self._avertissements(),
@@ -1453,7 +1489,7 @@ class Passerelle:
             return {"ok": False, "message": langues.t("ov.retrait_sources")}
         if self.materiel.moteur == "openvino":
             reglage_machine.oublier(self.config, self.materiel)
-            config_module.sauver(self.config)
+            self._enregistrer_config()
         resultat = ext_module.retirer(ext_module.DOSSIER_OPENVINO, vider_cache=False)
         if not resultat["ok"]:
             # Les DLL d'OpenVINO déjà chargées par ce processus restent
@@ -1569,7 +1605,7 @@ class Passerelle:
             return {"ok": False, "message": langues.t("vitesse.aucun_conseil")}
         reglage_machine.enregistrer(self.config, self.materiel, conseil)
         banc.enregistrer_mesures(self.materiel, conseil)
-        config_module.sauver(self.config)
+        self._enregistrer_config()
         self._effet_reglage = reglage_machine.appliquer_au_materiel(self.config, self.materiel)
         journal.info("Réglage du banc appliqué : %s", self._resume_reglage(conseil))
         return {"ok": True, "message": langues.t("vitesse.applique",
@@ -1577,7 +1613,7 @@ class Passerelle:
 
     def revenir_reglage_automatique(self) -> dict:
         reglage_machine.oublier(self.config, self.materiel)
-        config_module.sauver(self.config)
+        self._enregistrer_config()
         self._effet_reglage = {}
         journal.info("Réglage de vitesse : retour au choix automatique")
         return {"ok": True, "message": langues.t("vitesse.retour_auto")}
@@ -1789,6 +1825,9 @@ class Passerelle:
         if retour.get("ok"):
             # L'objet de configuration en mémoire est périmé dès cet instant.
             self.config = config_module.charger()
+            import copy
+
+            self._config_lue = copy.deepcopy(self.config)
             retour["config"] = self.config
             retour["avertissements"] = self._avertissements()
             retour["modeles"] = self.infos_modeles()
@@ -1936,7 +1975,7 @@ class Passerelle:
         if resultat:
             chemin = resultat[0] if isinstance(resultat, (list, tuple)) else resultat
             self.config["dossier_sortie"] = str(chemin)
-            config_module.sauver(self.config)
+            self._enregistrer_config()
             self._js(f"onDossierSortie({_json(str(chemin))})")
             self.charger_historique()
 
@@ -2443,8 +2482,8 @@ def _au_demarrage(passerelle: Passerelle, fenetre) -> None:
 
     # Barre de progression de l'icône : la fenêtre existe maintenant, elle se
     # retrouve par son titre. Sans elle, le module reste simplement inerte.
-    if passerelle.config.get("barre_taches", True):
-        passerelle._fond(lambda: barre_taches.definir_fenetre(NOM_APPLICATION))
+    # Retrouvée même sans la barre de progression : la fin de file s'y signale.
+    passerelle._fond(lambda: barre_taches.definir_fenetre(NOM_APPLICATION))
 
     # Dossier surveillé : le fil ne démarre que si l'utilisateur l'a demandé.
     if passerelle.config.get("surveillance") and passerelle.config.get("dossier_surveille"):
@@ -2485,6 +2524,15 @@ def _avant_fermeture(passerelle: Passerelle, fenetre):
 
 def principal() -> None:
     journal.info("%s v%s", NOM_APPLICATION, VERSION)
+    # Une seule fenêtre par dossier de données (app/instance.py) : la seconde
+    # ramène la première au premier plan et s'en va.
+    from app import instance
+
+    if not instance.prendre_fenetre():
+        journal.info("Une fenêtre est déjà ouverte sur ces données : elle est ramenée au premier plan")
+        if not instance.montrer_fenetre_existante(NOM_APPLICATION):
+            _abandonner(NOM_APPLICATION, langues.t("inst.deja_ouverte"))
+        return
     passerelle = Passerelle()
 
     fenetre = webview.create_window(

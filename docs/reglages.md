@@ -66,6 +66,7 @@ Sans `mode_avance`, les quatre clés suivantes sont ignorées.
 | `dossier_surveille` | vide | Dossier scruté. |
 | `lecture_audio` | `false` | Écouter l'extrait depuis la vue de lecture (serveur local). |
 | `barre_taches` | `true` | Progression sur l'icône de la barre des tâches. |
+| `prevenir_fin` | `true` | Fin de file, fenêtre en arrière-plan : clignotement, titre, notification Windows sans son. |
 | `maj_verifier` | `false` | Vérifier les nouvelles versions sur GitHub, une fois par jour au plus. Seul appel réseau hors téléchargement d'un modèle. |
 | `theme`, `zoom`, `journal_ouvert`, `proposition_ecartee` | | État de l'interface. |
 

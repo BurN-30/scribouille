@@ -71,6 +71,7 @@ REGLAGES: dict[str, str] = {
     "surveillance": "Transcrire ce qui arrive dans le dossier surveillé.",
     "maj_verifier": "Vérifier les mises à jour (seul appel réseau hors modèles).",
     "barre_taches": "Progression sur l'icône de la barre des tâches.",
+    "prevenir_fin": "Fin de file, fenêtre en arrière-plan : clignotement, titre, notification Windows sans son.",
     "filtres_salle": "Filtres de salle avant transcription (passe-haut, passe-bas, niveau).",
     "mode_avance": "Active modele_avance, beam_size, condition_on_previous_text, forcer_processeur.",
     "modele_avance": "Modèle imposé (mode avancé) ; vide : celui du preset.",

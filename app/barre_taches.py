@@ -224,3 +224,79 @@ def clignoter() -> bool:
     except Exception as exc:
         journal.debug("Clignotement de la barre des tâches impossible : %s", exc)
         return False
+
+
+def au_premier_plan() -> bool:
+    """La fenêtre de Scribouille est-elle celle que l'on regarde ?"""
+    if _hors_service or not _hwnd or sys.platform != "win32":
+        return False
+    try:
+        return int(ctypes.windll.user32.GetForegroundWindow() or 0) == _hwnd
+    except Exception:
+        return False
+
+
+class _NOTIFYICONDATAW(ctypes.Structure):
+    _fields_ = [("cbSize", ctypes.c_uint), ("hWnd", ctypes.c_void_p), ("uID", ctypes.c_uint),
+                ("uFlags", ctypes.c_uint), ("uCallbackMessage", ctypes.c_uint), ("hIcon", ctypes.c_void_p),
+                ("szTip", ctypes.c_wchar * 128), ("dwState", ctypes.c_uint), ("dwStateMask", ctypes.c_uint),
+                ("szInfo", ctypes.c_wchar * 256), ("uVersion", ctypes.c_uint),
+                ("szInfoTitle", ctypes.c_wchar * 64), ("dwInfoFlags", ctypes.c_uint),
+                ("guidItem", _GUID), ("hBalloonIcon", ctypes.c_void_p)]
+
+
+_NIM_ADD, _NIM_DELETE = 0, 2
+_NIF_ICON, _NIF_TIP, _NIF_INFO = 0x2, 0x4, 0x10
+#: NIIF_INFO | NIIF_NOSOUND : icône d'information, jamais de son.
+_NIIF = 0x1 | 0x10
+_ID_ICONE = 0x5C1B
+
+
+def notifier(titre: str, texte: str, duree_s: float = 20.0) -> bool:
+    """
+    Notification Windows de fin, sans son, par l'icône de la zone de
+    notification (Shell_NotifyIcon) : rien à installer ni à enregistrer
+    auprès du système, aucun droit. L'icône est retirée après `duree_s` ; la
+    notification reste dans le centre de notifications selon les réglages de
+    Windows (et « Ne pas déranger » la fait taire).
+    """
+    if _hors_service or not _hwnd or sys.platform != "win32":
+        return False
+    try:
+        user32, shell32 = ctypes.windll.user32, ctypes.windll.shell32
+        user32.SendMessageW.restype = ctypes.c_void_p
+        user32.SendMessageW.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_void_p, ctypes.c_void_p]
+        user32.LoadIconW.restype = ctypes.c_void_p
+        user32.LoadIconW.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        # Icône de la fenêtre (WM_GETICON, petite puis grande), sinon celle de Windows.
+        icone = (user32.SendMessageW(ctypes.c_void_p(_hwnd), 0x7F, ctypes.c_void_p(2), None)
+                 or user32.SendMessageW(ctypes.c_void_p(_hwnd), 0x7F, ctypes.c_void_p(0), None)
+                 or user32.SendMessageW(ctypes.c_void_p(_hwnd), 0x7F, ctypes.c_void_p(1), None)
+                 or user32.LoadIconW(None, ctypes.c_void_p(32512)))
+        donnees = _NOTIFYICONDATAW()
+        donnees.cbSize = ctypes.sizeof(_NOTIFYICONDATAW)
+        donnees.hWnd = ctypes.c_void_p(_hwnd)
+        donnees.uID = _ID_ICONE
+        donnees.uFlags = _NIF_ICON | _NIF_TIP | _NIF_INFO
+        donnees.hIcon = icone
+        donnees.szTip = titre[:127]
+        donnees.szInfoTitle = titre[:63]
+        donnees.szInfo = texte[:255]
+        donnees.dwInfoFlags = _NIIF
+        shell32.Shell_NotifyIconW.argtypes = [ctypes.c_uint, ctypes.c_void_p]
+        if not shell32.Shell_NotifyIconW(_NIM_ADD, ctypes.byref(donnees)):
+            return False
+
+        def retirer() -> None:
+            try:
+                shell32.Shell_NotifyIconW(_NIM_DELETE, ctypes.byref(donnees))
+            except Exception:
+                pass
+
+        minuterie = threading.Timer(duree_s, retirer)
+        minuterie.daemon = True
+        minuterie.start()
+        return True
+    except Exception as exc:
+        journal.debug("Notification de fin impossible : %s", exc)
+        return False

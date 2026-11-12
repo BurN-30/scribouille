@@ -514,6 +514,38 @@ def essai_migration(base: Path) -> None:
              "relecture (historique, positions) et profil d'affichage reconnus et migrés")
 
 
+def essai_instances(base: Path) -> None:
+    """Deux Scribouille en même temps : un fichier n'est transcrit que par un seul."""
+    import os
+    import subprocess
+
+    from app import chemins, instance
+
+    titre("Plusieurs instances : verrou d'un fichier en cours")
+    racine = chemins.RACINE
+    chemins.RACINE = base / "instances"
+    try:
+        source = base / "reunion.wav"
+        source.write_bytes(b"x")
+        verifier(instance.prendre_fichier(source) == 0, "le premier processus prend le fichier")
+        verifier(instance.prendre_fichier(source) == 0, "le même processus peut le reprendre (reprise après plantage)")
+        verrou = instance._fichier_verrou(source)
+        autre = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+        try:
+            verrou.write_text(str(autre.pid), encoding="ascii")
+            verifier(instance.prendre_fichier(source) == autre.pid,
+                     "un autre processus vivant le tient : refusé, son PID est rendu")
+        finally:
+            autre.kill()
+            autre.wait()
+        verifier(instance.prendre_fichier(source) == 0 and verrou.read_text(encoding="ascii") == str(os.getpid()),
+                 "le verrou d'un processus disparu est repris")
+        instance.rendre_fichier(source)
+        verifier(not verrou.exists(), "le verrou est rendu en fin de fichier")
+    finally:
+        chemins.RACINE = racine
+
+
 def principal() -> int:
     print(f"Vérification du socle de Scribouille\n{'=' * 40}")
     with tempfile.TemporaryDirectory(prefix="scribouille-socle-") as brut:
@@ -524,6 +556,7 @@ def principal() -> int:
         essai_reglage_propose()
         essai_repetitions()
         essai_migration(base)
+        essai_instances(base)
     print(f"\n{'=' * 40}")
     if _echecs:
         print(f"{_reussites} vérifications passées, {len(_echecs)} en échec :")

@@ -25,6 +25,7 @@ from . import audio as audio_module
 from . import calibration
 from . import config as config_module
 from . import diarisation, energie, journal, langues, moteur, presets, reprise as reprise_module
+from . import instance as instances
 from . import reglage_machine, repetitions, rythme, sorties, vocabulaire, vocabulaire_usage, vocabulaire_v2
 from .journal import ErreurLisible
 from .materiel import Materiel
@@ -458,7 +459,16 @@ class FileTraitement:
             config = {**config, "dossier_sortie": element.sortie}
         echec = True
         statut = "erreur"
+        verrou = False
         try:
+            # Un même enregistrement n'est transcrit que par un processus à la
+            # fois (une fenêtre et une commande, deux commandes) : voir
+            # app/instance.py.
+            occupant = instances.prendre_fichier(element.chemin)
+            if occupant:
+                raise ErreurLisible(langues.t("inst.fichier_occupe.titre"),
+                                    langues.t("inst.fichier_occupe.msg", pid=occupant))
+            verrou = True
             sans_voix = self._traiter(element, config, contexte["reglages"], instance, rappels)
             statut = "sans_voix" if sans_voix else "reussi"
             echec = False
@@ -474,6 +484,8 @@ class FileTraitement:
             rappels.journal_ui("erreur", f"{element.nom} : {incident['titre']}")
             rappels.termine(element.identifiant, {"ok": False, **incident})
         finally:
+            if verrou:
+                instances.rendre_fichier(element.chemin)
             # Un fichier interrompu garde sa reprise, seul un succès
             # l'efface : c'est tout l'intérêt de la sauvegarde.
             self._session.fermer()

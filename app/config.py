@@ -35,7 +35,8 @@ DEFAUTS: dict = {
     "dossier_surveille": "",        # dossier scruté quand la surveillance est active
     "surveillance": False,          # opt-in, voir app/surveillance.py
     "maj_verifier": False,          # opt-in, SEUL appel réseau hors modèles
-    "barre_taches": True,           # progression dans la barre des tâches Windows
+    "barre_taches": True,
+    "prevenir_fin": True,           # fin de file : clignotement, titre, notification sans son           # progression dans la barre des tâches Windows
     "filtres_salle": False,
     "mode_avance": False,
     "modele_avance": "",            # vide = modèle du preset

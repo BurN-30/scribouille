@@ -371,7 +371,9 @@ fr: {
   'ui.app.maj': 'Vérifier les mises à jour au lancement',
   'ui.app.maj_aide': "Désactivé : aucun appel réseau, hors téléchargement des modèles.",
   'ui.app.barre': 'Progression dans la barre des tâches',
-  'ui.app.barre_aide': "L'icône se remplit pendant le calcul, sans notification",
+  'ui.app.barre_aide': "L'icône se remplit pendant le calcul",
+  'ui.app.prevenir': 'Prévenir à la fin',
+  'ui.app.prevenir_aide': "Fin de la file, fenêtre en arrière-plan : l'icône clignote et une notification sans son s'affiche",
 
   /* -- réglages : mode avancé ------------------------------------------- */
   'ui.avance.bascule': 'Mode avancé',
@@ -1135,7 +1137,9 @@ en: {
   'ui.app.maj': 'Check for updates at startup',
   'ui.app.maj_aide': "Off: no network call, except model downloads.",
   'ui.app.barre': 'Progress in the taskbar',
-  'ui.app.barre_aide': 'The icon fills up while computing, with no notification',
+  'ui.app.barre_aide': 'The icon fills up while computing',
+  'ui.app.prevenir': 'Notify when done',
+  'ui.app.prevenir_aide': 'End of the queue, window in the background: the icon flashes and a silent notification appears',
 
   'ui.avance.bascule': 'Advanced mode',
   'ui.avance.bascule_aide': 'Model, beam, audio filters',

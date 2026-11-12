@@ -441,6 +441,7 @@ function appliquerConfig() {
   $('#bloc-surveillance').style.display = c.surveillance ? 'block' : 'none';
   $('#opt-maj').checked = !!c.maj_verifier;
   $('#opt-barre-taches').checked = c.barre_taches !== false;
+  $('#opt-prevenir-fin').checked = c.prevenir_fin !== false;
   $('#opt-diarisation').checked = !!c.diarisation;
   $('#nb-locuteurs').value = String(c.nb_locuteurs || 0);
   $('#opt-avance').checked = !!c.mode_avance;
@@ -2627,6 +2628,8 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   $('#opt-barre-taches').addEventListener('change', (e) =>
     enregistrer({ barre_taches: e.target.checked }));
+  $('#opt-prevenir-fin').addEventListener('change', (e) =>
+    enregistrer({ prevenir_fin: e.target.checked }));
   $('#btn-maj-page').addEventListener('click', () => {
     if (etat.maj && etat.maj.url) pywebview.api.ouvrir_lien(etat.maj.url);
   });
