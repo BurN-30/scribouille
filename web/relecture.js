@@ -745,7 +745,9 @@ function supprimerSelection() {
 
 function ouvrirCorrection() {
   masquerBoutonCorrection();
-  const sel = lect.selection || lireSelection();
+  // La selection du moment d'abord : celle gardee d'un geste precedent
+  // (souris, ou correction deja faite) visait un autre endroit.
+  const sel = lireSelection() || lect.selection;
   if (!sel || !lect.d) return;
   lect.selection = sel;
   // L'audio ne continue pas pendant qu'on tape la correction.
@@ -852,6 +854,7 @@ async function appliquerCorrection() {
       return;
     }
     fermerModale($('#modale-correction'));
+    lect.selection = null;  // une correction faite ne sert pas de cible a la suivante
     if (r.nb_corrections !== undefined) majCorrections({ nb: r.nb_corrections, erreurs: [] });
     const message = tn('ui.correction.faite', r.remplacements || 1, { source: source, cible: cible })
       + (r.regle_ajoutee ? ' ' + t('ui.correction.regle_memorisee') : '');
