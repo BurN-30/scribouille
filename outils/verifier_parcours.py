@@ -748,9 +748,15 @@ def essai_ecrans() -> None:
                           ("Entrée valide depuis toute la fenêtre de correction",
                            "$('#modale-correction').addEventListener('keydown'"),
                           ("après une correction, N repart du mot atteint", "retablirVise(repere)"),
+                          ("vitesse aux touches directes , et ; (AZERTY)", "touche === ',' || touche === ';'"),
+                          ("N puis Entrée corrige le mot atteint", "selectionnerMot(lect.vise)"),
+                          ("un clic sur un bouton de lecture ne lui laisse pas Espace",
+                           "$('.rl-outils').addEventListener('mousedown'"),
                           ("clic sur un mot : l'écoute s'y place, sur ce mot", "placerA(lect.mots[i].d)"),
                           ("un double-clic qui sélectionne ne déplace pas l'écoute", "e.detail > 1")):
         verifier(preuve in js, f"relecture : {geste}")
+    verifier("touche === ' ' && !cible.closest('button')" not in js,
+             "relecture : Espace lit même après un clic sur un bouton")
     piege = re.search(r"function pieger.*?querySelectorAll\(\s*'([^']*)'", js, re.S)
     verifier(piege and "a[href]" in piege.group(1) and ", [href]" not in piege.group(1),
              "piège du focus : une icône (<use href>) ne compte pas parmi les éléments focalisables",

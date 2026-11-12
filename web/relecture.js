@@ -995,8 +995,19 @@ function echapRelecture() {
   return false;
 }
 
+/* Un champ ou l'on ecrit : la, les touches gardent leur sens. Une case, une
+   liste ou le curseur de position ne retiennent pas Espace : il lit. */
 function dansUnChamp(cible) {
-  return !!(cible && cible.closest && cible.closest('input, textarea, select, [contenteditable]'));
+  return !!(cible && cible.closest && cible.closest(
+    'input:not([type=checkbox]):not([type=range]):not([type=radio]), textarea, [contenteditable]'));
+}
+
+/* Selectionne le texte d'un mot affiche, pour le corriger au clavier seul. */
+function selectionnerMot(i) {
+  const span = lect.spans[i];
+  const noeud = span && span.firstChild;
+  if (!noeud) return;
+  window.getSelection().setBaseAndExtent(noeud, 0, noeud, noeud.nodeValue.length);
 }
 
 function clavierRelecture(e) {
@@ -1020,26 +1031,41 @@ function clavierRelecture(e) {
     annulerCorrection();
     return;
   }
-  if (champ) return;
-  if (touche === 'Enter' && lireSelection()) {
+  // Vitesse : virgule et point-virgule (touches directes en AZERTY comme en
+  // QWERTY), et toujours [ et ], que AltGr donne avec Ctrl+Alt.
+  if (!champ && !e.metaKey && (touche === '[' || touche === ']')) {
     e.preventDefault();
-    ouvrirCorrection();
+    changerVitesse(touche === '[' ? -1 : 1);
     return;
+  }
+  if (champ) return;
+  // Espace lit ou met en pause quel que soit l'element qui a le focus (bouton
+  // clique, case, liste, curseur) : seuls les champs de saisie le gardent.
+  if (touche === ' ' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+    e.preventDefault();
+    basculerLecture();
+    return;
+  }
+  if (cible.closest('select')) return;
+  if (touche === 'Enter' && !cible.closest('button, a, [role=menuitem]')) {
+    if (!lireSelection() && lect.vise >= 0 && lect.spans[lect.vise]) selectionnerMot(lect.vise);
+    if (lireSelection()) {
+      e.preventDefault();
+      ouvrirCorrection();
+      return;
+    }
   }
   if ((touche === 'Delete' || touche === 'Backspace') && !e.ctrlKey && !e.altKey) {
     if (supprimerSelection()) { e.preventDefault(); return; }
   }
   if (e.ctrlKey || e.altKey || e.metaKey) return;
-  if (touche === ' ' && !cible.closest('button')) {
-    e.preventDefault();
-    basculerLecture();
-  } else if (touche === 'ArrowLeft' || touche === 'ArrowRight') {
+  if (touche === 'ArrowLeft' || touche === 'ArrowRight') {
     if (cible.closest('[role=menu]')) return;
     e.preventDefault();
     deplacer(touche === 'ArrowLeft' ? -5 : 5);
-  } else if (touche === '[' || touche === ']') {
+  } else if (touche === ',' || touche === ';') {
     e.preventDefault();
-    changerVitesse(touche === '[' ? -1 : 1);
+    changerVitesse(touche === ',' ? -1 : 1);
   } else if (touche === 'n' || touche === 'N') {
     e.preventDefault();
     allerPoint(e.shiftKey ? -1 : 1);
@@ -1076,6 +1102,11 @@ document.addEventListener('DOMContentLoaded', () => {
   s.addEventListener('seeked', () => suivreLecture(false));
 
   $('#rl-retour').addEventListener('click', retourPrincipale);
+  // Un clic de souris sur un bouton de lecture ne lui laisse pas le focus :
+  // Espace et Entree restent a la relecture (lire, corriger), pas au dernier
+  // bouton clique. Le clavier, lui, garde le parcours habituel.
+  $('.rl-outils').addEventListener('mousedown', (e) => { if (e.target.closest('button')) e.preventDefault(); });
+  $('#rl-texte').addEventListener('mousedown', (e) => { if (e.target.closest('.rl-heure')) e.preventDefault(); });
   $('#rl-lire').addEventListener('click', basculerLecture);
   $('#rl-reculer').addEventListener('click', () => deplacer(-5));
   $('#rl-avancer').addEventListener('click', () => deplacer(5));
