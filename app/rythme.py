@@ -189,7 +189,7 @@ def pause(rythme: str, sur_puce: bool, auto: bool) -> float:
 @dataclass
 class Releve:
     inactivite_s: float = 1e9
-    charge_autres: float = 0.0       # % du processeur entier pris par les autres
+    charge_autres: float = 0.0       # % du processeur entier pris par les autres, -1 : inconnue
     plein_ecran: bool = False        # plein écran ou présentation
     micro: bool = False              # micro ouvert (appel, visioconférence)
     batterie: bool = False           # portable débranché
@@ -205,6 +205,9 @@ def poste_occupe(releve: Releve, occupe_avant: bool = False) -> tuple[bool, str]
         return True, "batterie"
     if releve.inactivite_s < SEUIL_INACTIVITE_S:
         return True, "clavier_souris"
+    if releve.charge_autres < 0:
+        # Charge pas encore mesurable (premier relevé) : on garde l'état d'avant.
+        return occupe_avant, "charge_inconnue"
     seuil = SEUIL_CHARGE_SORTIE if occupe_avant else SEUIL_CHARGE_ENTREE
     if releve.charge_autres >= seuil:
         return True, "charge"
@@ -332,7 +335,7 @@ class Capteur:
             self._psutil = None
 
     def __call__(self) -> Releve:
-        charge = 0.0
+        charge = -1.0
         # psutil mesure la charge depuis l'appel précédent : sur une fenêtre de
         # moins d'une seconde, la valeur ne veut rien dire (100 % constaté).
         maintenant = time.monotonic()
@@ -343,7 +346,7 @@ class Capteur:
                 propre = self._processus.cpu_percent(None) / self._logiques
                 charge = max(0.0, total - propre)
             except Exception:
-                charge = 0.0
+                charge = -1.0
         from . import energie
 
         courant = energie.alimentation()

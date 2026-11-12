@@ -2749,7 +2749,9 @@ def essai_rythmes() -> None:
              and not rythme.poste_occupe(R(inactivite_s=600, charge_autres=20), False)[0]
              and rythme.poste_occupe(R(micro=True))[1] == "micro"
              and rythme.poste_occupe(R(plein_ecran=True))[1] == "plein_ecran"
-             and rythme.poste_occupe(R(batterie=True))[1] == "batterie",
+             and rythme.poste_occupe(R(batterie=True))[1] == "batterie"
+             and rythme.poste_occupe(R(inactivite_s=600, charge_autres=-1), True) == (True, "charge_inconnue")
+             and not rythme.poste_occupe(R(inactivite_s=600, charge_autres=-1), False)[0],
              "poste occupé : clavier, charge des autres (avec hystérésis), micro, plein écran, batterie")
 
     horloge = [0.0]
