@@ -142,6 +142,8 @@ def construire(source: Path, segments, details: dict) -> dict:
             "nom": source.name,
             "chemin": str(source),
             "duree": round(float(details.get("duree", 0) or 0), 2),
+            # Date de l'enregistrement (fichier audio), pas de la transcription.
+            **({"date": _date_fichier(source)} if _date_fichier(source) else {}),
         },
         "transcription": {
             "date": datetime.now().isoformat(timespec="seconds"),
@@ -222,3 +224,34 @@ def enregistrer_tel_quel(chemin_sortie: str | Path, donnees: dict) -> bool:
     except (OSError, TypeError, ValueError) as exc:
         journal.attention("Compagnon non réécrit (%s) : %s", cible.name, exc)
         return False
+
+
+def _date_fichier(source: Path) -> str:
+    """Date de modification du fichier audio, ISO, ou vide."""
+    try:
+        return datetime.fromtimestamp(Path(source).stat().st_mtime).isoformat(timespec="seconds")
+    except (OSError, ValueError, TypeError):
+        return ""
+
+
+def source_rapide(compagnon_json: Path) -> dict:
+    """
+    Le bloc « source » d'un compagnon, lu dans ses premiers octets seulement
+    (il est écrit en tête) : la liste des transcriptions n'a pas à charger les
+    mots d'une réunion d'une heure pour connaître la date de l'enregistrement.
+    """
+    import re
+
+    try:
+        with Path(compagnon_json).open(encoding="utf-8", errors="replace") as flux:
+            debut = flux.read(4000)
+    except OSError:
+        return {}
+    trouve = re.search(r'"source"\s*:\s*(\{[^{}]*\})', debut)
+    if not trouve:
+        return {}
+    try:
+        bloc = json.loads(trouve.group(1))
+    except ValueError:
+        return {}
+    return bloc if isinstance(bloc, dict) else {}

@@ -7,18 +7,10 @@
    detaille. Les transcriptions vivent a part et ne sont jamais effacees sans
    demande explicite.
 
-   Contrat de passerelle (branche « moteur ») :
-     espace_inventaire()  -> { postes: [{ cle, libelle, octets, liberable,
-                              description, chemins }], total_octets,
-                              transcriptions_octets }
-     espace_liberer(cles) -> { ok, octets_liberes?, message? }
-     effacement_apercu(garder_transcriptions)
-                          -> { ok, jeton, elements: [{ libelle, chemin, octets }],
-                               total_octets, conserves?: [{ libelle, chemin }] }
-     effacement_executer(jeton) -> { ok, message? }
-     moteur_etat()        -> { etat, modele? } ou null
-     usage_instantane()   -> { fenetre: { memoire_octets, processeur_pct },
-                               moteur: { ... } ou null } ou null
+   Contrat de passerelle : voir la classe Passerelle de transcriber.pyw
+   (espace_inventaire, espace_liberer, effacement_apercu, effacement_executer,
+   moteur_etat, usage_instantane). « liberable » d'un poste est un booleen :
+   tout le poste se libere, ou rien.
    ========================================================================= */
 
 'use strict';
@@ -57,7 +49,8 @@ async function mesurerEspace() {
 
 function dessinerEspace() {
   const inv = espace.inventaire;
-  const liberable = inv.postes.reduce((s, p) => s + (Number(p.liberable) || 0), 0);
+  const liberable = typeof inv.liberable_octets === 'number' ? inv.liberable_octets
+    : inv.postes.reduce((s, p) => s + octetsLiberables(p), 0);
   const chiffre = (valeur, etiquette, classe) => `<div class="chiffre ${classe || ''}">
     <span class="valeur">${ech(valeur)}</span><span class="etiquette">${ech(etiquette)}</span></div>`;
   $('#espace-bilan').innerHTML = chiffre(formaterOctets(inv.total_octets), t('ui.espace.total'))
@@ -67,7 +60,7 @@ function dessinerEspace() {
 
   const postes = inv.postes.slice().sort((a, b) => (b.octets || 0) - (a.octets || 0));
   $('#espace-postes').innerHTML = postes.map((p) => {
-    const lib = Number(p.liberable) || 0;
+    const lib = octetsLiberables(p);
     const chemins = (p.chemins || []).filter(Boolean);
     const id = 'poste-' + String(p.cle).replace(/[^a-z0-9_-]/gi, '');
     return `<div class="poste-espace">
@@ -85,6 +78,13 @@ function dessinerEspace() {
     </div>`;
   }).join('') || `<p class="vide">${ech(t('ui.espace.vide'))}</p>`;
   majBoutonLiberer();
+}
+
+/* Octets d'un poste que l'on peut liberer : tout le poste s'il est marque
+   liberable (cache, journaux, modele inutilise), rien sinon. */
+function octetsLiberables(p) {
+  if (p.liberable === true) return Number(p.octets) || 0;
+  return Number(p.liberable) || 0;
 }
 
 function selectionEspace() {
@@ -116,10 +116,18 @@ async function libererEspace() {
     majBoutonLiberer();
     return;
   }
-  const message = r.message || t('ui.espace.libere', { taille: formaterOctets(r.octets_liberes || 0) });
-  $('#espace-retour').innerHTML = encartSucces(message);
-  journaliser('ok', message);
-  await mesurerEspace();
+  const message = t('ui.espace.libere', { taille: formaterOctets(r.octets || 0) });
+  const restes = (r.restes || []).length;
+  $('#espace-retour').innerHTML = restes
+    ? encartAttention(message + ' ' + tn('ui.espace.restes', restes))
+    : encartSucces(message);
+  journaliser(restes ? 'attention' : 'ok', message);
+  if (r.inventaire && Array.isArray(r.inventaire.postes)) {
+    espace.inventaire = r.inventaire;
+    dessinerEspace();
+  } else {
+    await mesurerEspace();
+  }
 }
 
 /* Memoire et processeur, de la fenetre et du moteur, toutes les deux secondes
@@ -140,9 +148,12 @@ async function majRessources() {
   });
   const cartes = [];
   if (usage.fenetre) cartes.push(carte(t('ui.espace.fenetre'), mesure(usage.fenetre)));
-  const etatMoteur = moteur && moteur.etat ? t('ui.espace.moteur_etat.' + moteur.etat) : '';
+  if (usage.affichage && usage.affichage.processus) {
+    cartes.push(carte(t('ui.espace.affichage'), formaterOctets(usage.affichage.memoire_octets || 0)));
+  }
+  const etatMoteur = t('ui.moteur.' + ((moteur && moteur.etat) || 'arrete'));
   cartes.push(carte(t('ui.espace.moteur') + (moteur && moteur.modele ? ` (${moteur.modele})` : ''),
-    usage.moteur ? mesure(usage.moteur) : (etatMoteur || t('ui.espace.moteur_etat.arrete'))));
+    etatMoteur + (usage.moteur ? ' · ' + mesure(usage.moteur) : '')));
   $('#ressources').innerHTML = cartes.join('');
 }
 
@@ -152,15 +163,26 @@ async function apercuEffacement() {
   const garder = !$('#eff-transcriptions').checked;
   let r = null;
   try { r = await appelPasserelle('effacement_apercu', garder); } catch (e) { r = null; }
-  if (!r || !r.ok) {
-    $('#espace-retour').innerHTML = encartAttention((r && r.message) || t('ui.espace.code.' + ((r && r.code) || 'echec')));
+  if (!r || !r.jeton) {
+    $('#espace-retour').innerHTML = encartAttention((r && r.message) || t('ui.espace.code.echec'));
     return;
   }
   espace.apercu = r;
-  const elements = r.elements || [];
+  // Un element par poste (son premier emplacement, et combien d'autres) ; les
+  // transcriptions seulement si la case est cochee.
+  const elements = (r.postes || []).map((p) => {
+    const chemins = (p.chemins || []).filter(Boolean);
+    return { libelle: p.libelle, octets: p.octets,
+      chemin: (chemins[0] || '') + (chemins.length > 1 ? ' ' + t('ui.eff.et_autres', { n: chemins.length - 1 }) : '') };
+  });
+  const trans = r.transcriptions || {};
+  if (!garder && r.transcriptions_octets) {
+    elements.push({ libelle: t('ui.eff.transcriptions'), chemin: trans.dossier || '', octets: r.transcriptions_octets });
+  }
   const total = typeof r.total_octets === 'number' ? r.total_octets
     : elements.reduce((s, x) => s + (Number(x.octets) || 0), 0);
-  const conserves = r.conserves || [];
+  const conserves = garder && trans.dossier ? [{ chemin: trans.dossier }] : [];
+  const etrangers = (r.non_reconnus || []).length;
   $('#eff-contenu').innerHTML = `
     <p>${ech(tn('ui.eff.liste', elements.length, { taille: formaterOctets(total) }))}</p>
     <div class="eff-liste">${elements.map((x) => `<div class="eff-ligne">
@@ -168,7 +190,8 @@ async function apercuEffacement() {
       <span class="octets">${ech(formaterOctets(x.octets))}</span></div>`).join('')}</div>
     ${garder ? encartSucces(conserves.length
       ? t('ui.eff.gardees_ou', { ou: conserves.map((c) => c.chemin || c.libelle).join(', ') })
-      : t('ui.eff.gardees')) : encartAttention(t('ui.eff.aussi_transcriptions_avis'))}`;
+      : t('ui.eff.gardees')) : encartAttention(t('ui.eff.aussi_transcriptions_avis'))}
+    ${etrangers ? `<p class="aide">${ech(tn('ui.eff.non_reconnus', etrangers))}</p>` : ''}`;
   $('#eff-compris').checked = false;
   $('#btn-eff-executer').disabled = true;
   $('#btn-eff-executer').textContent = t('ui.eff.executer_taille', { taille: formaterOctets(total) });
@@ -182,12 +205,17 @@ async function executerEffacement() {
   let r = null;
   try { r = await appelPasserelle('effacement_executer', espace.apercu.jeton); } catch (e) { r = null; }
   if (!r || !r.ok) {
-    $('#eff-retour').innerHTML = encartAttention((r && r.message) || t('ui.espace.code.' + ((r && r.code) || 'echec')));
+    $('#eff-retour').innerHTML = encartAttention((r && r.message) || t('ui.espace.code.echec'));
     $('#btn-eff-executer').disabled = !$('#eff-compris').checked;
     return;
   }
-  $('#eff-retour').innerHTML = encartSucces(r.message || t('ui.eff.fait'));
-  journaliser('ok', r.message || t('ui.eff.fait'));
+  // La fenetre se ferme d'elle-meme : son journal et son profil d'affichage
+  // sont effaces juste apres, puis le desinstalleur passe (version installee).
+  const message = t(r.fermeture ? 'ui.eff.fait_fermeture' : 'ui.eff.fait', { taille: formaterOctets(r.octets || 0) });
+  const restes = (r.restes || []).length;
+  $('#eff-retour').innerHTML = restes ? encartAttention(message + ' ' + tn('ui.espace.restes', restes))
+    : encartSucces(message);
+  journaliser(restes ? 'attention' : 'ok', message);
   espace.apercu = null;
 }
 

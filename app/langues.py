@@ -64,6 +64,7 @@ _FR: dict[str, str] = {
 
     # -- formats et unités -------------------------------------------------
     "format.date_heure": "%d/%m/%Y à %H:%M",
+    "format.date": "%d/%m/%Y",
     "format.decimal": ",",
     "format.titre_message": "{titre} : {message}",
     "contexte.export": "export des données",
@@ -1495,6 +1496,7 @@ _EN: dict[str, str] = {
     "langue.en": "English",
 
     "format.date_heure": "%m/%d/%Y at %H:%M",
+    "format.date": "%m/%d/%Y",
     "format.decimal": ".",
     "format.titre_message": "{titre}: {message}",
     "contexte.export": "data export",

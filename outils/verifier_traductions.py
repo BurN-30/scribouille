@@ -191,9 +191,8 @@ def essai_parite_js(source: str) -> None:
 # ---------------------------------------------------------------------------
 
 #: Scripts de l'interface soumis aux contrôles : tous ceux de `web/`, sauf le
-#: catalogue lui-même et la doublure provisoire de la passerelle (données
-#: fictives des essais à l'écran, retirée à la fusion avec la branche moteur).
-EXCLUS_INTERFACE = {"langues.js", "doublure-passerelle.js"}
+#: catalogue lui-même.
+EXCLUS_INTERFACE = {"langues.js"}
 
 
 def scripts_interface() -> list[Path]:

@@ -773,9 +773,14 @@ def essai_ecrans() -> None:
              piege.group(1) if piege else "")
     verifier("'occurrences_correction'" in js and "'corriger_occurrences'" in js and "data-rang" in js,
              "une correction vise les endroits cochés, pas tout le fichier d'office")
-    verifier(html.count("doublure-passerelle.js") == 1 and "DOUBLURE_PASSERELLE" in js
-             and js.count("DOUBLURE_PASSERELLE") == 1,
-             "la doublure de la passerelle tient dans un fichier et une balise, retirables à la fusion")
+    verifier("doublure-passerelle" not in html and "DOUBLURE" not in js
+             and not (RACINE / "web" / "doublure-passerelle.js").exists(),
+             "plus de doublure : espace disque, effacement et moteur parlent à la vraie passerelle")
+    source_passerelle = (RACINE / "transcriber.pyw").read_text(encoding="utf-8")
+    for nom in ("espace_inventaire", "espace_liberer", "effacement_apercu", "effacement_executer",
+                "moteur_etat", "usage_instantane", "markdown_relecture"):
+        verifier(f"def {nom}(" in source_passerelle and f"'{nom}'" in js,
+                 f"passerelle : {nom} existe et l'écran l'appelle")
     catalogue = (RACINE / "web" / "langues.js").read_text(encoding="utf-8")
     verifier("(s)" not in catalogue, "aucun accord en « (s) » dans les textes de l'interface")
     textes_py = [v for code in langues.LANGUES for v in langues.TEXTES[code].values()]

@@ -2105,11 +2105,13 @@ class Passerelle:
         # Une entrée par transcription (texte et sous-titres ensemble), et plus
         # de coupure à 40 fichiers.
         elements = sorties.historique(Path(self.config.get("dossier_sortie") or ""))
+        positions = lecture._lire_positions()
         for element in elements:
             element["taille"] = audio_module.formater_taille(element["taille"])
             # Durée de la réunion et date de la transcription, lues dans
             # l'en-tête du .txt : une correction ne redate plus la réunion.
             element.update(self._entete_historique(element.get("chemin", "")))
+            element.update(self._reunion_historique(element.get("chemin", ""), positions))
         self._js(f"onHistorique({_json(elements)})")
 
     @staticmethod
@@ -2130,6 +2132,47 @@ class Passerelle:
             retour["duree"] = duree
         if date:
             retour["date"] = date
+        return retour
+
+    @staticmethod
+    def _reunion_historique(chemin: str, positions: dict) -> dict:
+        """
+        Date de l'enregistrement (quand elle diffère du jour de la
+        transcription) et endroit où la relecture s'est arrêtée.
+        """
+        from datetime import datetime
+
+        from app import compagnon
+
+        fichier = Path(chemin or "")
+        retour: dict = {}
+        if fichier.suffix.lower() != ".txt":
+            return retour
+        source = compagnon.source_rapide(compagnon.chemin_pour(fichier))
+        quand = None
+        try:
+            if source.get("date"):
+                quand = datetime.fromisoformat(str(source["date"]))
+            elif source.get("chemin") and Path(source["chemin"]).is_file():
+                quand = datetime.fromtimestamp(Path(source["chemin"]).stat().st_mtime)
+            transcrit = datetime.fromtimestamp(fichier.stat().st_mtime)
+        except (OSError, ValueError):
+            quand = None
+        if quand is not None:
+            date = quand.strftime(langues.t("format.date"))
+            # La date de transcription suffit quand c'est le même jour.
+            if date != transcrit.strftime(langues.t("format.date")):
+                retour["reunion"] = date
+        try:
+            position = positions.get(str(fichier.resolve()).lower())
+        except OSError:
+            position = None
+        instant = float((position or {}).get("t") or 0)
+        if instant >= 1:
+            total = int(instant)
+            heures, reste = divmod(total, 3600)
+            retour["relu"] = (f"{heures}:{reste // 60:02d}:{reste % 60:02d}" if heures
+                              else f"{reste // 60}:{reste % 60:02d}")
         return retour
 
     def lire_texte(self, chemin: str) -> str:

@@ -20,6 +20,7 @@ const etat = {
   fichiers: new Map(),   // identifiant -> donnees de la ligne
   historique: [],
   diarisation: { disponible: false, jeton_present: false, guide: {}, extension: {} },
+  recents: new Map(),          // transcriptions finies pendant la session : chemin -> details
   extensionEnCours: false,   // installation de la separation des locuteurs en cours
   vitesse: {},               // moteur OpenVINO, reglage de vitesse, banc d'essai
   rythme: {},                // vitesse maximale, equilibre ou discret, adaptation
@@ -57,14 +58,10 @@ function icone(nom, classe) {
   return `<svg class="icone ${classe || ''}"><use href="#${nom}"></use></svg>`;
 }
 
-/* Appel d'une fonction de passerelle. Celles qu'apporte la branche « moteur »
-   (espace disque, effacement, etat du moteur) n'existent pas encore ici : la
-   doublure de web/doublure-passerelle.js les remplace tant qu'elles manquent. */
+/* Appel d'une fonction de passerelle (pywebview.api), en promesse. */
 function appelPasserelle(nom, ...args) {
   const api = window.pywebview && window.pywebview.api;
   if (api && typeof api[nom] === 'function') return Promise.resolve(api[nom](...args));
-  const doublure = window.DOUBLURE_PASSERELLE;
-  if (doublure && typeof doublure[nom] === 'function') return Promise.resolve(doublure[nom](...args));
   return Promise.reject(new Error(nom));
 }
 
@@ -131,7 +128,6 @@ function initialiser(d, silencieux) {
 
   if (!silencieux) {
     if (!d.ffmpeg) journaliser('erreur', t('ui.journal.ffmpeg'));
-    journaliser('info', t('ui.journal.pret', { fichier: d.journal }));
   }
 
   etat.pret = true;
@@ -176,7 +172,6 @@ async function changerLangueInterface(code) {
     console.error(e);
   }
   if (typeof relectureLangueChangee === 'function') relectureLangueChangee();
-  journaliser('info', t('ui.journal.langue'));
 }
 
 /* ------------------------------------------------------------- Ecrans */
@@ -1503,7 +1498,12 @@ function ligneHTML(id) {
   const actions = [];
   if (texte) actions.push(`<button class="bouton bouton-accent bouton-petit" data-lire="${ech(texte.chemin)}" aria-label="${ech(t('ui.ligne.relire_nom', { nom: it.nom }))}">${icone('i-fichier', 'icone-s')}<span>${ech(t('ui.ligne.relire'))}</span></button>`);
   actions.push(autres);
-  if (['annule', 'erreur'].includes(it.etat)) actions.push(`<button class="bouton bouton-petit" data-relancer>${icone('i-reprise', 'icone-s')}<span>${ech(t('ui.ligne.relancer'))}</span></button>`);
+  // Arrete, ou abandonne apres plantage du moteur : ce qui est transcrit est
+  // garde, le bouton le dit (« Reprendre ») ; un autre echec repart de zero.
+  if (['annule', 'erreur'].includes(it.etat)) {
+    const reprendre = it.etat === 'annule' || !!it.reprise;
+    actions.push(`<button class="bouton bouton-petit" data-relancer>${icone('i-reprise', 'icone-s')}<span>${ech(t(reprendre ? 'ui.ligne.reprendre' : 'ui.ligne.relancer'))}</span></button>`);
+  }
   if (it.etat === 'erreur') actions.push(boutonLigne('data-log', 'ui.ligne.journal', 'i-info'));
   actions.push(boutonLigne('data-retirer', 'ui.ligne.retirer', 'i-croix'));
 
@@ -1643,24 +1643,44 @@ function dessinerHistorique() {
     vue.innerHTML = `<div class="vide">${ech(t('ui.historique.aucun_resultat'))}</div>`;
     return;
   }
-  /* Une ligne par transcription ; « Relire » en toutes lettres, chaque autre
-     format s'ouvre a part. */
-  vue.innerHTML = liste.map((h) => {
+  /* Une ligne par transcription ; « Relire » en toutes lettres, « Exporter »
+     ouvre la relecture sur son menu d'export, chaque autre format s'ouvre a
+     part. Celles finies pendant cette session passent en tete. */
+  const recente = (h) => etat.recents.get(String(h.chemin).toLowerCase());
+  const triee = liste.slice().sort((a, b) => ((recente(b) || {}).quand || 0) - ((recente(a) || {}).quand || 0));
+  vue.innerHTML = triee.map((h) => {
     const formats = h.formats || [{ format: h.format, chemin: h.chemin }];
     const texte = formats.find((f) => f.format === 'TXT');
-    return `<div class="ligne" data-chemin="${ech(h.chemin)}">
+    const r = recente(h);
+    const meta = [
+      r ? t('ui.historique.a_l_instant', { duree: r.duree || '?' }) : '',
+      h.duree,
+      h.reunion ? t('ui.historique.reunion', { date: h.reunion }) : '',
+      h.date ? t('ui.historique.transcrite', { date: h.date }) : '',
+      r && r.locuteurs ? tn('ui.ligne.locuteurs', r.locuteurs) : '',
+      h.relu ? t('ui.historique.relu', { position: h.relu }) : '',
+    ].filter(Boolean).join(' · ');
+    return `<div class="ligne${r ? ' recente' : ''}" data-chemin="${ech(h.chemin)}">
       <span class="pastille termine">${icone('i-coche', 'icone-s')}</span>
       <div class="infos">
         <div class="nom">${ech(h.nom)}</div>
-        <div class="meta">${ech([h.duree, h.date].filter(Boolean).join(' · '))}</div>
+        <div class="meta ${r ? 'succes' : ''}">${ech(meta)}</div>
       </div>
       <div class="actions-ligne">
-        ${texte ? `<button class="bouton bouton-petit" data-lire="${ech(texte.chemin)}" aria-label="${ech(t('ui.ligne.relire_nom', { nom: h.nom }))}">${icone('i-fichier', 'icone-s')}<span>${ech(t('ui.ligne.relire'))}</span></button>` : ''}
+        ${texte ? `<button class="bouton ${r ? 'bouton-accent' : ''} bouton-petit" data-lire="${ech(texte.chemin)}" aria-label="${ech(t('ui.ligne.relire_nom', { nom: h.nom }))}">${icone('i-fichier', 'icone-s')}<span>${ech(t('ui.ligne.relire'))}</span></button>` : ''}
+        ${texte ? `<button class="bouton bouton-petit" data-exporter="${ech(texte.chemin)}" aria-label="${ech(t('ui.ligne.exporter_nom', { nom: h.nom }))}">${ech(t('ui.ligne.exporter'))}</button>` : ''}
         ${formats.filter((f) => f.format !== 'TXT').map((f) =>
           `<button class="etiquette-format" data-ouvrir="${ech(f.chemin)}">${ech(f.format)}</button>`).join('')}
       </div>
     </div>`;
   }).join('');
+  $$('#vue-historique [data-exporter]').forEach((b) => {
+    b.onclick = async (e) => {
+      e.stopPropagation();
+      await ouvrirLecture(b.dataset.exporter);
+      if (lect.d && typeof basculerMenuExport === 'function') basculerMenuExport();
+    };
+  });
   $$('#vue-historique .ligne').forEach((l) => {
     l.onclick = (e) => { if (!e.target.closest('button')) ouvrirSortie(l.dataset.chemin); };
   });
@@ -2299,7 +2319,24 @@ window.onFichierTermine = function (id, d) {
   } else {
     it.etat = 'erreur';
     it.titre = d.titre;
-    it.message = d.message;
+    it.message = d.plantage_moteur ? '' : d.message;
+    it.reprise = d.reprise || '';
+  }
+  if (d.ok) {
+    // Une transcription finie quitte la file et rejoint « Transcriptions », en
+    // tete, marquee « Terminé à l'instant » : plus de doublon entre les deux.
+    const texte = (it.sorties || []).find((s) => s.format === 'TXT') || (it.sorties || [])[0];
+    if (texte) {
+      etat.recents.set(String(texte.chemin).toLowerCase(), {
+        quand: Date.now(), duree: it.duree_calcul, locuteurs: it.locuteurs, corrections: it.corrections,
+      });
+      etat.fichiers.delete(id);
+      pywebview.api.retirer(id);
+      dessinerFile();
+      dessinerHistorique();
+      majBoutons();
+      return;
+    }
   }
   majLigne(id);
   majBoutons();
@@ -2949,3 +2986,33 @@ function encartSucces(m) {
 function encartAttention(m) {
   return `<div class="encart encart-attention">${icone('i-alerte', 'icone-s')}<span>${ech(m)}</span></div>`;
 }
+
+
+/* --------------------------------------------------- Etat du moteur, au pied
+
+   Le processus moteur (app/superviseur.py) : au repos, chargement,
+   transcription, arrete, en panne. Montre tant qu'il vit, et apres une panne
+   (avec sa cause en infobulle) ; rien quand il est simplement arrete. */
+let derniereVueMoteur = '';
+async function majEtatMoteur() {
+  if (!etat.pret || !(window.pywebview && window.pywebview.api)) return;
+  let m = null;
+  try { m = await appelPasserelle('moteur_etat'); } catch (e) { m = null; }
+  const el = $('#etat-moteur');
+  if (!m || !m.etat || (m.etat === 'arrete' && !etat.enCours)) {
+    el.hidden = true;
+    derniereVueMoteur = '';
+    return;
+  }
+  const texte = t('ui.moteur.etat', { etat: t('ui.moteur.' + m.etat) })
+    + (m.modele && ['chargement', 'transcription', 'repos'].includes(m.etat) ? ` (${m.modele})` : '');
+  if (texte === derniereVueMoteur && !el.hidden) return;
+  derniereVueMoteur = texte;
+  el.hidden = false;
+  el.textContent = texte;
+  el.className = 'etat-moteur ' + (m.etat === 'panne' ? 'panne' : '');
+  el.title = m.etat === 'panne' && m.derniere_panne
+    ? t('ui.moteur.panne_detail', { code: m.derniere_panne.code, date: String(m.derniere_panne.date || '').replace('T', ' ') })
+    : '';
+}
+setInterval(majEtatMoteur, 2000);

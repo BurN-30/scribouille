@@ -286,6 +286,8 @@ kbd {
 .segments {
   display: inline-flex; border: 1px solid var(--bordure-forte); border-radius: var(--rayon-petit);
   background: var(--carte-creuse); overflow: hidden;
+  /* Jamais compressé par sa rangée : le dernier segment perdait son bord droit. */
+  flex: none; max-width: 100%;
 }
 .segment {
   border: none; border-right: 1px solid var(--bordure); background: transparent;
@@ -651,6 +653,9 @@ textarea { resize: vertical; font-family: var(--police-mono); font-size: 12.5px;
 .etat-global.succes .point { background: var(--vert); }
 .etat-global.erreur .point { background: var(--rouge); }
 .etat-global.attention .point { background: var(--ambre); }
+.etat-moteur { font-size: 12px; color: var(--texte-faible); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.etat-moteur.panne { color: var(--rouge); }
+#vue-historique .ligne.recente .meta.succes { color: var(--vert); }
 .etat-global .texte { color: var(--texte-doux); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
 .etat-global.erreur .texte { color: var(--rouge); }
 .etat-global.attention .texte { color: var(--ambre); }
