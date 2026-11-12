@@ -229,6 +229,16 @@ def executer_reglage(parametres: dict) -> dict:
     amorce = {"amorce": "", "nb_retenus": 0, "jetons": 0}
     if parametres.get("glossaire"):
         amorce = vocabulaire.construire_amorce(None, tokeniseur=instance.tokeniseur, langue=langue)
+    if parametres.get("vocabulaire"):
+        # Mesure du vocabulaire (app/mesure_vocabulaire.py) : amorce choisie
+        # dans un fichier du format 2, refaite fenêtre par fenêtre s'il déborde.
+        from . import vocabulaire_usage, vocabulaire_v2
+
+        voc = vocabulaire_v2.lire(parametres["vocabulaire"])[0]
+        dynamique = vocabulaire_usage.amorce(voc, instance.tokeniseur, langue,
+                                             str(parametres.get("contexte") or ""))
+        amorce = {"amorce": dynamique, "nb_retenus": dynamique.info["nb_retenus"],
+                  "jetons": dynamique.info["jetons"]}
     regles = vocabulaire.analyser_corrections()[0] if parametres.get("corrections") else []
 
     sorties: dict[str, dict] = {}
