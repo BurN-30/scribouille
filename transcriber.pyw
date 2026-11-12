@@ -380,7 +380,7 @@ from app import config as config_module  # noqa: E402
 from app import barre_taches, diarisation, donnees, ecoute, gabarit, lecture, maj  # noqa: E402
 from app import banc, materiel, nommage, presets, reglage_machine, reprise, rythme, stockage  # noqa: E402
 from app import surveillance, traitement, vocabulaire, vocabulaire_interface  # noqa: E402
-from app import processus, superviseur  # noqa: E402
+from app import inventaire, processus, superviseur  # noqa: E402
 
 _SANS_FENETRE = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
@@ -393,8 +393,34 @@ class Passerelle:
     """
     Objet exposé à l'interface web sous le nom `pywebview.api`.
 
-    Fonctions du contrat de la version 2.6 (l'écran du moteur se construit
-    contre ces noms ; formes stables, clés ajoutées sans changer les anciennes) :
+    Fonctions du contrat de la version 2.6 (l'écran de l'espace disque et celui
+    du moteur se construisent contre ces noms ; formes stables, clés ajoutées
+    sans changer les anciennes) :
+
+    espace_inventaire() -> {postes: [{cle, libelle, octets, taille, liberable,
+        description, chemins, nombre}], total_octets, total, liberable_octets,
+        transcriptions_octets, transcriptions: {dossier, octets, nombre},
+        non_reconnus, donnees, modeles, installee}
+        Ce que Scribouille occupe, poste par poste (`app/inventaire.py`). Les
+        transcriptions sont comptées à part, jamais dans `total_octets`.
+        Parcourt le disque : appel lent (jusqu'à une seconde pour des modèles).
+
+    espace_liberer(cles: list[str]) -> {liberes: [{cle, octets}], octets,
+        restes, inconnus, inventaire}
+        Supprime les postes donnés (clés de `espace_inventaire`), sauf
+        « programme » et « installation ». Refusé pendant une transcription.
+
+    effacement_apercu(garder_transcriptions: bool = True) -> {jeton, postes,
+        total_octets, total, garder_transcriptions, transcriptions_octets,
+        transcriptions, non_reconnus, desinstalleur, valide_s}
+        Ce que l'effacement complet supprimerait, sans rien toucher. Le jeton
+        vaut 15 minutes et pour cette liste-là seulement.
+
+    effacement_executer(jeton: str) -> {ok, liberes, octets, restes,
+        desinstalleur, fermeture}
+        Efface la liste de l'aperçu. Version installée : la fenêtre se ferme et
+        le désinstalleur retire ensuite programme, raccourcis et registre
+        (`fermeture` vaut alors true). Refusé pendant une transcription.
 
     moteur_etat() -> {etat, pid, modele, peripherique, sur_puce,
         memoire_octets, prive_octets, depuis, file_ouverte, protocole,
@@ -944,7 +970,51 @@ class Passerelle:
 
         self._fond(travail)
 
-    # -- moteur et usage (contrat 2.6) ------------------------------------
+    # -- espace disque, effacement, moteur, usage (contrat 2.6) -------------
+
+    def espace_inventaire(self) -> dict:
+        try:
+            return inventaire.inventaire(self.config)
+        except Exception as exc:
+            journal.exception("Inventaire de l'espace occupé en échec", exc)
+            return {"postes": [], "total_octets": 0, "transcriptions_octets": 0, "erreur": str(exc)}
+
+    def espace_liberer(self, cles: list) -> dict:
+        if self.file.occupee:
+            return {"ok": False, "message": langues.t("app.banc.file_occupee"), "liberes": [], "octets": 0,
+                    "restes": [], "inconnus": []}
+        bilan = inventaire.liberer([str(c) for c in (cles or [])], self.config)
+        journal.info("Espace libéré : %s (%s octets)", ", ".join(str(c) for c in cles or []), bilan["octets"])
+        bilan["ok"] = True
+        bilan["inventaire"] = self.espace_inventaire()
+        return bilan
+
+    def effacement_apercu(self, garder_transcriptions: bool = True) -> dict:
+        return inventaire.apercu_effacement(bool(garder_transcriptions), self.config)
+
+    def effacement_executer(self, jeton: str) -> dict:
+        if self.file.occupee:
+            return {"ok": False, "message": langues.t("app.banc.file_occupee")}
+        self.moteur.quitter()
+        self.surveillant.configurer("", False)
+        bilan = inventaire.executer_effacement(str(jeton or ""))
+        if not bilan.get("ok"):
+            return bilan
+        journal.info("Effacement complet : %s octets, %s reste(s)", bilan["octets"], len(bilan["restes"]))
+        bilan["fermeture"] = False
+        if bilan.get("desinstalleur") and inventaire.lancer_desinstalleur_apres(os.getpid(), bilan["desinstalleur"]):
+            # Le désinstalleur attend la fin de ce processus pour retirer le
+            # programme, ses raccourcis et sa clé de registre.
+            bilan["fermeture"] = True
+            threading.Timer(1.5, self._fermer_fenetre).start()
+        return bilan
+
+    def _fermer_fenetre(self) -> None:
+        try:
+            if self._fenetre is not None:
+                self._fenetre.destroy()
+        except Exception as exc:
+            journal.debug("Fermeture de la fenêtre : %s", exc)
 
     def moteur_etat(self) -> dict:
         return self.moteur.etat_public()
@@ -2286,7 +2356,11 @@ def principal() -> None:
     fenetre.events.closed += passerelle.moteur.arreter
 
     try:
-        webview.start(debug=bool(os.environ.get("TRANSCRIPTEUR_DEBUG")))
+        # Profil du composant d'affichage dans nos données (inventorié et
+        # effaçable), au lieu d'un dossier temporaire anonyme ; mode privé
+        # gardé : rien n'y persiste d'une session à l'autre.
+        webview.start(debug=bool(os.environ.get("TRANSCRIPTEUR_DEBUG")),
+                      storage_path=str(chemins.RACINE / "webview"))
     except Exception as exc:
         journal.exception("La fenêtre n'a pas pu s'ouvrir", exc)
         _abandonner(
