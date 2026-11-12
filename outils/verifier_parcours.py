@@ -359,6 +359,71 @@ def essai_fichiers_produits(base: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Conseil et annonces de durée
+# ---------------------------------------------------------------------------
+
+def essai_une_seule_verite(base: Path) -> None:
+    import copy
+
+    from app import adaptation, calibration, diarisation, materiel, presets, rythme
+
+    titre("Conseil et durées : une seule source, le rythme compté une fois")
+    racine = chemins.RACINE
+    # Racine temporaire : ni les mesures du poste, ni celles du banc des rythmes.
+    chemins.RACINE = base / "racine"
+    chemins.RACINE.mkdir()
+    try:
+        mat = materiel.Materiel(cpu_nom="Processeur d'essai", coeurs_physiques=8,
+                                coeurs_logiques=16, ram_go=32.0)
+        profil = adaptation.Profil(processeur="essai", logiques=16, ram_go=32, openvino_installe=True)
+        proposition = adaptation.proposer(mat, profil, etat_modele=lambda _d: "complet")
+        reco = presets.recommandation(mat, proposition)
+        verifier(proposition["preset"] == "rapide" and reco["preset_conseille"] == "rapide"
+                 and proposition["resume"] in reco["phrase"],
+                 "la pastille et la fiche du matériel suivent la proposition", reco["phrase"])
+        reco_seule = presets.recommandation(mat)
+        verifier(reco_seule["preset_conseille"] == "qualite",
+                 "sans proposition, la règle de repli décide seule (elle disait « Qualité », d'où la contradiction)")
+
+        essai = copy.copy(mat)
+        essai.moteur, essai.peripherique_openvino = "openvino", "CPU"
+        verifier(proposition["une_heure"] == presets.pour_une_heure("rapide", essai, proposition["rythme"]),
+                 "la proposition annonce ce qu'annonceront les cartes une fois appliquée",
+                 proposition["une_heure"])
+        for nom in rythme.RYTHMES:
+            verifier(presets.pour_une_heure("qualite", mat, nom) == presets.formater_duree(
+                presets.estimer_secondes(3600, "qualite", mat) * rythme.coefficient(nom, mat.cle_calcul)),
+                f"carte et rythme « {nom} » : le même chiffre")
+        reco_discret = presets.recommandation(mat, None, "discret")
+        verifier(reco_discret["estimations"][0]["pour_une_heure"] == presets.pour_une_heure("qualite", mat, "discret"),
+                 "la fiche du matériel tient compte du rythme choisi")
+
+        verifier(diarisation.effective(True) == diarisation.disponible() and not diarisation.effective(False),
+                 "la séparation des locuteurs ne compte que si elle est installée et demandée")
+        if not diarisation.disponible():
+            verifier(presets.estimer_annonce(600, "rapide", mat, "vitesse", diarisation.effective(True))
+                     == presets.estimer_annonce(600, "rapide", mat, "vitesse", False),
+                     "non installée, elle n'allonge pas l'estimation de la file")
+
+        # Une transcription faite en « discret » (2,4 fois plus lente) : sa mesure
+        # est rangée ramenée à la vitesse maximale, le rythme n'est compté qu'une fois.
+        c_discret = rythme.coefficient("discret", "cpu")
+        ralenti = rythme.coefficient_effectif({}, {"discret": 120.0}, "discret", "cpu")
+        verifier(abs(ralenti - c_discret) < 1e-9, "tout le calcul en discret : coefficient du discret")
+        moitie = rythme.coefficient_effectif({"vitesse": 10.0}, {"vitesse": 70.0, "discret": 60.0}, "discret", "cpu")
+        verifier(abs(moitie - (1.0 + c_discret) / 2) < 1e-9, "moitié à pleine vitesse : moyenne pondérée")
+        verifier(rythme.coefficient_effectif({}, {}, "equilibre", "cpu") == rythme.coefficient("equilibre", "cpu"),
+                 "sans relevé : coefficient du rythme choisi")
+        calibration.enregistrer("large-v3", "cpu", 5, 600.0, 600.0 / ralenti, mat, lot=8)
+        verifier(abs(presets.estimer_annonce(600, "qualite", mat, "discret") - 600.0) < 1.0
+                 and abs(presets.estimer_annonce(600, "qualite", mat, "vitesse") - 600.0 / c_discret) < 1.0,
+                 "après une mesure en discret, l'annonce en discret retrouve la durée réelle",
+                 f"{presets.estimer_annonce(600, 'qualite', mat, 'discret'):.0f} s")
+    finally:
+        chemins.RACINE = racine
+
+
+# ---------------------------------------------------------------------------
 # File d'attente
 # ---------------------------------------------------------------------------
 
@@ -445,6 +510,7 @@ def principal() -> int:
         essai_moteur_sans_confiance(base)
         essai_ecoute(base)
         essai_fichiers_produits(base)
+        essai_une_seule_verite(base)
         essai_file_apres_arret(base)
 
     print(f"\n{'=' * 42}")

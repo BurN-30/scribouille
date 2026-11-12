@@ -318,6 +318,29 @@ def estimer_secondes(duree_audio: float, cle_preset: str, mat: Materiel,
         cle_preset, mat, diarisation, modele_avance, beam, lot)
 
 
+def estimer_annonce(duree_audio: float, cle_preset: str, mat: Materiel,
+                    rythme_choisi: str = "vitesse", diarisation: bool = False,
+                    modele_avance: str = "", beam: int = 0, lot: int | None = None) -> float:
+    """
+    LA durée annoncée, partout : cartes des presets, rythme, fiche du matériel,
+    proposition, ligne d'un fichier en file, estimation de départ de la file.
+
+    Calcul mesuré ou estimé, multiplié UNE fois par le coefficient du rythme
+    (les mesures sont rangées ramenées à la vitesse maximale, voir
+    `app/traitement.py`). `diarisation` ne doit être vrai que si la séparation
+    des locuteurs tournera réellement : demandée ET installée.
+    """
+    from . import rythme
+
+    return estimer_secondes(duree_audio, cle_preset, mat, diarisation, modele_avance, beam, lot) \
+        * rythme.coefficient(rythme_choisi, mat.cle_calcul)
+
+
+def pour_une_heure(cle_preset: str, mat: Materiel, rythme_choisi: str = "vitesse") -> str:
+    """Durée annoncée pour une heure d'audio, transcription seule : le chiffre de référence."""
+    return formater_duree(estimer_annonce(3600, cle_preset, mat, rythme_choisi))
+
+
 def nombre_fr(valeur: float, decimales: int = 1) -> str:
     """Nombre décimal au séparateur de la langue d'interface courante."""
     return langues.nombre(valeur, decimales)
@@ -336,19 +359,32 @@ def formater_duree(secondes: float | None) -> str:
     return langues.t("duree.secondes", s=sec)
 
 
-def recommandation(mat: Materiel) -> dict:
+def recommandation(mat: Materiel, proposition: dict | None = None,
+                   rythme_choisi: str = "vitesse") -> dict:
     """
     Preset conseillé pour cette machine, avec la phrase à afficher.
 
-    Règle : la qualité par défaut, sauf si la mémoire est trop juste pour
-    large-v3, auquel cas on bascule sur le preset rapide et on le dit.
+    Quand la proposition du poste (`app/adaptation.py`) est connue, c'est ELLE
+    qui décide : la pastille « conseillé ici », la phrase de la fiche du
+    matériel et l'encart de proposition disent alors la même chose. Deux
+    décisions prises chacune de leur côté se contredisaient à l'écran
+    (« Qualité maximale est le bon choix » à côté de « Réglage proposé :
+    Rapide »). La règle ci-dessous ne sert plus que de repli, sans proposition.
+
+    Règle de repli : la qualité par défaut, sauf si la mémoire est trop juste
+    pour large-v3, auquel cas on bascule sur le preset rapide et on le dit.
     """
     duree_reference = 3600  # une réunion d'une heure
 
-    qualite = estimer_secondes(duree_reference, "qualite", mat)
-    rapide = estimer_secondes(duree_reference, "rapide", mat)
+    qualite = estimer_annonce(duree_reference, "qualite", mat, rythme_choisi)
+    rapide = estimer_annonce(duree_reference, "rapide", mat, rythme_choisi)
 
-    if mat.memoire_tres_serree:
+    if proposition:
+        conseille = proposition["preset"]
+        phrase = langues.t("reco.en_place" if proposition.get("deja") else "reco.proposee",
+                           resume=proposition.get("resume", ""),
+                           duree=proposition.get("une_heure", ""))
+    elif mat.memoire_tres_serree:
         conseille = "rapide"
         phrase = langues.t("reco.memoire_juste", ram=f"{mat.ram_go:.0f}")
     elif mat.cuda_disponible:
@@ -375,7 +411,7 @@ def recommandation(mat: Materiel) -> dict:
             {
                 "preset": cle,
                 "nom": nom_preset(cle),
-                "facteur": facteur_temps_reel(cle, mat),
+                "facteur": round(duree / duree_reference, 3),
                 "pour_une_heure": formater_duree(duree),
                 # Vrai quand le chiffre vient d'une transcription faite ici, et
                 # non d'une mesure publique extrapolée : l'interface le dit.

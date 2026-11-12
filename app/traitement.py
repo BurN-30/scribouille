@@ -445,21 +445,23 @@ class FileTraitement:
 
         # 2. Transcription
         element.etat = "transcription"
-        estimation = presets.estimer_secondes(
+        # Rythme équilibré ou discret : l'estimation de départ en tient compte
+        # (adaptation automatique : celle du rythme choisi, la plus longue).
+        # C'est la même fonction que pour les annonces de l'écran.
+        estimation = presets.estimer_annonce(
             duree_audio,
             reglages["preset"],
             self.materiel,
-            diarisation=bool(config.get("diarisation")),
+            choisi,
+            diarisation=diarisation.effective(config.get("diarisation")),
             modele_avance=reglages["modele"] if (
                 config.get("mode_avance")
                 or reglages["modele"] != presets.preset(reglages["preset"])["modele"]) else "",
             beam=int(reglages["beam_size"] or 0),
             lot=int(reglages.get("lot") or 0),
         )
-        # Rythme équilibré ou discret : l'estimation de départ en tient compte
-        # (adaptation automatique : celle du rythme choisi, la plus longue).
-        estimation *= rythme.coefficient(choisi, getattr(instance, "cle_calcul", self.materiel.cle_calcul))
         regulateur = (self._rythme or {}).get("regulateur")
+        durees_avant = regulateur.releve_durees() if regulateur is not None else {}
         rappels.etat(element.identifiant, "transcription", langues.t("etat.transcription"))
 
         instance.charger(reglages["modele"], signaler)
@@ -514,13 +516,22 @@ class FileTraitement:
         # décodage, le chargement du modèle et la séparation des locuteurs restant
         # dehors. Une reprise après coupure ne compte pas : son temps de calcul
         # est réparti sur deux exécutions.
+        #
+        # La mesure est rangée ramenée à la vitesse maximale : en rythme
+        # équilibré ou discret, le calcul a duré plus longtemps à dessein, et
+        # les annonces appliquent déjà le coefficient du rythme. Sans cette
+        # division, il était compté deux fois (une transcription en « discret »
+        # faisait annoncer « Rapide » plus lent que « Qualité maximale »).
         if not deja_transcrits:
             cle_calcul = getattr(instance, "cle_calcul", self.materiel.cle_calcul)
             sur_openvino = cle_calcul.startswith("openvino")
+            ralenti = rythme.coefficient_effectif(
+                durees_avant, regulateur.releve_durees() if regulateur is not None else {},
+                choisi, cle_calcul)
             calibration.enregistrer(
                 reglages["modele"], cle_calcul,
                 1 if sur_openvino else int(reglages["beam_size"] or 0),
-                duree_audio, temps_transcription, self.materiel,
+                duree_audio, temps_transcription / ralenti, self.materiel,
                 lot=0 if sur_openvino else int(reglages.get("lot") or 0),
             )
 

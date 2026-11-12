@@ -417,6 +417,22 @@ def coefficient(rythme: str, cle_calcul: str = "", mesures: dict | None = None) 
     return valeur if valeur >= 1.0 else COEFFICIENTS_REPLI[rythme]
 
 
+def coefficient_effectif(durees_avant: dict, durees_apres: dict, choisi: str,
+                         cle_calcul: str = "") -> float:
+    """
+    Ralentissement moyen subi pendant un calcul, d'après le temps passé dans
+    chaque rythme entre deux relevés du régulateur : ce par quoi diviser une
+    durée mesurée pour la ramener à la vitesse maximale. Sans relevé exploitable,
+    celui du rythme choisi.
+    """
+    passe = {nom: max(0.0, float(durees_apres.get(nom, 0.0)) - float(durees_avant.get(nom, 0.0)))
+             for nom in RYTHMES}
+    total = sum(passe.values())
+    if total <= 0:
+        return coefficient(choisi, cle_calcul)
+    return sum(duree * coefficient(nom, cle_calcul) for nom, duree in passe.items()) / total
+
+
 def restant_s(estimation_s: float, ecoule_s: float, part: float) -> float:
     """
     Temps restant : l'estimation au départ, puis la vitesse observée.
@@ -566,6 +582,12 @@ class Regulateur:
         maintenant = self.horloge()
         self.durees[self.effectif] += max(0.0, maintenant - self._depuis)
         self._depuis = maintenant
+
+    def releve_durees(self) -> dict[str, float]:
+        """Temps passé dans chaque rythme jusqu'à maintenant (pour la calibration)."""
+        with self._verrou:
+            self._compter()
+            return dict(self.durees)
 
     def rapport_pause(self) -> float:
         # `sur_puce` peut être une fonction : après un repli d'OpenVINO sur

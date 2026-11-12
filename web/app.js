@@ -211,8 +211,8 @@ function dessinerPresets(reco) {
     b.addEventListener('click', () => {
       etat.config.preset = b.dataset.preset;
       majPresetActif();
-      enregistrer({ preset: etat.config.preset });
-      rafraichirEstimations();
+      // Le rythme annonce la duree du preset choisi : tout est recalcule.
+      rafraichirRythme({ preset: etat.config.preset });
     });
   });
   majPresetActif();
@@ -710,12 +710,15 @@ function majRythme() {
   $('#rythme-retour').innerHTML = notes.join('');
 }
 
+/* Preset ou rythme change : toutes les durees affichees en dependent (cartes,
+   rythme, fiche du materiel, conseil, file). Python les recalcule d'un bloc,
+   avec la meme fonction, pour qu'aucune ne reste en retard sur les autres. */
 async function rafraichirRythme(partiel) {
   await enregistrer(partiel);
   try {
-    etat.rythme = await pywebview.api.etat_rythme();
+    const d = await pywebview.api.etat_initial();
+    initialiser(d, true);
   } catch (e) { console.error(e); }
-  majRythme();
   rafraichirEstimations();
 }
 
@@ -758,6 +761,7 @@ async function appliquerProposition() {
   afficherProposition(null);
   const d = await pywebview.api.etat_initial();
   initialiser(d, true);
+  rafraichirEstimations();   // la file aussi suit le nouveau reglage
 }
 
 async function appliquerBanc() {
@@ -769,6 +773,7 @@ async function appliquerBanc() {
     // tout est redemande a Python, comme apres un changement de langue.
     const d = await pywebview.api.etat_initial();
     initialiser(d, true);
+    rafraichirEstimations();
   }
 }
 
@@ -777,6 +782,7 @@ async function revenirReglageAuto() {
   journaliser('info', r.message);
   const d = await pywebview.api.etat_initial();
   initialiser(d, true);
+  rafraichirEstimations();
   $('#banc-retour').innerHTML = encartInfo(r.message);
 }
 

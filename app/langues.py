@@ -142,6 +142,15 @@ _FR: dict[str, str] = {
     "modele.qualite.bonne": "Bonne",
     "modele.qualite.tres_bonne": "Très bonne",
     "modele.qualite.excellente": "Excellente",
+    "reco.proposee": (
+        "Réglage conseillé pour ce poste : {resume}, environ {duree} pour une heure "
+        "d'audio. Il s'applique d'un clic (Réglages, Vitesse de cette machine, "
+        "« Reconnaître ce poste »)."
+    ),
+    "reco.en_place": (
+        "Le réglage en service est celui conseillé pour ce poste : {resume}, environ "
+        "{duree} pour une heure d'audio."
+    ),
     "reco.memoire_juste": (
         "Mémoire vive détectée : {ram} Go. C'est trop juste pour large-v3, le preset "
         "« Rapide » est conseillé."
@@ -615,6 +624,7 @@ _FR: dict[str, str] = {
     "adapt.raison.campagne": "c'est le réglage retenu par la campagne de mesure menée sur ce poste",
     "adapt.raison.banc": "c'est le réglage conseillé par le banc d'essai mené sur ce poste",
     "adapt.phrase": "{preset}, {moteur}, environ {duree} pour une heure de réunion : {raison}.",
+    "adapt.resume": "{preset}, {moteur}",
     "adapt.applique": "Réglage appliqué : {phrase}",
     "adapt.mode.efficacite": "meilleure efficacité énergétique",
     "adapt.mode.equilibre": "équilibré",
@@ -1537,6 +1547,15 @@ _EN: dict[str, str] = {
     "modele.qualite.bonne": "Good",
     "modele.qualite.tres_bonne": "Very good",
     "modele.qualite.excellente": "Excellent",
+    "reco.proposee": (
+        "Recommended setting for this computer: {resume}, about {duree} for an hour of "
+        "audio. It is applied in one click (Settings, Speed of this machine, \"Recognise "
+        "this computer\")."
+    ),
+    "reco.en_place": (
+        "The setting in use is the one recommended for this computer: {resume}, about "
+        "{duree} for an hour of audio."
+    ),
     "reco.memoire_juste": (
         "RAM detected: {ram} GB. That is too tight for large-v3, the \"Fast\" preset is "
         "the better choice here."
@@ -1994,6 +2013,7 @@ _EN: dict[str, str] = {
     "adapt.raison.campagne": "it is the setting chosen by the measurement campaign run on this computer",
     "adapt.raison.banc": "it is the setting recommended by the benchmark run on this computer",
     "adapt.phrase": "{preset}, {moteur}, about {duree} for an hour of meeting: {raison}.",
+    "adapt.resume": "{preset}, {moteur}",
     "adapt.applique": "Setting applied: {phrase}",
     "adapt.mode.efficacite": "best power efficiency",
     "adapt.mode.equilibre": "balanced",

@@ -85,6 +85,14 @@ Corrections issues d'une revue d'usage de l'application réelle (vérifiées par
   mots ; la légende de la relecture le dit au lieu d'annoncer des mots
   surlignés qui n'existent pas, et la proposition de réglage dit ce que l'on
   perd en choisissant ce moteur.
+- **Un seul conseil, un seul chiffre** : la proposition du poste décide
+  seule de la pastille « conseillé ici », de la phrase de la fiche du
+  matériel et de l'encart, qui ne se contredisent plus ; toutes les durées
+  (cartes, rythme, fiche, proposition, file) viennent d'une même fonction,
+  `presets.estimer_annonce`, et suivent le rythme choisi ; la séparation des
+  locuteurs n'allonge plus l'estimation quand elle n'est pas installée ; une
+  mesure prise en rythme équilibré ou discret est rangée ramenée à la vitesse
+  maximale, le coefficient du rythme n'est donc plus compté deux fois.
 - **Correction depuis la relecture** : l'en-tête du fichier texte reste séparé
   du corps ; la barre de fin d'en-tête et la première phrase ne se retrouvent
   plus sur la même ligne.

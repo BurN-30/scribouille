@@ -67,6 +67,15 @@ def disponible() -> bool:
     return torch_present() and pyannote_present()
 
 
+def effective(demandee: bool) -> bool:
+    """
+    La séparation tournera-t-elle vraiment ? Demandée (cochée par défaut) ET
+    installée. C'est ce qui compte pour les annonces de durée et la
+    progression : une option cochée mais absente ne coûte rien.
+    """
+    return bool(demandee) and disponible()
+
+
 def indisponibilite() -> str:
     """Phrase expliquant pourquoi la diarisation ne peut pas tourner, ou chaîne vide."""
     if disponible():

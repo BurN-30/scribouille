@@ -36,6 +36,9 @@ from .materiel import Materiel
 #: Graphics (GPU) with OpenVINO », docs.openvino.ai, version 2026).
 PILOTE_INTEL_MIN = (30, 0, 100, 9955)
 
+#: Rythme que la proposition pose, avec l'adaptation automatique.
+RYTHME_PROPOSE = "equilibre"
+
 
 @dataclass
 class Profil:
@@ -206,7 +209,9 @@ def proposer(mat: Materiel, p: Profil, verdict: dict | None = None, conseil: dic
     essai = copy.copy(mat)
     essai.moteur = choix["moteur"]
     essai.peripherique_openvino = choix["peripherique"] if choix["moteur"] == "openvino" else ""
-    une_heure = presets.formater_duree(presets.estimer_secondes(3600, choix["preset"], essai))
+    # Le même calcul que partout ailleurs, rythme proposé compris : une fois
+    # appliquée, la proposition annonce ce que diront les cartes des presets.
+    une_heure = presets.pour_une_heure(choix["preset"], essai, RYTHME_PROPOSE)
 
     if choix["moteur"] == "openvino":
         from . import moteur_openvino
@@ -222,7 +227,9 @@ def proposer(mat: Materiel, p: Profil, verdict: dict | None = None, conseil: dic
         phrase += " " + langues.t("adapt.telechargement", taille=telechargement)
     return {**choix, "modele": moteur.nom_court(depot), "telechargement": telechargement,
             "une_heure": une_heure, "phrase": phrase, "notes": notes,
-            "rythme": "equilibre", "rythme_auto": True,
+            "resume": langues.t("adapt.resume", preset=presets.nom_preset(choix["preset"]),
+                                moteur=moteur_lisible),
+            "rythme": RYTHME_PROPOSE, "rythme_auto": True,
             "action": "installer_openvino" if (p.puce_intel and not p.openvino_installe) else ""}
 
 

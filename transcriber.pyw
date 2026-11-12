@@ -453,13 +453,18 @@ class Passerelle:
         chemins.assurer_dossiers()
         glossaire = vocabulaire.resume_glossaire(self.config.get("langue", "fr"))
         manque_diarisation = diarisation.indisponibilite()
+        # Une seule décision pour tout l'écran : la proposition du poste pilote
+        # la pastille « conseillé ici », la fiche du matériel et l'encart, et
+        # toutes les durées tiennent compte du rythme choisi, une seule fois.
+        rythme_choisi = rythme.normaliser(self.config.get("rythme"))
+        proposition = self._proposition_du_poste()
 
         return {
             "version": VERSION,
             "nom": NOM_APPLICATION,
             "config": self.config,
             "materiel": self.materiel.en_dict(),
-            "recommandation": presets.recommandation(self.materiel),
+            "recommandation": presets.recommandation(self.materiel, proposition, rythme_choisi),
             "presets": [
                 {
                     "cle": p["cle"],
@@ -468,9 +473,7 @@ class Passerelle:
                     "modele": moteur_nom_court(p["modele"]),
                     "telechargement": langues.octets(p["telechargement_go"] * 1024 ** 3),
                     "facteur": presets.facteur_temps_reel(p["cle"], self.materiel),
-                    "pour_une_heure": presets.formater_duree(
-                        presets.estimer_secondes(3600, p["cle"], self.materiel)
-                    ),
+                    "pour_une_heure": presets.pour_une_heure(p["cle"], self.materiel, rythme_choisi),
                 }
                 for p in presets.PRESETS.values()
             ],
@@ -507,7 +510,7 @@ class Passerelle:
             "avertissements": self._avertissements(),
             "vitesse": self.etat_vitesse(),
             "rythme": self.etat_rythme(),
-            "proposition": self._proposition_au_demarrage(),
+            "proposition": self._proposition_au_demarrage(proposition),
         }
 
     # -- rythme et réglage proposé pour le poste ----------------------------
@@ -515,35 +518,40 @@ class Passerelle:
     def etat_rythme(self) -> dict:
         """Rythme choisi, adaptation, et durée pour une heure dans chaque rythme."""
         choisi = rythme.normaliser(self.config.get("rythme"))
-        base = presets.estimer_secondes(3600, self.config.get("preset", "qualite"), self.materiel)
+        preset_choisi = self.config.get("preset", "qualite")
         courant = __import__("app.energie", fromlist=["alimentation"]).alimentation()
         return {
             "choisi": choisi,
             "auto": bool(self.config.get("rythme_auto")),
             "batterie": bool(courant["batterie"] and not courant["secteur"]),
             "pour_une_heure": {
-                nom: presets.formater_duree(base * rythme.coefficient(nom, self.materiel.cle_calcul))
+                nom: presets.pour_une_heure(preset_choisi, self.materiel, nom)
                 for nom in rythme.RYTHMES},
         }
 
-    def _proposition_au_demarrage(self) -> dict | None:
+    def _proposition_du_poste(self) -> dict | None:
+        """La proposition du poste, seule source du conseil affiché ; None si elle échoue."""
+        try:
+            from app import adaptation
+
+            proposition = adaptation.proposition_du_poste(self.materiel)
+            proposition["deja"] = adaptation.deja_en_place(proposition, self.config, self.materiel)
+            return proposition
+        except Exception as exc:
+            journal.exception("Proposition du poste impossible", exc)
+            return None
+
+    def _proposition_au_demarrage(self, proposition: dict | None) -> dict | None:
         """
         La proposition ne s'affiche d'elle-même qu'au tout premier lancement, et
         tant qu'elle n'a été ni appliquée ni écartée ; sinon, sur demande.
         """
         if not self._premier_lancement or self._proposition.get("_vue"):
             return None
-        try:
-            from app import adaptation
-
-            proposition = adaptation.proposition_du_poste(self.materiel)
-            if adaptation.deja_en_place(proposition, self.config, self.materiel):
-                return None
-            self._proposition = {**proposition, "_vue": True}
-            return proposition
-        except Exception as exc:
-            journal.exception("Proposition du poste impossible", exc)
+        if not proposition or proposition.get("deja"):
             return None
+        self._proposition = {**proposition, "_vue": True}
+        return proposition
 
     def proposer_reglage(self) -> dict:
         """Bouton « Reconnaître ce poste » : la proposition, jamais appliquée d'office."""
@@ -1484,12 +1492,11 @@ class Passerelle:
             if self.config.get("mode_avance") else 0
         # Rythme équilibré ou discret : plus long, et l'annonce le dit (en
         # adaptation automatique, la durée du rythme choisi, la plus longue).
-        coefficient = rythme.coefficient(self.config.get("rythme"), self.materiel.cle_calcul)
-        return presets.formater_duree(
-            coefficient * presets.estimer_secondes(duree_secs, cle_preset, self.materiel,
-                                                   bool(diarisation_active), modele_avance or "",
-                                                   beam=beam)
-        )
+        # La séparation des locuteurs ne compte que si elle tournera vraiment :
+        # cochée par défaut, elle ajoutait son coût sans être installée.
+        return presets.formater_duree(presets.estimer_annonce(
+            duree_secs, cle_preset, self.materiel, self.config.get("rythme"),
+            diarisation.effective(diarisation_active), modele_avance or "", beam=beam))
 
     # -- fichiers ----------------------------------------------------------
 
