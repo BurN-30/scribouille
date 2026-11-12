@@ -1113,6 +1113,21 @@ def essai_calibration(base: Path) -> None:
         verifier(not calibration.fichier().exists(),
                  "aucun fichier écrit tant que rien n'a été mesuré")
 
+        # -- confiance : une mesure courte ne déplace pas tout -------------------
+        verifier(calibration.enregistrer("large-v3", "cpu", 5, 78.0, 156.0, machine) == 0.0,
+                 "une transcription de 78 s n'est pas retenue (mise en route trop lourde)")
+        un_a_un = presets.facteur_temps_reel("qualite", machine, lot=0)
+        calibration.enregistrer("large-v3", "cpu", 5, 200.0, 2.07 * 200.0, machine)
+        partiel = presets.facteur_temps_reel("qualite", machine, lot=0)
+        verifier(un_a_un < partiel < un_a_un + (2.07 - un_a_un) * 0.3,
+                 "une seule mesure de 3 min 20 rapproche l'annonce de la mesure, sans la remplacer",
+                 f"{un_a_un} puis {partiel}")
+        calibration.oublier()
+
+        # Le reste de ce bloc éprouve la mesure elle-même : confiance pleine.
+        pivot = calibration.PIVOT_CONFIANCE_S
+        calibration.PIVOT_CONFIANCE_S = 0.0
+
         # -- une transcription réussie est retenue -----------------------------
         # 1 200 s d'audio en 2 484 s de calcul, soit le facteur 2,07 relevé le
         # 21 août 2026 sur le 7800X3D, là où le preset annonçait 1,35.
@@ -1190,6 +1205,7 @@ def essai_calibration(base: Path) -> None:
                  "et l'estimation revient au facteur statique")
     finally:
         chemins.RACINE = racine_reelle
+        calibration.PIVOT_CONFIANCE_S = pivot
 
 
 # ---------------------------------------------------------------------------
@@ -1534,6 +1550,8 @@ def essai_estimations_machine(base: Path) -> None:
     bac.mkdir(parents=True, exist_ok=True)
     racine_reelle = chemins.RACINE
     chemins.RACINE = bac
+    pivot = calibration.PIVOT_CONFIANCE_S
+    calibration.PIVOT_CONFIANCE_S = 0.0  # mesure tenue pour sûre dans ce bloc
     try:
         topo = materiel.Topologie(performants=2, efficaces=8, basse_consommation=2, hybride=True)
         portable = materiel.Materiel(cpu_nom="Intel(R) Core(TM) Ultra 5 225U", coeurs_physiques=12,
@@ -1570,6 +1588,7 @@ def essai_estimations_machine(base: Path) -> None:
                  "un extrait du banc (40 s) n'entre que si on l'accepte explicitement")
     finally:
         chemins.RACINE = racine_reelle
+        calibration.PIVOT_CONFIANCE_S = pivot
 
 
 def essai_energie() -> None:

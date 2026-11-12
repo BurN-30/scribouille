@@ -418,10 +418,12 @@ def essai_une_seule_verite(base: Path) -> None:
         verifier(rythme.coefficient_effectif({}, {}, "equilibre", "cpu") == rythme.coefficient("equilibre", "cpu"),
                  "sans relevé : coefficient du rythme choisi")
         calibration.enregistrer("large-v3", "cpu", 5, 600.0, 600.0 / ralenti, mat, lot=8)
+        pivot, calibration.PIVOT_CONFIANCE_S = calibration.PIVOT_CONFIANCE_S, 0.0  # mesure tenue pour sûre
         verifier(abs(presets.estimer_annonce(600, "qualite", mat, "discret") - 600.0) < 1.0
                  and abs(presets.estimer_annonce(600, "qualite", mat, "vitesse") - 600.0 / c_discret) < 1.0,
                  "après une mesure en discret, l'annonce en discret retrouve la durée réelle",
                  f"{presets.estimer_annonce(600, 'qualite', mat, 'discret'):.0f} s")
+        calibration.PIVOT_CONFIANCE_S = pivot
     finally:
         chemins.RACINE = racine
 
@@ -540,7 +542,8 @@ def essai_voix_non_installees(base: Path) -> None:
     verifier(max(x for x in pourcents if x < 100) == 99,
              "la barre ne plafonne pas à 85 % pour une séparation absente", str(pourcents))
     texte = next(sorties_dossier.glob("*.txt")).read_text(encoding="utf-8")
-    verifier("n'est pas installée" in texte, "l'en-tête dit pourquoi, sans renvoyer au journal")
+    verifier("installée" not in texte and "journal" not in texte and "Locuteurs" not in texte,
+             "l'en-tête ne parle des voix que si elles ont été séparées")
 
 
 def essai_retour_pendant_calcul(base: Path) -> None:

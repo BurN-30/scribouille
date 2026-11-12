@@ -58,8 +58,14 @@ from .materiel import Materiel
 #: ignoré plutôt que mal relu : perdre des mesures ne coûte qu'une transcription.
 VERSION_FICHIER = 1
 
-#: En dessous, la mise en route du moteur pèse trop lourd dans le chronomètre.
-DUREE_MINIMALE = 60.0
+#: En dessous, la mise en route du moteur pèse trop lourd dans le chronomètre :
+#: une transcription de 78 s doublait l'annonce d'une heure (revue du
+#: 12/11/2026). Le banc et la campagne, qui mesurent exprès, passent leur seuil.
+DUREE_MINIMALE = 180.0
+#: Confiance d'une mesure faite en transcrivant : durée mesurée / (durée + PIVOT).
+#: Dix minutes mesurées pèsent pour moitié face au facteur statique, une heure
+#: pour 86 % ; une mesure du banc ou de la campagne, faite exprès, compte pleine.
+PIVOT_CONFIANCE_S = 600.0
 
 #: Garde-fous : au-delà, la mesure vient d'autre chose que d'une transcription
 #: (machine mise en veille, disque saturé, horloge qui saute).
@@ -185,6 +191,35 @@ def moyenne_lissee(historique: list) -> float:
     return round(total / poids_total, 3) if poids_total else 0.0
 
 
+def confiance(historique: list) -> float:
+    """
+    Poids, entre 0 et 1, du facteur mesuré face au facteur statique. Une seule
+    mesure courte, sur un poste chargé, ne doit pas déplacer toutes les
+    annonces : elle compte selon la durée transcrite.
+    """
+    duree = 0.0
+    for entree in historique[:MESURES_RETENUES]:
+        try:
+            if entree.get("expres"):
+                return 1.0
+            duree += max(0.0, float(entree.get("duree", 0)))
+        except (AttributeError, TypeError, ValueError):
+            continue
+    return duree / (duree + PIVOT_CONFIANCE_S) if duree > 0 else 0.0
+
+
+def mesure_et_confiance(modele: str, peripherique: str, beam: int,
+                        mat: Materiel | None = None, lot: int = 0) -> tuple[float, float]:
+    """Facteur lissé et sa confiance (voir `confiance`), (0, 0) sans mesure."""
+    donnees = charger(signature_machine(mat) if mat else "")
+    entree = donnees["mesures"].get(cle_mesure(modele, peripherique, beam, lot))
+    if not isinstance(entree, dict) or not isinstance(entree.get("historique"), list):
+        return 0.0, 0.0
+    historique = entree["historique"]
+    facteur = moyenne_lissee(historique)
+    return (facteur, confiance(historique)) if facteur else (0.0, 0.0)
+
+
 def facteur_mesure(modele: str, peripherique: str, beam: int,
                    mat: Materiel | None = None, lot: int = 0) -> float:
     """
@@ -239,6 +274,8 @@ def enregistrer(modele: str, peripherique: str, beam: int, duree_audio: float,
         "facteur": facteur,
         "duree": round(duree_audio, 1),
         "date": datetime.now().isoformat(timespec="seconds"),
+        # Banc et campagne : mesure faite exprès, sur un poste préparé.
+        **({"expres": True} if duree_minimale < DUREE_MINIMALE else {}),
     })
     del historique[MESURES_RETENUES:]
 

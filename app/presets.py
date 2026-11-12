@@ -287,6 +287,23 @@ def facteur_mesure(cle_preset: str, mat: Materiel, modele_avance: str = "",
     )
 
 
+def _facteur_mesure_pondere(cle_preset: str, mat: Materiel, modele_avance: str, beam: int,
+                            lot: int) -> float:
+    """
+    Facteur mesuré, rapproché du facteur statique tant qu'il repose sur peu de
+    minutes transcrites (`calibration.confiance`) ; 0 sans mesure.
+    """
+    if mat.cle_calcul.startswith("openvino"):
+        beam, lot = 1, 0
+    mesure, poids = calibration.mesure_et_confiance(
+        modele_du_preset(cle_preset, modele_avance), mat.cle_calcul,
+        beam or preset(cle_preset)["beam_size"], mat, lot)
+    if not mesure:
+        return 0.0
+    repli = _facteur_repli(modele_du_preset(cle_preset, modele_avance), mat, lot)
+    return repli + (mesure - repli) * poids
+
+
 def facteur_temps_reel(cle_preset: str, mat: Materiel, diarisation: bool = False,
                        modele_avance: str = "", beam: int = 0,
                        lot: int | None = None) -> float:
@@ -301,7 +318,7 @@ def facteur_temps_reel(cle_preset: str, mat: Materiel, diarisation: bool = False
     sur_gpu = mat.cuda_disponible
     if lot is None:
         lot = taille_lot(cle_preset, mat)
-    facteur = facteur_mesure(cle_preset, mat, modele_avance, beam, lot)
+    facteur = _facteur_mesure_pondere(cle_preset, mat, modele_avance, beam, lot)
     if not facteur:
         facteur = _facteur_repli(modele, mat, lot)
     if diarisation:
