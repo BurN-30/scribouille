@@ -18,7 +18,7 @@ DEFAUTS: dict = {
     "langue": "fr",                 # langue PARLÉE, pour le moteur
     "langue_interface": "",         # langue de l'INTERFACE, vide = à détecter
     "dossier_sortie": "",
-    "diarisation": True,
+    "diarisation": False,
     "nb_locuteurs": 0,              # 0 = détection automatique
     # Heure en tête de chaque paragraphe du .txt, par défaut : depuis un compte
     # rendu, on retrouve le passage dans l'enregistrement.

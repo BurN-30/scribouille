@@ -3,7 +3,7 @@
   "langue": "fr",
   "langue_interface": "",
   "dossier_sortie": "",
-  "diarisation": true,
+  "diarisation": false,
   "nb_locuteurs": 0,
   "formats": {
     "txt": true,
