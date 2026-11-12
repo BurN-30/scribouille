@@ -49,6 +49,15 @@ Ligne de commande :
         sur la puce graphique : dossier à part, jamais le verdict public du poste)
     scribouille-verifier.exe --campagne --reunion FICHIER [--debut 00:05:00]
         [--duree 600] [--reglages CLE,CLE]
+
+Modèles candidats (`MODELES_CANDIDATS`) : d'autres modèles que ceux du
+catalogue, mesurés sur le même corpus pour décider s'ils valent une
+intégration. Ils ne tournent que sur demande (`--reglages candidats`, ou leurs
+clés, `--telecharger` pour prendre leurs poids à la révision figée), restent
+hors du verdict et de `--appliquer`, et le rapport donne leur écart apparié au
+meilleur réglage de l'application. Ceux qui tournent sur un moteur de mesure
+(`app/moteurs_candidats.py`) demandent un interprète désigné par la variable
+SCRIBOUILLE_PYTHON_CANDIDATS ; ceux d'OpenVINO, une conversion (`CONVERSIONS`).
 """
 
 from __future__ import annotations
@@ -95,17 +104,35 @@ SEUIL_INCERTAIN = 0.50
 # Réglages candidats
 # ---------------------------------------------------------------------------
 
+#: Moteurs de mesure seulement (`app/moteurs_candidats.py`), absents de l'application.
+MOTEURS_CANDIDATS = ("onnx-asr", "transformers")
+#: Interprète qui porte les paquets de ces moteurs (torch, transformers, onnx-asr).
+VARIABLE_PYTHON_CANDIDATS = "SCRIBOUILLE_PYTHON_CANDIDATS"
+
+
 @dataclass(frozen=True)
 class Reglage:
     cle: str
-    moteur: str          # « ctranslate2 » ou « openvino »
-    modele: str          # « large-v3 » ou presets.MODELE_TURBO
+    moteur: str          # « ctranslate2 », « openvino », ou un des MOTEURS_CANDIDATS
+    modele: str          # « large-v3 », presets.MODELE_TURBO, ou le dépôt d'un modèle candidat
     faisceau: int
     actuel: str = ""     # preset dont c'est le réglage par défaut, s'il y en a un
+    # Modèles candidats seulement (hors catalogue de l'application) :
+    nom: str = ""                 # nom affiché dans le rapport
+    revision: str = ""            # révision figée du dépôt
+    motifs: tuple[str, ...] = ()  # fichiers à prendre dans le dépôt, qui en contient souvent bien plus
+    sous_dossier: str = ""        # dossier des poids dans le dépôt (« ctranslate2 » chez bofenghuang)
+    converti: str = ""            # dossier produit sur le poste par une conversion (CONVERSIONS)
+    onnx_asr: str = ""            # nom du modèle pour la bibliothèque onnx-asr
+
+    @property
+    def candidat(self) -> bool:
+        """Modèle hors du catalogue de l'application : mesuré, jamais appliqué."""
+        return self.moteur in MOTEURS_CANDIDATS or self.modele not in ("large-v3", presets.MODELE_TURBO)
 
     @property
     def preset(self) -> str:
-        return "qualite" if self.modele == "large-v3" else "rapide"
+        return "qualite" if self.modele == "large-v3" or self.candidat else "rapide"
 
 
 #: Ordre de passage : les réglages les plus utiles au verdict d'abord, pour qu'une
@@ -119,15 +146,110 @@ CANDIDATS = (
     Reglage("ct2-turbo-f5", "ctranslate2", presets.MODELE_TURBO, 5, "rapide"),
     Reglage("ct2-v3-f1", "ctranslate2", "large-v3", 1),
 )
-PAR_CLE = {r.cle: r for r in CANDIDATS}
+
+_CT2 = ("ctranslate2/*",)
+#: Modèles candidats, mesurés seulement sur demande (`--reglages candidats`, ou
+#: leurs clés). La liste s'allonge d'une ligne par modèle : dépôt, révision
+#: figée, fichiers utiles. Aucun n'entre dans le verdict ni dans `--appliquer`.
+#: Sources et résultats publiés : rapport « scribouille-modeles » du 12/11/2026.
+MODELES_CANDIDATS = (
+    # Affinages français de Whisper par bofenghuang (MIT), poids CTranslate2 fournis par l'auteur.
+    Reglage("ct2-frv3-f5", "ctranslate2", "bofenghuang/whisper-large-v3-french", 5,
+            nom="whisper-large-v3-french", revision="90a7cd1fea9cd69f80f5a0fc49738418dba96083",
+            motifs=_CT2, sous_dossier="ctranslate2"),
+    Reglage("ct2-frd16-f5", "ctranslate2", "bofenghuang/whisper-large-v3-french-distil-dec16", 5,
+            nom="whisper-large-v3-french-distil-dec16",
+            revision="16bd02185bdaa6b00fb4b0deb46e47ac1b754b8e", motifs=_CT2, sous_dossier="ctranslate2"),
+    Reglage("ct2-frd2-f5", "ctranslate2", "bofenghuang/whisper-large-v3-distil-fr-v0.2", 5,
+            nom="whisper-large-v3-distil-fr-v0.2", revision="a9e66d6b03c203f1c2730963bba9e96a80b26175",
+            motifs=_CT2, sous_dossier="ctranslate2"),
+    # Les deux distillations, converties sur le poste au format d'OpenVINO (voir CONVERSIONS) ;
+    # large-v3-french ne l'est pas : en CTranslate2, il ne gagne rien sur large-v3 (rapport du 12/11).
+    Reglage("ov-frd16-f1", "openvino", "bofenghuang/whisper-large-v3-french-distil-dec16", 1,
+            nom="whisper-large-v3-french-distil-dec16", converti="whisper-large-v3-french-distil-dec16-int8-ov"),
+    Reglage("ov-frd2-f1", "openvino", "bofenghuang/whisper-large-v3-distil-fr-v0.2", 1,
+            nom="whisper-large-v3-distil-fr-v0.2", converti="whisper-large-v3-distil-fr-v0.2-int8-ov"),
+    # NVIDIA Parakeet TDT 0.6B v3 et Canary 1B v2 (CC BY 4.0), export ONNX int8 d'onnx-asr.
+    Reglage("onnx-parakeet3", "onnx-asr", "istupakov/parakeet-tdt-0.6b-v3-onnx", 1,
+            nom="parakeet-tdt-0.6b-v3", revision="8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce",
+            motifs=("config.json", "vocab.txt", "nemo128.onnx", "*.int8.onnx"),
+            onnx_asr="nemo-parakeet-tdt-0.6b-v3"),
+    Reglage("onnx-canary2", "onnx-asr", "istupakov/canary-1b-v2-onnx", 1,
+            nom="canary-1b-v2", revision="5ebc1520cef7b6b318b3526ad17adbfe00bc1bfc",
+            motifs=("config.json", "vocab.txt", "*.int8.onnx"), onnx_asr="nemo-canary-1b-v2"),
+    # Cohere Transcribe 03-2026 (Apache 2.0). Le dépôt officiel demande d'accepter des
+    # conditions ; cette copie non verrouillée porte un model.safetensors à l'empreinte
+    # SHA-256 identique à l'officiel (987bd3e1…158137a, vérifiée).
+    Reglage("hf-cohere", "transformers", "evewashere/cohere-transcribe-03-2026-ungated", 1,
+            nom="cohere-transcribe-03-2026", revision="29b9036c65620e1a148127c6147543b52358da6a",
+            motifs=("*.json", "*.py", "tokenizer.model", "model.safetensors")),
+    # Qwen3-ASR 1.7B (Apache 2.0), version servie nativement par transformers ≥ 5.13.
+    Reglage("hf-qwen3asr", "transformers", "Qwen/Qwen3-ASR-1.7B-hf", 1,
+            nom="Qwen3-ASR-1.7B", revision="bcd2b5b7f32b480ab5790554cfa8347f246a14f3",
+            motifs=("*.json", "*.jinja", "model.safetensors")),
+)
+TOUS = CANDIDATS + MODELES_CANDIDATS
+PAR_CLE = {r.cle: r for r in TOUS}
+
+#: Conversions faites sur le poste pour les candidats OpenVINO, dans un
+#: environnement à part (optimum-intel 2.2.0, transformers 5.5.4, openvino et
+#: openvino-tokenizers 2026.4.1, nncf), depuis les poids transformers du dépôt
+#: pris à la révision figée (fichiers *.json, merges.txt, vocab.json,
+#: model.safetensors), vers <dossier des modèles>/convertis/<nom>. Poids int8,
+#: comme les dépôts OpenVINO officiels. La distillation dec16 n'a pas de
+#: `alignment_heads` dans son generation_config.json : OpenVINO GenAI refuse
+#: alors l'horodatage des mots au premier décodage (« 'word_timestamps' can be
+#: true only when 'alignment_heads' is set »). On y ajoute, après conversion,
+#: toutes les têtes de la seconde moitié du décodeur ([[l, h] for l in 8..15,
+#: h in 0..19]), le choix par défaut de CTranslate2.
+CONVERSIONS = {
+    "whisper-large-v3-french-distil-dec16-int8-ov":
+        "optimum-cli export openvino --model <instantané bofenghuang/whisper-large-v3-french-distil-dec16@16bd0218> "
+        "--task automatic-speech-recognition-with-past --weight-format int8 <dossier>",
+    "whisper-large-v3-distil-fr-v0.2-int8-ov":
+        "optimum-cli export openvino --model <instantané bofenghuang/whisper-large-v3-distil-fr-v0.2@a9e66d6b> "
+        "--task automatic-speech-recognition-with-past --weight-format int8 <dossier>",
+}
 
 
 def libelle(reglage: Reglage, peripherique: str = "") -> str:
-    nom = "large-v3-turbo" if reglage.modele == presets.MODELE_TURBO else reglage.modele
+    nom = reglage.nom or ("large-v3-turbo" if reglage.modele == presets.MODELE_TURBO else reglage.modele)
     if reglage.moteur == "openvino":
         return langues.t("camp.libelle_ov", modele=nom, faisceau=reglage.faisceau,
                          peripherique=peripherique or "?")
+    if reglage.moteur == "onnx-asr":
+        return langues.t("camp.libelle_onnx", modele=nom)
+    if reglage.moteur == "transformers":
+        return langues.t("camp.libelle_hf", modele=nom)
     return langues.t("camp.libelle_ct2", modele=nom, faisceau=reglage.faisceau)
+
+
+def chemin_poids(reglage: Reglage, telecharger: bool = False) -> str:
+    """
+    Dossier local des poids d'un modèle candidat, « » s'il manque.
+
+    Seuls les fichiers utiles du dépôt sont pris (`motifs`), à la révision
+    figée, dans le dossier des modèles de l'application. Sans `telecharger`,
+    aucun appel réseau.
+    """
+    if reglage.converti:
+        dossier = chemins.DOSSIER_MODELES / "convertis" / reglage.converti
+        return str(dossier) if moteur.est_modele_openvino(str(dossier)) else ""
+    if not reglage.motifs:
+        return ""
+    from huggingface_hub import snapshot_download
+
+    try:
+        racine = snapshot_download(reglage.modele, revision=reglage.revision or None,
+                                   allow_patterns=list(reglage.motifs), cache_dir=str(chemins.DOSSIER_MODELES),
+                                   local_files_only=not telecharger)
+    except Exception as exc:
+        journal.info("Campagne : poids de %s indisponibles (%s)", reglage.cle, type(exc).__name__)
+        return ""
+    dossier = Path(racine) / reglage.sous_dossier if reglage.sous_dossier else Path(racine)
+    if reglage.moteur == "ctranslate2" and moteur.etat_modele(str(dossier))["etat"] != "complet":
+        return ""
+    return str(dossier) if dossier.is_dir() and any(dossier.iterdir()) else ""
 
 
 #: État d'un réglage que le périphérique ne sait pas faire (faisceau d'OpenVINO
@@ -193,13 +315,24 @@ def executer_reglage(parametres: dict) -> dict:
     reglage = PAR_CLE[parametres["cle"]]
     reglages = config_module.reglages_effectifs({**config, "preset": reglage.preset, "mode_avance": False})
     langue = str(parametres.get("langue") or "fr")
-    if reglage.moteur == "openvino":
+    a_charger = reglage.modele
+    if reglage.candidat:
+        a_charger = chemin_poids(reglage)
+        if not a_charger:
+            resultat["etat"] = "modele_absent"
+            return resultat
+    if reglage.moteur in MOTEURS_CANDIDATS:
+        from . import moteurs_candidats
+
+        instance = moteurs_candidats.creer(reglage.moteur, mat.fils_calcul, reglage.onnx_asr)
+        resultat.update({"peripherique": instance.peripherique, "fils": mat.fils_calcul})
+    elif reglage.moteur == "openvino":
         from . import moteur_openvino
 
         if not moteur_openvino.installe():
             resultat["etat"] = "openvino_absent"
             return resultat
-        if moteur.etat_modele(depot_du(reglage))["etat"] != "complet":
+        if moteur.etat_modele(a_charger if reglage.candidat else depot_du(reglage))["etat"] != "complet":
             resultat["etat"] = "modele_absent"
             return resultat
         peripherique = str(parametres.get("peripherique") or "CPU").upper()
@@ -209,7 +342,7 @@ def executer_reglage(parametres: dict) -> dict:
         reglages["faisceau_openvino"] = reglage.faisceau
         resultat["peripherique"] = peripherique
     else:
-        if moteur.etat_modele(reglage.modele)["etat"] != "complet":
+        if moteur.etat_modele(a_charger)["etat"] != "complet":
             resultat["etat"] = "modele_absent"
             return resultat
         moteur.limiter_parallelisme(mat.fils_calcul)
@@ -223,7 +356,7 @@ def executer_reglage(parametres: dict) -> dict:
                          "fils": mat.fils_calcul})
 
     debut = time.perf_counter()
-    instance.charger(reglage.modele, lambda niveau, texte: journal.info("campagne : %s", texte))
+    instance.charger(a_charger, lambda niveau, texte: journal.info("campagne : %s", texte))
     resultat["chargement_s"] = round(time.perf_counter() - debut, 1)
 
     amorce = {"amorce": "", "nb_retenus": 0, "jetons": 0}
@@ -308,6 +441,8 @@ def commande_essai(parametres: dict) -> tuple[list[str], str]:
     racine = Path(__file__).resolve().parent.parent
     python = racine / ".venv" / "Scripts" / "python.exe"
     interprete = str(python) if python.exists() else sys.executable
+    # Modèle candidat sur un moteur de mesure : l'interprète qui porte ses paquets.
+    interprete = str(parametres.get("interprete") or interprete)
     return [interprete, "-m", "app.campagne", "--campagne-essai", charge], str(racine)
 
 
@@ -580,7 +715,8 @@ def _ligne_vitesse(r: dict) -> str:
 
 def rediger_rapport(mat, corpus_info: dict, resultats: dict[str, dict], agregats: dict[str, dict],
                     decision: dict, temoins: dict[str, float], doutes: dict, glossaire: dict,
-                    peripherique: str, duree_totale: float) -> str:
+                    peripherique: str, duree_totale: float,
+                    ecarts_candidats: dict[str, dict] | None = None) -> str:
     """Rapport de la partie publique : des nombres seulement."""
     from .banc import _masquer
     from .corpus import ATTRIBUTION
@@ -596,7 +732,7 @@ def rediger_rapport(mat, corpus_info: dict, resultats: dict[str, dict], agregats
     lignes.append("  - " + t("camp.rapport.source", attribution=ATTRIBUTION))
 
     lignes += ["", t("camp.rapport.section.reglages")]
-    for reglage in CANDIDATS:
+    for reglage in TOUS:
         r = resultats.get(reglage.cle)
         if r is None:
             continue
@@ -651,6 +787,14 @@ def rediger_rapport(mat, corpus_info: dict, resultats: dict[str, dict], agregats
         lignes.append("  - " + t("camp.rapport.cout_" + ("ov" if retenu.moteur == "openvino" else "ct2")))
         lignes.append("  - " + t("camp.rapport.pour_une_heure",
                                  duree=presets.formater_duree(float(r["facteur"]) * 3600)))
+
+    if ecarts_candidats:
+        lignes += ["", t("camp.rapport.section.candidats")]
+        for cle, reperes in ecarts_candidats.items():
+            for repere, (ecart, bas, haut) in reperes.items():
+                lignes.append("  - " + t("camp.rapport.candidat_ecart", code=cle, repere=repere,
+                                         ecart=_n(ecart, 1), bas=_n(bas, 1), haut=_n(haut, 1)))
+        lignes.append("  - " + t("camp.rapport.candidat_note"))
 
     lignes += ["", t("camp.rapport.section.doutes")]
     if doutes.get("ct2"):
@@ -725,9 +869,14 @@ def _glossaire_du_poste() -> dict:
 
 
 def _choisir(reglages: str) -> list[Reglage]:
+    """Réglages demandés. « candidats » vaut tous les modèles candidats, « tous » le tout."""
     if not reglages:
         return list(CANDIDATS)
-    voulus = [c.strip() for c in reglages.split(",") if c.strip()]
+    voulus: list[str] = []
+    for c in (c.strip() for c in reglages.split(",")):
+        groupe = {"candidats": MODELES_CANDIDATS, "tous": TOUS}.get(c)
+        voulus += [r.cle for r in groupe] if groupe else ([c] if c else [])
+    voulus = list(dict.fromkeys(voulus))
     inconnus = [c for c in voulus if c not in PAR_CLE]
     if inconnus:
         raise journal.ErreurLisible(langues.t("camp.reglage_inconnu.titre"),
@@ -761,6 +910,13 @@ def _jouer(reglages: list[Reglage], extraits: list[dict], dossier: Path, periphe
         if reglage.moteur == "openvino" and not peripherique:
             resultats[reglage.cle] = {"cle": reglage.cle, "etat": "openvino_absent"}
             continue
+        interprete = ""
+        if reglage.moteur in MOTEURS_CANDIDATS:
+            interprete = os.environ.get(VARIABLE_PYTHON_CANDIDATS, "")
+            if chemins.EST_GELE or not interprete or not Path(interprete).is_file():
+                resultats[reglage.cle] = {"cle": reglage.cle, "etat": "moteur_absent",
+                                          "erreur": VARIABLE_PYTHON_CANDIDATS}
+                continue
         if reglage.moteur == "openvino" and not pris_en_charge(reglage, peripherique):
             # Limite connue d'OpenVINO, pas une panne : rien n'est lancé, et le
             # verdict ne voit pas ce réglage (seuls les « ok » y entrent).
@@ -773,6 +929,8 @@ def _jouer(reglages: list[Reglage], extraits: list[dict], dossier: Path, periphe
         parametres = {**parametres_communs, "cle": reglage.cle, "peripherique": peripherique,
                       "extraits": [{k: e[k] for k in ("id", "wav", "npy") if k in e} for e in extraits],
                       "sortie": str(fichier_textes)}
+        if interprete:
+            parametres["interprete"] = interprete
         debut = _heure()
         resultat = lancer_reglage(
             parametres, inactivite_max=900.0 + 4.0 * duree_max,
@@ -873,8 +1031,12 @@ def _executer(reglages: str, limite: int, paquet: str, peripherique: str, recomm
     peripherique = _peripherique_ov(peripherique)
 
     if telecharger:
-        for depot in dict.fromkeys(depot_du(r) for r in choisis
-                                   if r.moteur == "ctranslate2" or peripherique):
+        for reglage in choisis:
+            if reglage.candidat and reglage.motifs and not chemin_poids(reglage):
+                dire(langues.t("camp.etape.modele", modele=reglage.nom or reglage.modele))
+                chemin_poids(reglage, telecharger=True)
+        for depot in dict.fromkeys(depot_du(r) for r in choisis if not r.candidat
+                                   and (r.moteur == "ctranslate2" or peripherique)):
             if moteur.etat_modele(depot)["etat"] != "complet":
                 dire(langues.t("camp.etape.modele", modele=moteur.nom_court(depot)))
                 moteur.assurer_modele_telecharge(depot, None, None, annoncer=False)
@@ -931,10 +1093,22 @@ def _executer(reglages: str, limite: int, paquet: str, peripherique: str, recomm
             par_extrait.pop(cle)
             agregats.pop(cle)
             resultats[cle]["etat"] = "incomplet"
-    decision = verdict({c: {**resultats[c], "wer": agregats[c]["wer"]} for c in agregats}, ordre, par_extrait)
+    # Le verdict ne porte que sur les réglages de l'application ; les modèles
+    # candidats sont situés à côté, par leur écart apparié au meilleur d'entre eux.
+    application = [c for c in agregats if not PAR_CLE[c].candidat]
+    decision = verdict({c: {**resultats[c], "wer": agregats[c]["wer"]} for c in application}, ordre,
+                       {c: par_extrait[c] for c in application})
+    ecarts_candidats: dict[str, dict] = {}
+    if decision.get("meilleur"):
+        mots = [par_extrait[decision["meilleur"]][i]["mots_ref"] for i in ordre]
+        for cle in (c for c in agregats if PAR_CLE[c].candidat):
+            for repere in dict.fromkeys(x for x in (decision["meilleur"], decision.get("retenu")) if x):
+                ecart, bas, haut = ecart_apparie([par_extrait[cle][i]["erreurs"] for i in ordre],
+                                                 [par_extrait[repere][i]["erreurs"] for i in ordre], mots, indices)
+                ecarts_candidats.setdefault(cle, {})[repere] = (ecart, bas, haut)
 
     doutes: dict = {}
-    ct2 = [c for c in agregats if PAR_CLE[c].moteur == "ctranslate2" and agregats[c]["avec_probabilite"]]
+    ct2 = [c for c in application if PAR_CLE[c].moteur == "ctranslate2" and agregats[c]["avec_probabilite"]]
     if ct2:
         cle = decision.get("retenu") if decision.get("retenu") in ct2 else min(ct2, key=lambda c: agregats[c]["wer"])
         a = agregats[cle]
@@ -942,7 +1116,7 @@ def _executer(reglages: str, limite: int, paquet: str, peripherique: str, recomm
                          "incertains_errones": a["incertains_errones"], "erreurs": a["hyp_erronees"]}
     retenu = decision.get("retenu") if decision else ""
     if retenu:
-        autres = [c for c in agregats if c != retenu and PAR_CLE[c].modele != PAR_CLE[retenu].modele]
+        autres = [c for c in application if c != retenu and PAR_CLE[c].modele != PAR_CLE[retenu].modele]
         if autres:
             second = min(autres, key=lambda c: resultats[c]["facteur"])
             cumul = {"mots": 0, "signales": 0, "erreurs": 0, "signales_errones": 0}
@@ -962,7 +1136,8 @@ def _executer(reglages: str, limite: int, paquet: str, peripherique: str, recomm
                    "chev": sum(sum(c) for _m, c in tous_mots),
                    "anglais": sum(nombre_mots_anglais(m) for m, _c in tous_mots)}
     rapport = rediger_rapport(mat, corpus_info, resultats, agregats, decision, temoins, doutes,
-                              _glossaire_du_poste(), peripherique, time.time() - depart)
+                              _glossaire_du_poste(), peripherique, time.time() - depart,
+                              ecarts_candidats=ecarts_candidats)
     fichier = dossier / f"rapport-campagne-{datetime.now():%Y%m%d-%H%M}.txt"
     fichier.write_text(rapport, encoding="utf-8")
     verdict_donnees = {}
@@ -1051,7 +1226,7 @@ def rediger_rapport_reunion(mat, duree: float, resultats: dict[str, dict], accor
                     source=t(f"camp.reunion.ancre.{ancre_source}", retenu=retenu or "-")))
     lignes.append(t("camp.reunion.glossaire", termes=glossaire["termes"], exemples=glossaire["exemples"]))
     lignes.append("")
-    for reglage in CANDIDATS:
+    for reglage in TOUS:
         r = resultats.get(reglage.cle)
         if r is None:
             continue

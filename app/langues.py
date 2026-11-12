@@ -1232,6 +1232,8 @@ Transcription :
     # -- Campagne de mesure (app/campagne.py) ----------------------------------
     "camp.libelle_ov": "OpenVINO {peripherique}, {modele}, faisceau {faisceau}",
     "camp.libelle_ct2": "CTranslate2 processeur, {modele}, faisceau {faisceau}",
+    "camp.libelle_onnx": "ONNX Runtime processeur (onnx-asr), {modele}, glouton",
+    "camp.libelle_hf": "PyTorch processeur (transformers), {modele}, glouton",
     "camp.rapport.titre": "Campagne de mesure des réglages, {nom} {version}, {date}",
     "camp.rapport.machine": "Machine : {processeur}, {memoire} Go, {alimentation}",
     "camp.rapport.openvino": "OpenVINO {version}, périphériques vus : {peripheriques}",
@@ -1306,6 +1308,9 @@ Transcription :
         "les mots incertains restent soulignés dans la vue de relecture"
     ),
     "camp.rapport.pour_une_heure": "durée attendue pour une heure de réunion : {duree}",
+    "camp.rapport.section.candidats": "Modèles candidats (mesurés, hors application)",
+    "camp.rapport.candidat_ecart": "{code} contre {repere} : {ecart} points (intervalle apparié à 95 % : {bas} à {haut})",
+    "camp.rapport.candidat_note": "un écart négatif est un gain ; ces modèles n'entrent ni dans le verdict ni dans --appliquer",
     "camp.rapport.section.doutes": "Mots douteux",
     "camp.rapport.doute_ct2": (
         "{code}, probabilité sous {seuil} : {part} % des mots signalés, qui couvrent {rappel} % "
@@ -1380,6 +1385,7 @@ Transcription :
     "camp.cli.usage": (
         "Usage : --campagne [--appliquer] [--recommencer] [--reglages CLE,CLE] "
         "[--limite-extraits N] [--corpus PAQUET.zip] [--peripherique GPU|CPU] [--telecharger]\n"
+        "        (--reglages candidats : modèles candidats seulement ; --reglages tous : le tout)\n"
         "        --campagne --reunion FICHIER [--debut 00:05:00] [--duree 600] [--reglages CLE,CLE]"
     ),
     "camp.cli.fichier": "Rapport : {fichier}",
@@ -2633,6 +2639,8 @@ Transcript:
     # -- Measurement campaign (app/campagne.py) --------------------------------
     "camp.libelle_ov": "OpenVINO {peripherique}, {modele}, beam {faisceau}",
     "camp.libelle_ct2": "CTranslate2 processor, {modele}, beam {faisceau}",
+    "camp.libelle_onnx": "ONNX Runtime processor (onnx-asr), {modele}, greedy",
+    "camp.libelle_hf": "PyTorch processor (transformers), {modele}, greedy",
     "camp.rapport.titre": "Settings measurement campaign, {nom} {version}, {date}",
     "camp.rapport.machine": "Machine: {processeur}, {memoire} GB, {alimentation}",
     "camp.rapport.openvino": "OpenVINO {version}, devices seen: {peripheriques}",
@@ -2705,6 +2713,9 @@ Transcript:
         "underlined in the review view"
     ),
     "camp.rapport.pour_une_heure": "expected time for one hour of meeting: {duree}",
+    "camp.rapport.section.candidats": "Candidate models (measured, not in the application)",
+    "camp.rapport.candidat_ecart": "{code} versus {repere}: {ecart} points (paired 95 % interval: {bas} to {haut})",
+    "camp.rapport.candidat_note": "a negative gap is a gain; these models enter neither the verdict nor --appliquer",
     "camp.rapport.section.doutes": "Doubtful words",
     "camp.rapport.doute_ct2": (
         "{code}, probability below {seuil}: {part} % of words flagged, covering {rappel} % of "
@@ -2779,6 +2790,7 @@ Transcript:
     "camp.cli.usage": (
         "Usage: --campagne [--appliquer] [--recommencer] [--reglages KEY,KEY] "
         "[--limite-extraits N] [--corpus PACK.zip] [--peripherique GPU|CPU] [--telecharger]\n"
+        "       (--reglages candidats: candidate models only; --reglages tous: everything)\n"
         "       --campagne --reunion FILE [--debut 00:05:00] [--duree 600] [--reglages KEY,KEY]"
     ),
     "camp.cli.fichier": "Report: {fichier}",
