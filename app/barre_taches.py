@@ -197,3 +197,30 @@ def erreur() -> None:
 def effacer() -> None:
     """Retour à une icône ordinaire."""
     _etat(ETAT_AUCUN)
+
+
+class _FLASHWINFO(ctypes.Structure):
+    _fields_ = [("cbSize", ctypes.c_uint), ("hwnd", ctypes.c_void_p), ("dwFlags", ctypes.c_uint),
+                ("uCount", ctypes.c_uint), ("dwTimeout", ctypes.c_uint)]
+
+
+#: FLASHW_ALL | FLASHW_TIMERNOFG : la fenêtre et son bouton clignotent jusqu'à
+#: ce que l'utilisateur revienne sur la fenêtre, et pas du tout s'il y est déjà.
+_CLIGNOTEMENT = 0x3 | 0xC
+
+
+def clignoter() -> bool:
+    """
+    Signal discret de fin : le bouton de la barre des tâches clignote, comme
+    pour une conversation qui attend une réponse. User32 seulement, aucune
+    dépendance, rien d'affiché si la fenêtre est déjà au premier plan.
+    """
+    if _hors_service or not _hwnd or sys.platform != "win32":
+        return False
+    try:
+        info = _FLASHWINFO(ctypes.sizeof(_FLASHWINFO), ctypes.c_void_p(_hwnd), _CLIGNOTEMENT, 0, 0)
+        ctypes.windll.user32.FlashWindowEx(ctypes.byref(info))
+        return True
+    except Exception as exc:
+        journal.debug("Clignotement de la barre des tâches impossible : %s", exc)
+        return False

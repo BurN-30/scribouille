@@ -413,6 +413,31 @@ class Passerelle:
     def _sur_file_terminee(self, donnees: dict) -> None:
         self._js(f"onFileTerminee({_json(donnees)})")
         self._clore_barre_taches(bool(donnees.get("echecs")))
+        self._signaler_fin(donnees)
+
+    def _signaler_fin(self, donnees: dict) -> None:
+        """
+        Fin de file, quand on regarde ailleurs : le titre de la fenêtre le dit
+        et son bouton clignote dans la barre des tâches (rien de plus : une
+        notification Windows demanderait d'enregistrer l'application auprès du
+        système). Le titre revient à la normale au retour sur la fenêtre.
+        """
+        reussis = int(donnees.get("reussis") or 0)
+        if not reussis or self._fenetre is None:
+            return
+        try:
+            self._fenetre.set_title(langues.tn("app.titre_fin", reussis, nom=NOM_APPLICATION))
+        except Exception as exc:
+            journal.debug("Titre de fin non posé : %s", exc)
+        barre_taches.clignoter()
+
+    def titre_normal(self) -> None:
+        """Appelé par l'interface quand la fenêtre reprend la main."""
+        try:
+            if self._fenetre is not None and self._fenetre.title != NOM_APPLICATION:
+                self._fenetre.set_title(NOM_APPLICATION)
+        except Exception as exc:
+            journal.debug("Titre non rétabli : %s", exc)
 
     def _clore_barre_taches(self, en_echec: bool) -> None:
         """
@@ -1656,6 +1681,7 @@ class Passerelle:
             elif not diarisation.jeton_present():
                 self._sur_journal("attention", langues.t("app.diar.sans_jeton"))
 
+        self.titre_normal()
         lancee = self.file.demarrer(self.config, self._rappels)
         if not lancee:
             return {"ok": False, "message": langues.t("app.demarrer.file_vide")}

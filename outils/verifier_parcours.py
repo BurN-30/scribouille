@@ -540,6 +540,47 @@ def essai_voix_non_installees(base: Path) -> None:
     verifier("n'est pas installée" in texte, "l'en-tête dit pourquoi, sans renvoyer au journal")
 
 
+def essai_retour_pendant_calcul(base: Path) -> None:
+    from app import rythme
+
+    titre("Pendant le calcul : phases nommées, temps qui avance, reste lissé")
+    racine = chemins.RACINE
+    chemins.RACINE = base / "racine-progression"
+    chemins.RACINE.mkdir()
+    try:
+        _, recus, _ = file_factice(base, "progression", {"diarisation": False}, pause=0.05)
+    finally:
+        chemins.RACINE = racine
+    progressions = [r[1] for r in recus if r[0] == "progression"]
+    phases = [p["phase"] for p in progressions]
+    verifier(phases[0] == langues.t("phase.chargement") and progressions[0].get("indetermine") is True,
+             "le chargement du modèle est une phase à part, barre indéterminée", str(phases[:2]))
+    verifier(phases[1] == langues.t("phase.transcription") and progressions[1]["pct"] == 0
+             and progressions[1].get("restant_s"),
+             "la transcription s'annonce dès le modèle chargé, avec un reste à faire", str(progressions[1]))
+    verifier(phases[-2] == langues.t("etat.ecriture") and phases[-1] == langues.t("phase.termine"),
+             "l'écriture des fichiers a sa phase, avant « Terminé »", str(phases[-3:]))
+    pourcents = [p["pct"] for p in progressions]
+    verifier(pourcents == sorted(pourcents), "une seule progression, qui ne recule jamais", str(pourcents))
+    ecoules = [p.get("ecoule_s") for p in progressions]
+    verifier(all(isinstance(e, float) for e in ecoules) and ecoules == sorted(ecoules),
+             "chaque relevé donne le temps écoulé en secondes, pour l'horloge de l'interface")
+    journal = [r[2] for r in recus if r[0] == "journal"]
+    charge = next((i for i, t in enumerate(journal) if t.startswith("Modèle chargé")), -1)
+    verifier(charge > 0 and journal[charge - 1].startswith("Chargement du modèle"),
+             "le journal dit la fin du chargement : le pied de page ne reste pas figé dessus",
+             str(journal[:4]))
+
+    lisseur = rythme.LisseurRestant()
+    premier = lisseur(600.0, 0.0)
+    apres_saut = lisseur(150.0, 20.0)
+    verifier(premier == 600.0 and 400.0 < apres_saut < 580.0,
+             "un relevé plus rapide déplace la fin d'une fraction, sans saut", f"{apres_saut:.0f} s")
+    stable = [lisseur(apres_saut - 10.0 * k, 20.0 + 10.0 * k) for k in range(1, 4)]
+    verifier(all(abs(stable[k] - (apres_saut - 10.0 * (k + 1))) < 1.0 for k in range(3)),
+             "une cadence régulière décompte normalement", str([round(s) for s in stable]))
+
+
 def essai_file_apres_arret(base: Path) -> None:
     import copy
     import threading
@@ -615,6 +656,7 @@ def principal() -> int:
         essai_fichiers_produits(base)
         essai_une_seule_verite(base)
         essai_voix_non_installees(base)
+        essai_retour_pendant_calcul(base)
         essai_file_apres_arret(base)
 
     print(f"\n{'=' * 42}")

@@ -98,6 +98,14 @@ Corrections issues d'une revue d'usage de l'application réelle (vérifiées par
   passent à l'ambre avec « voix non séparées » au lieu d'un « Terminé » tout
   vert ; l'en-tête du fichier en donne la raison ; plus de phase de
   séparation ni de barre bloquée à 85 % pour une séparation impossible.
+- **Pendant le calcul** : phases nommées (chargement du modèle, transcription,
+  séparation des locuteurs, écriture des fichiers), barre animée tant
+  qu'aucun pourcentage n'est connu, temps écoulé qui avance chaque seconde,
+  reste à faire qui décompte et se corrige en douceur (heure de fin lissée,
+  cadence mesurée sans le chargement du modèle), pied de page qui ne reste
+  plus sur « Chargement du modèle... ». À la fin, le titre de la fenêtre le
+  dit et son bouton clignote dans la barre des tâches, jusqu'au retour sur la
+  fenêtre.
 - **Correction depuis la relecture** : l'en-tête du fichier texte reste séparé
   du corps ; la barre de fin d'en-tête et la première phrase ne se retrouvent
   plus sur la même ligne.

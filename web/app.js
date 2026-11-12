@@ -1224,10 +1224,7 @@ function ligneHTML(id) {
       it.estimation ? t('ui.ligne.calcul', { duree: it.estimation }) : '']
       .filter(Boolean).join(' · ');
   } else if (actif) {
-    meta = [it.phase || it.message,
-      it.ecoule ? t('ui.ligne.ecoule', { duree: it.ecoule }) : '',
-      it.restant ? t('ui.ligne.restant', { duree: it.restant }) : '']
-      .filter(Boolean).join(' · ');
+    meta = metaActive(it);
   } else if (it.etat === 'termine') {
     // Voix demandees mais non separees : la ligne passe a l'ambre et le dit.
     classeMeta = it.voix_non_separees ? 'attention' : 'succes';
@@ -1257,7 +1254,7 @@ function ligneHTML(id) {
     <div class="infos">
       <div class="nom" title="${ech(it.chemin)}">${ech(it.nom)}</div>
       <div class="meta ${classeMeta}">${ech(meta)}</div>
-      ${actif ? `<div class="barre"><span style="width:${it.pct || 0}%"></span></div>` : ''}
+      ${actif ? `<div class="barre ${it.indetermine ? 'indeterminee' : ''}"><span style="width:${it.pct || 0}%"></span></div>` : ''}
       ${sorties ? `<div class="sorties">${sorties}</div>` : ''}
     </div>
     ${texte ? `<button class="bouton-ligne" data-lire="${ech(texte.chemin)}" title="${ech(t('ui.ligne.lire'))}">${icone('i-loupe', 'icone-s')}</button>` : ''}
@@ -1747,9 +1744,52 @@ window.onHistorique = function (items) {
   dessinerHistorique();
 };
 
+/* Duree lisible, jumelle de presets.formater_duree cote Python. */
+function formaterDuree(secondes) {
+  const total = Math.floor(Math.max(0, secondes || 0));
+  if (!total) return t('duree.vide');
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const deux = (n) => String(n).padStart(2, '0');
+  if (h) return t('duree.heures', { h: h, m: deux(m) });
+  if (m) return t('duree.minutes', { m: m, s: deux(s) });
+  return t('duree.secondes', { s: s });
+}
+
+/* Ligne d'un fichier en cours : phase, temps ecoule qui avance chaque seconde,
+   reste a faire qui decompte entre deux releves de Python. */
+function metaActive(it) {
+  const maintenant = Date.now();
+  const ecoule = it.depart ? (maintenant - it.depart) / 1000 : 0;
+  let restant = '';
+  if (typeof it.restant_s === 'number') {
+    const reste = it.restant_s - (maintenant - (it.restant_recu || maintenant)) / 1000;
+    restant = reste > 5 ? formaterDuree(reste) : t('ui.ligne.bientot');
+  }
+  return [it.phase || it.message,
+    ecoule >= 1 ? t('ui.ligne.ecoule', { duree: formaterDuree(ecoule) }) : '',
+    restant ? t('ui.ligne.restant', { duree: restant }) : '']
+    .filter(Boolean).join(' · ');
+}
+
+const ETATS_ACTIFS = ['decodage', 'transcription', 'locuteurs', 'ecriture'];
+
+/* Une fois par seconde, les lignes en cours se mettent a jour d'elles-memes :
+   plus d'horloge figee entre deux paliers ni pendant le chargement du modele. */
+setInterval(() => {
+  for (const [id, it] of etat.fichiers) {
+    if (!ETATS_ACTIFS.includes(it.etat)) continue;
+    const meta = document.querySelector(`#vue-file .ligne[data-id="${CSS.escape(id)}"] .meta`);
+    if (meta) meta.textContent = metaActive(it);
+  }
+}, 1000);
+
 window.onEtat = function (id, nouvelEtat, message) {
   const it = etat.fichiers.get(id);
   if (!it) return;
+  if (nouvelEtat === 'decodage' || !it.depart) it.depart = Date.now();
+  if (!ETATS_ACTIFS.includes(nouvelEtat)) { it.restant_s = undefined; it.indetermine = false; }
   it.etat = nouvelEtat;
   it.message = message;
   if (nouvelEtat !== 'attente') it.phase = message;
@@ -1762,22 +1802,28 @@ window.onEtat = function (id, nouvelEtat, message) {
 window.onProgression = function (id, d) {
   const it = etat.fichiers.get(id);
   if (!it) return;
-  Object.assign(it, { pct: d.pct, phase: d.phase, ecoule: d.ecoule, restant: d.restant });
+  Object.assign(it, { pct: d.pct, phase: d.phase, ecoule: d.ecoule, restant: d.restant,
+    indetermine: !!d.indetermine });
+  // Python fait foi pour le temps ecoule (une reprise y ajoute le calcul deja
+  // fait) ; l'interface le fait avancer seule entre deux releves.
+  if (typeof d.ecoule_s === 'number') it.depart = Date.now() - d.ecoule_s * 1000;
+  it.restant_s = typeof d.restant_s === 'number' ? d.restant_s : undefined;
+  it.restant_recu = Date.now();
   const ligne = document.querySelector(`#vue-file .ligne[data-id="${CSS.escape(id)}"]`);
   if (ligne) {
-    const barre = ligne.querySelector('.barre span');
-    if (barre) barre.style.width = d.pct + '%';
-    const meta = ligne.querySelector('.meta');
-    if (meta) {
-      meta.textContent = [d.phase,
-        d.ecoule ? t('ui.ligne.ecoule', { duree: d.ecoule }) : '',
-        d.restant ? t('ui.ligne.restant', { duree: d.restant }) : '']
-        .filter(Boolean).join(' · ');
+    const barre = ligne.querySelector('.barre');
+    if (barre) {
+      barre.classList.toggle('indeterminee', it.indetermine);
+      barre.querySelector('span').style.width = d.pct + '%';
     }
+    const meta = ligne.querySelector('.meta');
+    if (meta) meta.textContent = metaActive(it);
   } else {
     majLigne(id);
   }
-  setEtat(t('ui.etat.progression', { phase: d.phase, pct: d.pct, nom: it.nom }), 'actif');
+  // Un seul pourcentage : celui de la barre, repris tel quel par la ligne d'etat.
+  setEtat(it.indetermine ? t('ui.etat.en_cours', { message: d.phase, nom: it.nom })
+    : t('ui.etat.progression', { phase: d.phase, pct: d.pct, nom: it.nom }), 'actif');
 };
 
 window.onFichierTermine = function (id, d) {
@@ -2356,6 +2402,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.ctrlKey && (e.key === '+' || e.key === '=')) { e.preventDefault(); zoom(0.1); }
     if (e.ctrlKey && e.key === '-') { e.preventDefault(); zoom(-0.1); }
     if (e.ctrlKey && e.key === '0') { e.preventDefault(); appliquerZoom(1); enregistrer({ zoom: 1 }); }
+  });
+  // Retour sur la fenetre apres une fin de file : le titre redevient normal.
+  window.addEventListener('focus', () => {
+    try { pywebview.api.titre_normal(); } catch (e) { /* sans consequence */ }
   });
   document.addEventListener('wheel', (e) => {
     if (e.ctrlKey) { e.preventDefault(); zoom(e.deltaY < 0 ? 0.05 : -0.05); }

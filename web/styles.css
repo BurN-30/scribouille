@@ -579,6 +579,14 @@ textarea { resize: vertical; font-family: var(--police-mono); font-size: 12.5px;
 .etat-global.attention .point { background: var(--ambre); }
 .etat-global .texte { color: var(--texte-doux); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* Phase sans pourcentage connu (chargement du modele, separation) : la barre
+   montre qu'elle travaille sans pretendre a un avancement. */
+.barre.indeterminee span {
+  width: 30% !important; animation: va-et-vient 1.6s ease-in-out infinite;
+}
+@keyframes va-et-vient { 0% { transform: translateX(-100%); } 100% { transform: translateX(340%); } }
+@media (prefers-reduced-motion: reduce) { .barre.indeterminee span { animation: none; width: 100% !important; opacity: .45; } }
+
 @keyframes pulsation { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 
 /* --------------------------------------------------------------- Modales */

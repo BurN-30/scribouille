@@ -433,6 +433,25 @@ def coefficient_effectif(durees_avant: dict, durees_apres: dict, choisi: str,
     return sum(duree * coefficient(nom, cle_calcul) for nom, duree in passe.items()) / total
 
 
+class LisseurRestant:
+    """
+    Lisse le reste à faire d'une transcription.
+
+    Ce qui est lissé, c'est l'heure de fin prévue, pas la durée : entre deux
+    relevés, le reste à faire décompte normalement, et un relevé isolé, plus
+    lent ou plus rapide, ne déplace la fin que d'une fraction de l'écart.
+    """
+
+    def __init__(self, poids: float = 0.3):
+        self.poids = poids
+        self.fin: float | None = None
+
+    def __call__(self, restant: float, maintenant: float) -> float:
+        fin = maintenant + max(0.0, restant)
+        self.fin = fin if self.fin is None else self.fin + self.poids * (fin - self.fin)
+        return max(0.0, self.fin - maintenant)
+
+
 def restant_s(estimation_s: float, ecoule_s: float, part: float) -> float:
     """
     Temps restant : l'estimation au départ, puis la vitesse observée.

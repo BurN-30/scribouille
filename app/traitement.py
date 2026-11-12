@@ -469,7 +469,29 @@ class FileTraitement:
         durees_avant = regulateur.releve_durees() if regulateur is not None else {}
         rappels.etat(element.identifiant, "transcription", langues.t("etat.transcription"))
 
+        # Phase à part : le chargement prend de 20 à 45 s sur processeur. La
+        # ligne le dit (barre indéterminée, horloge qui tourne côté interface)
+        # au lieu d'afficher « Transcription » à 0 % sans signe de vie.
+        rappels.progression(element.identifiant, {
+            "pct": 0, "phase": langues.t("phase.chargement"), "indetermine": True,
+            "ecoule": presets.formater_duree(time.time() - depart),
+            "ecoule_s": round(time.time() - depart, 1), "restant": "", "restant_s": None,
+        })
+        debut_chargement = time.time()
         instance.charger(reglages["modele"], signaler)
+        # Le pied de page montre la dernière ligne du journal : sans celle-ci,
+        # il affichait « Chargement du modèle... » pendant toute la transcription.
+        signaler("info", langues.t(
+            "trait.modele_charge", duree=presets.formater_duree(time.time() - debut_chargement)))
+        # Le calcul commence : la phase change tout de suite. Par lots, le
+        # premier avancement n'arrive qu'à la fin du premier lot, parfois une
+        # minute plus tard ; d'ici là, le reste à faire part de l'estimation.
+        rappels.progression(element.identifiant, {
+            "pct": 0, "phase": langues.t("phase.transcription"), "indetermine": True,
+            "ecoule": presets.formater_duree(time.time() - depart),
+            "ecoule_s": round(time.time() - depart, 1), "restant": "",
+            "restant_s": round(estimation * (1.0 - decalage / duree_audio) if duree_audio else estimation, 1),
+        })
 
         amorce_info = {"amorce": "", "nb_retenus": 0, "message": ""}
         if config.get("utiliser_glossaire", True):
@@ -482,13 +504,26 @@ class FileTraitement:
                 if amorce_info["tronque"]:
                     signaler("attention", langues.t("trait.glossaire_tronque"))
 
+        # Reste à faire : estimation de départ, puis cadence observée depuis le
+        # début du calcul (le chargement du modèle n'y entre plus), le tout
+        # lissé : l'heure de fin prévue bouge doucement au lieu de sauter de
+        # dix minutes à deux en vingt secondes. Une reprise ne compte que ce
+        # qui reste à transcrire.
+        estimation_reste = estimation * (1.0 - decalage / duree_audio) if duree_audio else estimation
+        lisseur = rythme.LisseurRestant()
+        debut_transcription = time.time()
+        # Point de départ du lissage : l'estimation annoncée à l'écran.
+        lisseur(estimation_reste, debut_transcription)
+
         def progression(part: float) -> None:
-            ecoule = time.time() - depart
+            maintenant = time.time()
+            ecoule = maintenant - depart
             part_transcription = 0.85 if diarisation.effective(config.get("diarisation")) else 1.0
             pourcent = int(part * part_transcription * 100)
             # Estimation au départ, puis cadence observée : elle suit d'elle-même
             # les bascules du rythme automatique.
-            restant = rythme.restant_s(estimation, ecoule, part)
+            restant = lisseur(rythme.restant_s(
+                estimation_reste, maintenant - debut_transcription, part), maintenant)
             effectif = getattr(regulateur, "effectif", "vitesse")
             rappels.progression(element.identifiant, {
                 "pct": min(99, pourcent),
@@ -496,10 +531,12 @@ class FileTraitement:
                           else langues.t("phase.transcription_rythme",
                                          rythme=langues.t(f"rythme.nom.{effectif}"))),
                 "ecoule": presets.formater_duree(ecoule),
+                "ecoule_s": round(ecoule, 1),
                 "restant": (
                     presets.formater_duree(restant) if restant > 5
                     else langues.t("phase.bientot")
                 ),
+                "restant_s": round(restant, 1),
             })
 
         debut_transcription = time.time()
@@ -551,8 +588,9 @@ class FileTraitement:
             element.etat = "locuteurs"
             rappels.etat(element.identifiant, "locuteurs", langues.t("etat.locuteurs"))
             rappels.progression(element.identifiant, {
-                "pct": 88, "phase": langues.t("phase.locuteurs"),
-                "ecoule": presets.formater_duree(time.time() - depart), "restant": "",
+                "pct": 88, "phase": langues.t("etat.locuteurs"), "indetermine": True,
+                "ecoule": presets.formater_duree(time.time() - depart),
+                "ecoule_s": round(time.time() - depart, 1), "restant": "", "restant_s": None,
             })
             try:
                 tours = diarisation.diariser(
@@ -594,6 +632,11 @@ class FileTraitement:
         # 6. Écriture
         element.etat = "ecriture"
         rappels.etat(element.identifiant, "ecriture", langues.t("etat.ecriture"))
+        rappels.progression(element.identifiant, {
+            "pct": 99, "phase": langues.t("etat.ecriture"),
+            "ecoule": presets.formater_duree(time.time() - depart),
+            "ecoule_s": round(time.time() - depart, 1), "restant": "", "restant_s": None,
+        })
         temps_calcul = time.time() - depart
         details.update({
             "modele_lisible": moteur.nom_court(reglages["modele"]),
@@ -629,7 +672,8 @@ class FileTraitement:
         element.etat = "termine"
         rappels.progression(element.identifiant, {
             "pct": 100, "phase": langues.t("phase.termine"),
-            "ecoule": presets.formater_duree(temps_calcul), "restant": "",
+            "ecoule": presets.formater_duree(temps_calcul),
+            "ecoule_s": round(temps_calcul, 1), "restant": "", "restant_s": None,
         })
         rappels.etat(element.identifiant, "termine", langues.t("etat.termine"))
         rappels.journal_ui("ok", langues.t(
