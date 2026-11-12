@@ -60,7 +60,9 @@ ce soit et **sans le moindre appel réseau** :
   25. la comparaison des moteurs sur un vrai enregistrement ;
   26. la campagne de mesure : taux d'erreur et intervalles, verdict, corpus
       (annotations, chevauchements, empreintes), rapport sans texte ni chemin,
-      exemples anciens du glossaire, application du verdict, veille suspendue.
+      exemples anciens du glossaire, application du verdict, veille suspendue ;
+  27. OpenVINO sur la puce graphique : faisceau non pris en charge (campagne,
+      réglage du poste), garde-fou des répétitions à température.
 
 Rien de ce que fait ce script ne touche à l'installation : tout se passe dans
 un dossier temporaire, effacé à la fin.
@@ -2112,6 +2114,154 @@ def essai_campagne(base: Path) -> None:
     verifier(refuse, "un réglage inconnu est refusé avec un message")
 
 
+
+def essai_campagne_limites(base: Path) -> None:
+    """Faisceau sur la puce graphique non pris en charge, réglage de comparaison des réunions."""
+    titre("Campagne : limites du périphérique, réglage de comparaison")
+    from app import campagne as cp, config as config_module, moteur_openvino, reglage_machine
+
+    lances: list[str] = []
+    lancer_reel = cp.lancer_reglage
+
+    def lancer_simule(parametres, inactivite_max, rappel=None, interrompu=None):
+        lances.append(parametres["cle"])
+        return {"cle": parametres["cle"], "etat": "ok", "peripherique": parametres["peripherique"]}
+
+    cp.lancer_reglage = lancer_simule
+    try:
+        dossier = base / "campagne-limites"
+        dits: list[str] = []
+        resultats = cp._jouer(list(cp.CANDIDATS), [{"id": "e1", "wav": "e1.wav", "duree_s": 60.0}], dossier,
+                              "GPU", {"langue": "fr"}, dits.append, None)
+    finally:
+        cp.lancer_reglage = lancer_reel
+    hors = {c for c, r in resultats.items() if r["etat"] == cp.NON_PRIS_EN_CHARGE}
+    verifier(hors == {"ov-v3-f5", "ov-turbo-f5"} and not hors & set(lances)
+             and "ov-turbo-f1" in lances and "ct2-v3-f5" in lances,
+             "faisceau 5 d'OpenVINO sur la puce graphique : non lancé, marqué non pris en charge")
+    verifier(not any((dossier / "reglages" / f"{c}.json").exists() for c in hors),
+             "rien n'est enregistré pour eux : une campagne sur processeur les mesurera")
+    import copy
+
+    mat = copy.deepcopy(materiel.detecter())
+    rapport = cp.rediger_rapport_reunion(
+        mat, 600.0, {"ov-v3-f5": resultats["ov-v3-f5"]}, {}, "", "premier",
+        {"termes": 0, "exemples": 0}, {}, {}, "GPU", 10.0)
+    verifier("non pris en charge" in rapport and "échec" not in rapport,
+             "le rapport les dit non pris en charge, pas en échec")
+    cpu = [r.cle for r in cp.CANDIDATS if cp.pris_en_charge(r, "CPU")]
+    verifier(len(cpu) == len(cp.CANDIDATS), "sur le processeur, tous les réglages sont mesurés")
+
+    # Réglage du poste : jamais de faisceau sur OpenVINO GPU, même écrit à la main.
+    racine_reelle, config_reelle = chemins.RACINE, chemins.FICHIER_CONFIG
+    chemins.RACINE = base / "faisceau-gpu"
+    chemins.RACINE.mkdir()
+    chemins.FICHIER_CONFIG = chemins.RACINE / "config.json"
+    temoin_reel = moteur_openvino.TEMOIN_CHARGEMENT
+    moteur_openvino.TEMOIN_CHARGEMENT = chemins.RACINE / "temoin.txt"
+    installe, vus = moteur_openvino.installe, moteur_openvino.peripheriques_disponibles
+    moteur_openvino.installe = lambda: True
+    moteur_openvino.peripheriques_disponibles = lambda forcer=False: ["CPU", "GPU"]
+    try:
+        config = config_module.charger()
+        propre = reglage_machine.enregistrer(config, mat, {"moteur": "openvino", "peripherique": "GPU",
+                                                           "faisceau": 5})
+        verifier(propre["faisceau"] == 1 and reglage_machine.faisceau_impose(config, mat) == 1,
+                 "réglage OpenVINO GPU en faisceau 5 : enregistré et appliqué en faisceau 1")
+        config[reglage_machine.CLE]["faisceau"] = 5
+        verifier(reglage_machine.faisceau_impose(config, mat) == 1,
+                 "faisceau 5 écrit à la main pour OpenVINO GPU : ramené à 1")
+        reglage_machine.enregistrer(config, mat, {"moteur": "openvino", "peripherique": "CPU", "faisceau": 5})
+        verifier(reglage_machine.faisceau_impose(config, mat) == 5,
+                 "OpenVINO sur processeur garde son faisceau")
+    finally:
+        moteur_openvino.installe, moteur_openvino.peripheriques_disponibles = installe, vus
+        chemins.RACINE, chemins.FICHIER_CONFIG = racine_reelle, config_reelle
+        moteur_openvino.TEMOIN_CHARGEMENT = temoin_reel
+
+
+# ---------------------------------------------------------------------------
+# 27. OpenVINO : faisceau sur la puce graphique, garde-fou des répétitions,
+#     filet (rejeu puis repli) sur un moteur simulé
+# ---------------------------------------------------------------------------
+
+_ERREUR_GPU = ("Exception from src\\core\\src\\runtime\\tensor.cpp:125: Exception from "
+               "src\\inference\\dev_api\\openvino\\runtime\\iremote_tensor.hpp:32: Not Implemented")
+
+
+def essai_openvino_faisceau() -> None:
+    """Faisceau ramené à 1 sur GPU, garde-fou à température, reprise en échec sans perte."""
+    titre("OpenVINO : faisceau et garde-fou des répétitions")
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from app import moteur_openvino as mo
+
+    verifier(not mo.faisceau_pris_en_charge("GPU", 5) and not mo.faisceau_pris_en_charge("NPU", 2)
+             and mo.faisceau_pris_en_charge("GPU", 1) and mo.faisceau_pris_en_charge("CPU", 5)
+             and mo.faisceau_effectif("gpu", 5) == 1 and mo.faisceau_effectif("CPU", 5) == 5,
+             "faisceau : jamais plus de 1 sur la puce graphique ni le NPU, libre sur le processeur")
+
+    class FauxPipeline:
+        def __init__(self, textes, lever_si_faisceau=False):
+            self.textes = list(textes)
+            self.lever_si_faisceau = lever_si_faisceau
+            self.configs: list[dict] = []
+
+        def get_generation_config(self):
+            return SimpleNamespace()
+
+        def generate(self, _morceau, config, streamer=None):
+            self.configs.append(dict(vars(config)))
+            if self.lever_si_faisceau and config.num_beams > 1:
+                # Ce que rend OpenVINO GenAI 2026.4 sur la puce graphique.
+                raise RuntimeError(_ERREUR_GPU)
+            texte = self.textes.pop(0)
+            return SimpleNamespace(texts=[texte], words=[], languages=["<|fr|>"], perf_metrics=None,
+                                   chunks=[SimpleNamespace(start_ts=0.0, end_ts=2.0, text=texte)])
+
+    decouper_reel = mo.decouper
+    mo.decouper = lambda signal: [[{"start": 0, "end": 32000}]]
+    boucle, propre = "bonjour " * 40, "Bonjour à tous, on commence."
+    mat = materiel.detecter()
+
+    def moteur_sur(peripherique: str, pipeline) -> "mo.MoteurOpenVINO":
+        instance = mo.MoteurOpenVINO(mat, peripherique)
+        instance._pipeline, instance._mots, instance._nom_modele = pipeline, False, "turbo"
+        return instance
+
+    signal = np.zeros(32000, dtype=np.float32)
+    try:
+        tube = FauxPipeline([propre])
+        segments, details = moteur_sur("GPU", tube).transcrire(signal, 2.0, "fr", {"faisceau_openvino": 5})
+        verifier(tube.configs[0]["num_beams"] == 1 and details["faisceau"] == 1 and segments,
+                 "faisceau de 5 demandé sur la puce graphique : décodage glouton, sans erreur")
+
+        tube = FauxPipeline([boucle, propre], lever_si_faisceau=True)
+        segments, details = moteur_sur("GPU", tube).transcrire(signal, 2.0, "fr", {"faisceau_openvino": 1})
+        verifier(all(c["num_beams"] == 1 for c in tube.configs) and tube.configs[1].get("do_sample")
+                 and tube.configs[1].get("temperature") == 0.2
+                 and details["fenetres_repetitives"] == 1 and details["reprises"] == 1
+                 and details["echecs_garde"] == 0 and segments[0].texte == propre,
+                 "fenêtre qui boucle sur la puce graphique : refaite à température, jamais en faisceau")
+
+        tube = FauxPipeline([boucle, propre])
+        moteur_sur("CPU", tube).transcrire(signal, 2.0, "fr", {"faisceau_openvino": 1})
+        verifier(tube.configs[1]["num_beams"] == 5 and not tube.configs[1].get("do_sample"),
+                 "sur le processeur, le garde-fou garde son faisceau de 5")
+
+        tube = FauxPipeline([boucle], lever_si_faisceau=True)
+        segments, details = moteur_sur("GPU", tube).transcrire(
+            signal, 2.0, "fr", {"faisceau_openvino": 1, "garde_repetition": "faisceau"})
+        verifier(details["echecs_garde"] == 1 and "Not Implemented" in details["erreur_garde"]
+                 and segments and segments[0].texte == boucle.strip(),
+                 "ancien garde-fou forcé sur la puce graphique : l'erreur de la 2.4.0 est relevée, "
+                 "la fenêtre garde sa première version au lieu de faire tomber la transcription")
+    finally:
+        mo.decouper = decouper_reel
+
+
 def principal() -> int:
     print(f"Vérification des fonctions périphériques de Scribouille\n{'=' * 54}")
     with tempfile.TemporaryDirectory(prefix="scribouille-verif-") as brut:
@@ -2143,6 +2293,8 @@ def principal() -> int:
         essai_extension_openvino()
         essai_comparaison(base)
         essai_campagne(base)
+        essai_campagne_limites(base)
+        essai_openvino_faisceau()
 
     print(f"\n{'=' * 54}")
     if _echecs:

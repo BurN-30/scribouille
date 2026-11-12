@@ -43,7 +43,25 @@ Décodage glouton par défaut : le faisceau de 5 coûtait 1,7 fois plus cher san
 gagner un mot sur les extraits de test (large-v3 : 8,03 % de WER en glouton,
 8,27 % avec faisceau). Garde-fou des boucles de répétition, à la manière de
 faster-whisper : une fenêtre dont le texte se compresse trop (taux > 2,4) est
-refaite avec un faisceau de 5.
+refaite, avec un faisceau de 5 sur le processeur, et par échantillonnage à
+température croissante (0,2, 0,4, 0,6) sur la puce graphique et le NPU.
+
+Pas de faisceau sur la puce graphique ni sur le NPU
+---------------------------------------------------
+OpenVINO GenAI 2026.4 ne sait pas décoder Whisper en faisceau sur la puce
+graphique : l'encodeur y rend un tenseur resté dans la mémoire du circuit
+(`init_model`, whisper/pipeline.cpp), et le décodeur en faisceau le recopie
+côté processeur pour chaque branche (`_set_encoder_hidden_states_tensor`,
+whisper/models/decoder.cpp), ce qu'un tenseur distant refuse : « tensor.cpp:125
+... iremote_tensor.hpp:32 Not Implemented », à chaque fois, dès la deuxième
+étape du décodage. Ticket public n° 2746 d'openvino.genai ; corrigé sur la
+branche principale le 22/09/2026 (PR 4498), pas dans la 2026.4, et la
+correction laisse un défaut de justesse du faisceau sur la puce graphique en
+précision par défaut (CVS-195124). Le NPU passe par un pipeline statique sans
+faisceau. Le faisceau y est donc ramené à 1, quoi que demande le réglage, et le
+garde-fou des répétitions n'y utilise jamais le faisceau : c'est lui qui, avant
+la 2.4.1, faisait tomber une transcription en glouton sur la puce graphique
+quand une fenêtre bouclait.
 
 Le compilé pour la puce graphique ou le NPU est mis en cache sous les données
 de l'utilisateur (`cache-openvino`) : la première ouverture coûte de quelques
@@ -82,6 +100,28 @@ SEUIL_COMPRESSION = 2.4
 JETONS_MAX = 224
 
 PERIPHERIQUES = ("GPU", "NPU", "CPU")
+
+#: Périphériques où OpenVINO ne décode Whisper qu'en glouton (voir plus haut).
+SANS_FAISCEAU = ("GPU", "NPU")
+
+#: Températures du garde-fou des répétitions là où le faisceau manque, dans
+#: l'ordre ; on s'arrête à la première fenêtre qui ne boucle plus.
+TEMPERATURES_REPRISE = (0.2, 0.4, 0.6)
+
+#: Graine de l'échantillonnage : la même fenêtre donne le même texte d'un
+#: passage à l'autre.
+GRAINE = 20261112
+
+
+def faisceau_pris_en_charge(peripherique: str, faisceau: int) -> bool:
+    """OpenVINO sait-il décoder avec ce faisceau sur ce périphérique ?"""
+    return int(faisceau or 1) <= 1 or (peripherique or "CPU").upper() not in SANS_FAISCEAU
+
+
+def faisceau_effectif(peripherique: str, faisceau: int) -> int:
+    """Faisceau réellement appliqué : ramené à 1 là où il n'est pas pris en charge."""
+    faisceau = max(1, int(faisceau or 1))
+    return faisceau if faisceau_pris_en_charge(peripherique, faisceau) else 1
 
 #: Témoin posé pendant l'ouverture d'un modèle sur la puce graphique ou le NPU,
 #: effacé dès qu'elle a réussi ou échoué proprement. Une compilation qui échoue
@@ -345,7 +385,7 @@ class MoteurOpenVINO:
         self._nom_modele = ""
         gc.collect()
 
-    def _config(self, langue: str | None, faisceau: int, amorce: str):
+    def _config(self, langue: str | None, faisceau: int, amorce: str, temperature: float = 0.0):
         config = self._pipeline.get_generation_config()
         config.task = "transcribe"
         config.language = f"<|{langue}|>" if langue else None
@@ -353,9 +393,52 @@ class MoteurOpenVINO:
         config.word_timestamps = self._mots
         config.num_beams = max(1, int(faisceau))
         config.max_new_tokens = JETONS_MAX
+        if temperature > 0:
+            # Échantillonnage sur une seule séquence : aucune recopie de l'état
+            # de l'encodeur, donc permis sur la puce graphique (vérifié sur
+            # processeur : accepté avec l'horodatage des mots).
+            config.num_beams = 1
+            config.do_sample = True
+            config.temperature = float(temperature)
+            config.top_p = 1.0
+            config.top_k = 0
+            config.rng_seed = GRAINE
         if amorce:
             config.initial_prompt = amorce
         return config
+
+    def _garde_repetition(self, morceau, resultat, texte: str, langue: str | None, amorce: str,
+                          flux, mode: str, bilan: dict):
+        """
+        Refait une fenêtre qui boucle ; garde la version qui se compresse le moins.
+
+        `mode` : « faisceau » ou « temperature », « auto » choisit selon le
+        périphérique. Un échec de la reprise n'emporte pas la transcription :
+        la première version est gardée, et l'échec est compté.
+        """
+        bilan["fenetres_repetitives"] += 1
+        if mode == "auto":
+            mode = "faisceau" if faisceau_pris_en_charge(self.peripherique_ov, 5) else "temperature"
+        taux = _taux_compression(texte)
+        essais = [(5, 0.0)] if mode == "faisceau" else [(1, t) for t in TEMPERATURES_REPRISE]
+        journal.attention("Fenêtre répétitive (taux %.2f), refaite (%s)", taux,
+                          "faisceau de 5" if mode == "faisceau" else "température")
+        meilleur, meilleur_taux = resultat, taux
+        try:
+            for faisceau, temperature in essais:
+                second = self._pipeline.generate(
+                    morceau, self._config(langue, faisceau, amorce, temperature), streamer=flux)
+                bilan["reprises"] += 1
+                taux_second = _taux_compression((second.texts[0] if second.texts else "") or "")
+                if taux_second < meilleur_taux:
+                    meilleur, meilleur_taux = second, taux_second
+                if meilleur_taux <= SEUIL_COMPRESSION:
+                    break
+        except Exception as exc:
+            bilan["echecs_garde"] += 1
+            bilan["erreur_garde"] = f"{type(exc).__name__}: {exc}"[:300]
+            journal.exception("Reprise d'une fenêtre répétitive impossible, première version gardée", exc)
+        return meilleur
 
     def transcrire(
         self,
@@ -375,7 +458,15 @@ class MoteurOpenVINO:
         import openvino_genai as ov_genai  # type: ignore
 
         signal = np.ascontiguousarray(signal, dtype=np.float32)
-        faisceau = int(reglages.get("faisceau_openvino") or 1)
+        demande = int(reglages.get("faisceau_openvino") or 1)
+        faisceau = faisceau_effectif(self.peripherique_ov, demande)
+        if faisceau != demande:
+            journal.attention("Faisceau de %s non pris en charge par OpenVINO sur %s : décodage glouton",
+                              demande, self.peripherique_ov)
+        # « auto » en temps normal ; l'épreuve d'endurance force l'ancien
+        # comportement pour le diagnostic (voir `app/endurance.py`).
+        mode_garde = str(reglages.get("garde_repetition") or "auto")
+        bilan = {"fenetres_repetitives": 0, "reprises": 0, "echecs_garde": 0, "erreur_garde": ""}
         langue_fixee = None if (not langue or langue == "auto") else langue
         fenetres = decouper(signal) if signal.size else []
         journal.info(
@@ -409,13 +500,11 @@ class MoteurOpenVINO:
                 # dernière phrase annoncée comme continuant au-delà de la fenêtre.
                 plafond += 1
             if faisceau == 1 and _taux_compression(texte) > SEUIL_COMPRESSION:
-                journal.attention("Fenêtre répétitive (taux %.2f), refaite avec un faisceau de 5",
-                                  _taux_compression(texte))
-                second = self._pipeline.generate(
-                    morceau, self._config(langue_fixee, 5, amorce), streamer=flux)
-                texte_second = (second.texts[0] if second.texts else "") or ""
-                if _taux_compression(texte_second) < _taux_compression(texte):
-                    resultat = second
+                resultat = self._garde_repetition(morceau, resultat, texte, langue_fixee, amorce,
+                                                  flux, mode_garde, bilan)
+                if arret():
+                    journal.attention("Transcription interrompue à la demande de l'utilisateur")
+                    raise Interruption()
             if not langue_fixee:
                 # Langue détectée sur la première fenêtre, puis gardée : une
                 # réunion ne change pas de langue d'une fenêtre à l'autre, et
@@ -445,6 +534,8 @@ class MoteurOpenVINO:
             "type_calcul": self.type_calcul,
             "moteur": "openvino",
             "fenetres_plafond": plafond,
+            "faisceau": faisceau,
+            **bilan,
         }
         journal.info("Transcription OpenVINO terminée : %s segments", len(segments))
         return segments, details

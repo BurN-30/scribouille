@@ -128,6 +128,20 @@ def libelle(reglage: Reglage, peripherique: str = "") -> str:
     return langues.t("camp.libelle_ct2", modele=nom, faisceau=reglage.faisceau)
 
 
+#: État d'un réglage que le périphérique ne sait pas faire (faisceau d'OpenVINO
+#: sur la puce graphique) : ni lancé, ni compté comme une panne.
+NON_PRIS_EN_CHARGE = "non_pris_en_charge"
+
+
+def pris_en_charge(reglage: Reglage, peripherique: str) -> bool:
+    """Ce réglage peut-il tourner sur ce périphérique ? (faux : OpenVINO GPU en faisceau)"""
+    if reglage.moteur != "openvino":
+        return True
+    from . import moteur_openvino
+
+    return moteur_openvino.faisceau_pris_en_charge(peripherique or "CPU", reglage.faisceau)
+
+
 def depot_du(reglage: Reglage) -> str:
     return presets.depot_openvino(reglage.modele) if reglage.moteur == "openvino" else reglage.modele
 
@@ -215,6 +229,7 @@ def executer_reglage(parametres: dict) -> dict:
 
     sorties: dict[str, dict] = {}
     calcul_total, audio_total, remplacements = 0.0, 0.0, 0
+    repetitions = {"fenetres_repetitives": 0, "reprises": 0, "echecs_garde": 0}
     temps_cpu = sum(processus.cpu_times()[:2]) if processus is not None else 0.0
     for rang, entree in enumerate(parametres["extraits"], 1):
         signal = _lire_signal(entree)
@@ -234,6 +249,8 @@ def executer_reglage(parametres: dict) -> dict:
         calcul_total += calcul
         audio_total += duree
         resultat["type_calcul"] = details.get("type_calcul", "")
+        for cle in repetitions:
+            repetitions[cle] += int(details.get(cle) or 0)
         _emettre({"progres": rang, "total": len(parametres["extraits"])})
     instance.liberer()
     if processus is not None:
@@ -246,7 +263,7 @@ def executer_reglage(parametres: dict) -> dict:
         "facteur": round(calcul_total / audio_total, 4) if audio_total else 0.0,
         "processeur_s": round(temps_cpu, 1), "memoire_go": round(pic, 2),
         "termes_amorce": int(amorce.get("nb_retenus") or 0), "jetons_amorce": int(amorce.get("jetons") or 0),
-        "remplacements": remplacements,
+        "remplacements": remplacements, **repetitions,
     })
     return resultat
 
@@ -572,6 +589,9 @@ def rediger_rapport(mat, corpus_info: dict, resultats: dict[str, dict], agregats
         nom = libelle(reglage, r.get("peripherique") or peripherique)
         if reglage.actuel in ("qualite", "rapide"):
             nom += " " + t("camp.rapport.preset_actuel", preset=presets.nom_preset(reglage.actuel))
+        if r.get("etat") == NON_PRIS_EN_CHARGE:
+            lignes.append(f"  - {reglage.cle} : {nom} : " + t("camp.rapport.non_pris_en_charge"))
+            continue
         if r.get("etat") != "ok" or reglage.cle not in agregats:
             lignes.append(f"  - {reglage.cle} : {nom} : " + t("camp.rapport.echec", etat=r.get("etat", "?"),
                                                               detail=r.get("erreur", "")))
@@ -726,6 +746,13 @@ def _jouer(reglages: list[Reglage], extraits: list[dict], dossier: Path, periphe
                 pass
         if reglage.moteur == "openvino" and not peripherique:
             resultats[reglage.cle] = {"cle": reglage.cle, "etat": "openvino_absent"}
+            continue
+        if reglage.moteur == "openvino" and not pris_en_charge(reglage, peripherique):
+            # Limite connue d'OpenVINO, pas une panne : rien n'est lancé, et le
+            # verdict ne voit pas ce réglage (seuls les « ok » y entrent).
+            resultats[reglage.cle] = {"cle": reglage.cle, "etat": NON_PRIS_EN_CHARGE,
+                                      "peripherique": peripherique}
+            dire(langues.t("camp.etape.non_pris_en_charge", code=reglage.cle, peripherique=peripherique))
             continue
         dire(langues.t("camp.etape.reglage", numero=rang, total=len(reglages),
                        reglage=libelle(reglage, peripherique), code=reglage.cle))
@@ -951,6 +978,9 @@ def rediger_rapport_reunion(mat, duree: float, resultats: dict[str, dict], accor
         if r is None:
             continue
         nom = libelle(reglage, r.get("peripherique") or peripherique)
+        if r.get("etat") == NON_PRIS_EN_CHARGE:
+            lignes.append(f"  - {reglage.cle} : {nom} : " + t("camp.rapport.non_pris_en_charge"))
+            continue
         if r.get("etat") != "ok":
             lignes.append(f"  - {reglage.cle} : {nom} : " + t("camp.rapport.echec", etat=r.get("etat", "?"),
                                                               detail=r.get("erreur", "")))

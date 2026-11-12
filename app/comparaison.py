@@ -682,7 +682,8 @@ def executer_moteur(parametres: dict) -> dict:
             return resultat
         peripherique = str(parametres.get("peripherique") or "CPU").upper()
         instance = moteur_openvino.MoteurOpenVINO(mat, peripherique)
-        reglages["faisceau_openvino"] = int(parametres.get("faisceau_openvino") or 1)
+        reglages["faisceau_openvino"] = moteur_openvino.faisceau_effectif(
+            peripherique, int(parametres.get("faisceau_openvino") or 1))
         modele_charge = modele
         resultat["peripherique"] = peripherique
         resultat["faisceau"] = reglages["faisceau_openvino"]

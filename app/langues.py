@@ -1111,6 +1111,10 @@ Transcription :
     "camp.rapport.section.reglages": "Réglages mesurés",
     "camp.rapport.preset_actuel": "(réglage actuel « {preset} »)",
     "camp.rapport.echec": "échec ({etat}) {detail}",
+    "camp.rapport.non_pris_en_charge": (
+        "non pris en charge sur ce périphérique (OpenVINO ne décode pas en faisceau sur la "
+        "puce graphique ni sur le NPU), pas compté comme une panne"
+    ),
     "camp.rapport.wer": (
         "taux d'erreur de mots : {wer} % (intervalle à 95 % : {bas} à {haut}) ; "
         "{sub} substitutions, {sup} omissions, {ins} insertions sur {mots} mots"
@@ -1191,6 +1195,7 @@ Transcription :
         "Ce rapport ne contient que des nombres : aucun mot transcrit, aucun nom, aucun chemin."
     ),
     "camp.etape.deja": "{code} : déjà mesuré, repris tel quel",
+    "camp.etape.non_pris_en_charge": "{code} : non pris en charge sur {peripherique}, passé",
     "camp.etape.reglage": "Réglage {numero} sur {total} : {reglage} ({code})",
     "camp.etape.progres": "{code} : extrait {n} sur {total}",
     "camp.etape.modele": "Téléchargement du modèle {modele}",
@@ -2250,6 +2255,10 @@ Transcript:
     "camp.rapport.section.reglages": "Measured settings",
     "camp.rapport.preset_actuel": "(current \"{preset}\" setting)",
     "camp.rapport.echec": "failed ({etat}) {detail}",
+    "camp.rapport.non_pris_en_charge": (
+        "not supported on this device (OpenVINO does not run beam search on the "
+        "integrated graphics or the NPU), not counted as a failure"
+    ),
     "camp.rapport.wer": (
         "word error rate: {wer} % (95 % interval: {bas} to {haut}); "
         "{sub} substitutions, {sup} deletions, {ins} insertions over {mots} words"
@@ -2328,6 +2337,7 @@ Transcript:
         "This report holds numbers only: no transcribed word, no name, no path."
     ),
     "camp.etape.deja": "{code}: already measured, reused as is",
+    "camp.etape.non_pris_en_charge": "{code}: not supported on {peripherique}, skipped",
     "camp.etape.reglage": "Setting {numero} of {total}: {reglage} ({code})",
     "camp.etape.progres": "{code}: excerpt {n} of {total}",
     "camp.etape.modele": "Downloading model {modele}",

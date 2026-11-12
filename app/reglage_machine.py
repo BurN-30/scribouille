@@ -84,13 +84,25 @@ def lot_impose(config: dict, mat: Materiel) -> int | None:
 
 
 def faisceau_impose(config: dict, mat: Materiel) -> int | None:
-    """Largeur de faisceau imposée par le réglage, None pour garder celle du moteur."""
+    """
+    Largeur de faisceau imposée par le réglage, None pour garder celle du moteur.
+
+    OpenVINO sur la puce graphique ou le NPU ne décode qu'en glouton (voir
+    `moteur_openvino.SANS_FAISCEAU`) : un faisceau plus large n'y est jamais
+    appliqué, même écrit à la main dans la configuration.
+    """
     reglage = lire(config, mat)
     try:
         valeur = int(reglage.get("faisceau") or 0)
     except (TypeError, ValueError):
         return None
-    return valeur if valeur >= 1 else None
+    if valeur < 1:
+        return None
+    if reglage.get("moteur") == "openvino":
+        from . import moteur_openvino
+
+        valeur = moteur_openvino.faisceau_effectif(str(reglage.get("peripherique") or "CPU"), valeur)
+    return valeur
 
 
 def enregistrer(config: dict, mat: Materiel, reglage: dict) -> dict:
@@ -101,6 +113,11 @@ def enregistrer(config: dict, mat: Materiel, reglage: dict) -> dict:
     }
     if propre.get("moteur") not in MOTEURS:
         propre["moteur"] = "ctranslate2"
+    if propre["moteur"] == "openvino" and "faisceau" in propre:
+        from . import moteur_openvino
+
+        propre["faisceau"] = moteur_openvino.faisceau_effectif(
+            str(propre.get("peripherique") or "CPU"), int(propre["faisceau"] or 1))
     propre["signature"] = calibration.signature_machine(mat)
     propre["date"] = date.today().isoformat()
     propre["source"] = str(reglage.get("source") or "banc")
