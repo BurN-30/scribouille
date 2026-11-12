@@ -433,9 +433,11 @@ class Passerelle:
 
     effacement_executer(jeton: str) -> {ok, liberes, octets, restes,
         desinstalleur, fermeture}
-        Efface la liste de l'aperçu. Version installée : la fenêtre se ferme et
-        le désinstalleur retire ensuite programme, raccourcis et registre
-        (`fermeture` vaut alors true). Refusé pendant une transcription.
+        Efface la liste de l'aperçu, puis la fenêtre se ferme (`fermeture`
+        vaut true) : ses derniers fichiers ouverts (journal, profil
+        d'affichage) sont effacés juste après, et le désinstalleur de la
+        version installée retire programme, raccourcis et registre. Refusé
+        pendant une transcription.
 
     moteur_etat() -> {etat, pid, modele, peripherique, sur_puce,
         memoire_octets, prive_octets, depuis, file_ouverte, protocole,
@@ -1016,11 +1018,12 @@ class Passerelle:
         if not bilan.get("ok"):
             return bilan
         journal.info("Effacement complet : %s octets, %s reste(s)", bilan["octets"], len(bilan["restes"]))
-        bilan["fermeture"] = False
-        if bilan.get("desinstalleur") and inventaire.lancer_desinstalleur_apres(os.getpid(), bilan["desinstalleur"]):
-            # Le désinstalleur attend la fin de ce processus pour retirer le
-            # programme, ses raccourcis et sa clé de registre.
-            bilan["fermeture"] = True
+        # La fenêtre tient encore son journal et son profil d'affichage : une
+        # fois fermée, la ligne de commande efface ces restes, puis le
+        # désinstalleur (version installée) retire programme, raccourcis et
+        # clé de registre.
+        bilan["fermeture"] = inventaire.nettoyer_apres(os.getpid(), bilan.get("desinstalleur") or "")
+        if bilan["fermeture"]:
             threading.Timer(1.5, self._fermer_fenetre).start()
         return bilan
 

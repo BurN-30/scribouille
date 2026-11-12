@@ -257,6 +257,8 @@ def lister() -> list[dict]:
     seconde n'est pas proposée : elle serait une fausse promesse.
     """
     resultat: list[dict] = []
+    if not (chemins.RACINE / "reprises").is_dir():
+        return resultat
     for fichier in sorted(dossier().glob("*.json")):
         identifiant = fichier.stem
         etat = lire_etat(identifiant)

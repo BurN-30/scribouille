@@ -767,6 +767,26 @@ def essai_inventaire() -> None:
     code, lignes, _ = cli("espace", "--json")
     verifier(code == 0 and "postes" in lignes[-1]["donnees"], "espace : inventaire en JSON")
 
+    # Regarder ou prévisualiser ne recrée rien ; effacer pour de bon, si.
+    neuf = TEMPORAIRE / "jamais-cree"
+    for commande in (("espace", "--json"), ("effacer", "--complet", "--apercu", "--json"), ("etat", "--json")):
+        cli(*commande, env_en_plus={"SCRIBOUILLE_DONNEES": str(neuf)})
+    verifier(not neuf.exists(), "espace, aperçu et etat n'écrivent rien (ni journal, ni réglages)")
+    bac = TEMPORAIRE / "bac" / "donnees"
+    _ecrire(bac / "config.json", texte="{}")
+    _ecrire(bac / "logs" / "s.log", 10)
+    _ecrire(bac / "cache-openvino" / "c", 10)
+    _ecrire(bac / "modeles" / "models--Systran--faster-whisper-tiny" / "p", 10)
+    _ecrire(bac / "a-quelqu-un.txt", 10)
+    code, lignes, _ = cli("effacer", "--complet", "--garder-programme", "--oui", "--json",
+                          env_en_plus={"SCRIBOUILLE_DONNEES": str(bac)})
+    restants = sorted(p.name for p in bac.rglob("*"))
+    verifier(code == 0 and restants == ["a-quelqu-un.txt"],
+             "effacer --complet --oui : tout ce qui est à nous, le fichier étranger reste", f"{code} {restants}")
+    (bac / "a-quelqu-un.txt").unlink()
+    cli("effacer", "--complet", "--garder-programme", "--oui", "--json", env_en_plus={"SCRIBOUILLE_DONNEES": str(bac)})
+    verifier(not bac.exists(), "dossier de données vide après effacement : retiré")
+
 
 def principal() -> int:
     print(f"Vérification du processus moteur\n{'=' * 40}\n(dossier temporaire : {TEMPORAIRE})")

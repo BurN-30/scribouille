@@ -517,8 +517,12 @@ def liberer(cles: list[str], config: dict | None = None) -> dict:
     return bilan
 
 
-def _ranger_dossiers_vides() -> None:
-    """Un dossier de modèles choisi à la main, vidé de nos modèles, part s'il ne reste que le hub."""
+def _ranger_dossiers_vides(complet: bool = False) -> None:
+    """
+    Un dossier de modèles vidé de nos modèles part s'il ne reste que les
+    fichiers du hub : toujours pour un dossier choisi à la main, et aussi pour
+    celui des données lors d'un effacement complet.
+    """
     modeles = Path(chemins.DOSSIER_MODELES)
     if not modeles.is_dir():
         return
@@ -535,7 +539,7 @@ def _ranger_dossiers_vides() -> None:
                 cible.rmdir()
             elif cible.exists():
                 cible.unlink()
-        if not _dans(modeles, chemins.RACINE):
+        if complet or not _dans(modeles, chemins.RACINE):
             modeles.rmdir()
     except OSError:
         pass
@@ -612,10 +616,10 @@ def executer_effacement(jeton: str) -> dict:
             sortie.rmdir()  # seulement s'il est vide
         except OSError:
             pass
-    _ranger_dossiers_vides()
+    _ranger_dossiers_vides(complet=True)
     for dossier in (chemins.RACINE, _ancien_dossier()):
-        if dossier is None or not chemins.EST_GELE:
-            continue
+        if dossier is None or _dans(dossier, chemins.DOSSIER_PROGRAMME):
+            continue  # depuis les sources, les données vivent dans le dépôt
         try:
             dossier.rmdir()  # seulement s'il est vide : ce qui n'est pas à nous y reste
         except OSError:
@@ -626,20 +630,32 @@ def executer_effacement(jeton: str) -> dict:
     return bilan
 
 
-def lancer_desinstalleur_apres(pid: int, chemin: str) -> bool:
+def nettoyer_apres(pid: int, desinstalleur_chemin: str = "") -> bool:
     """
-    Lance le désinstalleur en silence une fois le processus `pid` terminé
-    (il retire le programme, ses raccourcis et sa clé de registre). Le
+    Une fois le processus `pid` terminé (la fenêtre, qui tenait encore son
+    journal et son profil d'affichage ouverts), refait un effacement complet
+    par la ligne de commande pour ces restes, puis lance le désinstalleur en
+    silence s'il y en a un (programme, raccourcis, clé de registre). Le
     lanceur est détaché : il survit à la fermeture de Scribouille.
     """
-    if sys.platform != "win32" or not chemin or not Path(chemin).is_file():
+    if sys.platform != "win32":
         return False
     import subprocess
 
-    # Attente de la fin du PID (au plus une minute), puis désinstallation silencieuse.
+    console = chemins.executable_console()
+    if console is not None:
+        ligne = f'"{console}"'
+    else:
+        python = Path(sys.executable)
+        if python.name.lower() == "pythonw.exe":
+            python = python.with_name("python.exe")
+        ligne = f'"{python}" "{chemins.DOSSIER_PROGRAMME / "transcriber.pyw"}"'
+    etapes = [f"{ligne} effacer --complet --garder-programme --oui"]
+    if desinstalleur_chemin and Path(desinstalleur_chemin).is_file():
+        etapes.append(f'"{desinstalleur_chemin}" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART')
+    # Attente de la fin du PID (au plus une minute), puis les étapes dans l'ordre.
     commande = (f'cmd /d /c "for /l %i in (1,1,60) do @(tasklist /fi "PID eq {int(pid)}" 2>nul | '
-                f'find "{int(pid)}" >nul && ping -n 2 127.0.0.1 >nul) & '
-                f'"{chemin}" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART"')
+                f'find "{int(pid)}" >nul && ping -n 2 127.0.0.1 >nul) & ' + " & ".join(etapes) + '"')
     try:
         # Nouveau groupe, sans fenêtre, hors de l'objet de travail : il survit à Scribouille.
         subprocess.Popen(commande, creationflags=0x00000200 | 0x08000000, close_fds=True)

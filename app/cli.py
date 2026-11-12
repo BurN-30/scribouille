@@ -86,6 +86,31 @@ REGLAGES: dict[str, str] = {
 
 PSEUDO_CLES = ("moteur", "peripherique", "dossier_modeles")
 
+#: Commandes qui n'écrivent rien dans le dossier de données, ni journal ni
+#: réglages : regarder l'espace occupé, ou l'effacer, ne recrée rien.
+SANS_ECRITURE = ("espace", "effacer", "etat", "lire", "agent")
+
+
+def config_cli(commande: str = "") -> dict:
+    """
+    La configuration, et la langue de l'interface posée. Pour les commandes
+    sans écriture, lue telle quelle : rien n'est enregistré, même au premier
+    lancement.
+    """
+    from . import config as config_module
+
+    if commande not in SANS_ECRITURE:
+        return config_module.charger()
+    try:
+        donnees = json.loads(chemins.FICHIER_CONFIG.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        donnees = {}
+    config = config_module._fusionner(config_module.DEFAUTS, donnees if isinstance(donnees, dict) else {})
+    if not config.get("dossier_sortie"):
+        config["dossier_sortie"] = str(chemins.dossier_sortie_defaut())
+    langues.definir(config.get("langue_interface") or langues.detecter_systeme())
+    return config
+
 
 class Echec(Exception):
     def __init__(self, code: str, message: str, code_retour: int, suggestion: str = ""):
@@ -329,11 +354,14 @@ def principal(arguments: list[str]) -> int:
     if commande == "version":
         sortie.donnees({"version": VERSION, "schema": SCHEMA}, f"Scribouille {VERSION}")
         return OK
-    from . import config as config_module, journal
+    from . import journal
 
-    journal.demarrer()
+    if commande in SANS_ECRITURE:
+        journal.sans_fichier()
+    else:
+        journal.demarrer()
     journal.silence_bibliotheques()
-    config_module.charger()  # pose la langue de l'interface
+    config_cli(commande)  # pose la langue de l'interface
     try:
         return _COMMANDES[commande](options, sortie)
     except Echec as echec:
@@ -1012,9 +1040,9 @@ def _tableau(postes: list[dict]) -> str:
 
 
 def cmd_espace(options, sortie: Sortie) -> int:
-    from . import config as config_module, inventaire
+    from . import inventaire
 
-    resultat = inventaire.inventaire(config_module.charger())
+    resultat = inventaire.inventaire(config_cli("espace"))
     texte = (f"Scribouille occupe {resultat['total']} ({chemins.RACINE}).\n" + _tableau(resultat["postes"])
              + f"\n  Libérable sans rien perdre : {langues.octets(resultat['liberable_octets'])}"
              + f"\n  Transcriptions (à part, jamais effacées sans demande) : "
@@ -1039,9 +1067,9 @@ def _confirmer(sortie: Sortie, question: str, oui: bool) -> bool:
 
 
 def cmd_effacer(options, sortie: Sortie) -> int:
-    from . import config as config_module, inventaire
+    from . import inventaire
 
-    config = config_module.charger()
+    config = config_cli("effacer")
     if options.complet:
         apercu = inventaire.apercu_effacement(not options.avec_transcriptions, config,
                                               avec_programme=not options.garder_programme)
@@ -1053,7 +1081,8 @@ def cmd_effacer(options, sortie: Sortie) -> int:
         if apercu["non_reconnus"]:
             texte += "\n  Non reconnus, laissés : " + ", ".join(apercu["non_reconnus"][:10])
         if options.resume:
-            Path(options.resume).write_text(_resume_desinstalleur(apercu), encoding="utf-8")
+            # Avec marque d'ordre : le désinstalleur (Inno Setup) la lit en UTF-8.
+            Path(options.resume).write_text(_resume_desinstalleur(apercu), encoding="utf-8-sig")
         if options.apercu:
             sortie.donnees({"apercu": apercu, "fait": False}, texte)
             return OK
@@ -1064,7 +1093,9 @@ def cmd_effacer(options, sortie: Sortie) -> int:
             return ARGUMENTS
         bilan = inventaire.executer_effacement(apercu["jeton"])
         if bilan.get("desinstalleur"):
-            inventaire.lancer_desinstalleur_apres(os.getpid(), bilan["desinstalleur"])
+            # Programme, raccourcis et clé de registre : le désinstalleur, en
+            # silence, une fois cette commande terminée.
+            inventaire.nettoyer_apres(os.getpid(), bilan["desinstalleur"])
         sortie.donnees({"apercu": apercu, "fait": True, "bilan": bilan},
                        f"Effacé : {langues.octets(bilan.get('octets', 0))}"
                        + ("".join(f"\n  reste : {r}" for r in bilan.get("restes", [])[:10])))
