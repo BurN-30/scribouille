@@ -1241,6 +1241,11 @@ def essai_heures_et_avis(base: Path) -> None:
     verifier("majSousLibellesVocabulaire(voc.donnees.resume)" in chargement
              and "majSousLibellesVocabulaire(d.resume)" in appjs,
              "vocabulaire : les sous-libellés comptent le vocabulaire effectif (plus de « Aucun terme » à tort)")
+    passerelle = (RACINE / "transcriber.pyw").read_text(encoding="utf-8")
+    controle = passerelle[passerelle.index("def _verifier_modele_disponible"):][:4000]
+    verifier("app.modele.confirmer" in controle and "create_confirmation_dialog" in controle
+             and "app.modele.refuse" in controle,
+             "« Lancer » avec un modèle absent : le téléchargement (plusieurs Go) est demandé, refusable")
 
 
 def essai_depot_mele() -> None:

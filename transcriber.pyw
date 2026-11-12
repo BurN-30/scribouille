@@ -2102,6 +2102,19 @@ class Passerelle:
                     taille=taille) + " " + moteur.voie_hors_ligne(modele),
             }
 
+        # Plusieurs gigaoctets : demandé au moment du clic, pas seulement
+        # annoncé dans un bandeau que la ligne de la file (« environ 14 s de
+        # calcul ») ne rappelle pas.
+        if not incomplet and getattr(self, "_fenetre", None) is not None:
+            try:
+                d_accord = self._fenetre.create_confirmation_dialog(
+                    NOM_APPLICATION, langues.t("app.modele.confirmer", modele=moteur.nom_court(modele),
+                                               taille=taille, dossier=dossier))
+            except Exception as exc:
+                journal.debug("Confirmation du téléchargement impossible : %s", exc)
+                d_accord = True
+            if not d_accord:
+                return {"ok": False, "message": langues.t("app.modele.refuse", taille=taille)}
         self._sur_journal("attention", langues.t(
             "app.modele.incomplet" if incomplet else "app.modele.premier_usage",
             taille=taille, dossier=dossier))

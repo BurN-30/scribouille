@@ -1122,6 +1122,8 @@ _FR: dict[str, str] = {
         "connexion Internet n'a été trouvée. Connectez le poste le temps de ce "
         "téléchargement, l'application s'en occupe seule ensuite."
     ),
+    "app.modele.confirmer": "La transcription demande le modèle {modele}, absent de ce poste : {taille} à télécharger dans {dossier}. Le télécharger maintenant ?",
+    "app.modele.refuse": "Rien n'a été téléchargé ({taille}). Choisir un modèle déjà présent (Réglages), ou relancer pour le télécharger.",
     "app.modele.premier_usage": (
         "Premier usage de ce modèle : téléchargement d'environ {taille} vers « {dossier} ». "
         "Cela n'arrive qu'une fois, ensuite tout reste sur la machine."
@@ -2525,6 +2527,8 @@ _EN: dict[str, str] = {
         "connection was found. Connect the machine for the duration of that download, "
         "the application then takes care of it on its own."
     ),
+    "app.modele.confirmer": "Transcribing needs the {modele} model, which is not on this computer yet: {taille} to download into {dossier}. Download it now?",
+    "app.modele.refuse": "Nothing was downloaded ({taille}). Choose a model already present (Settings), or start again to download it.",
     "app.modele.premier_usage": (
         "First use of this model: about {taille} will be downloaded into \"{dossier}\". "
         "This happens only once, after that everything stays on the machine."
