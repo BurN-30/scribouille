@@ -1977,6 +1977,11 @@ class Passerelle:
             retour["nb_corrections"] = len(regles)
         return retour
 
+    def editer_passage(self, chemin: str, k: int, debut: int, fin: int, attendu: str, texte: str,
+                       empreinte: str = "") -> dict:
+        """Réécrit ou supprime un passage choisi dans la relecture (annulable)."""
+        return lecture.editer_passage(chemin, k, debut, fin, attendu, texte, str(empreinte or ""))
+
     def revenir_original(self, chemin: str) -> dict:
         """Remet la transcription dans son état d'avant toute modification (annulable)."""
         return lecture.revenir_original(chemin)

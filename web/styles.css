@@ -894,6 +894,10 @@ textarea { resize: vertical; font-family: var(--police-mono); font-size: 12.5px;
 .bouton-flottant kbd { font-size: 10.5px; background: transparent; color: inherit; border-color: color-mix(in srgb, var(--accent-contraste) 50%, transparent); }
 .bouton-flottant.visible { display: inline-flex; }
 .bouton-flottant:hover { background: var(--accent-fort); }
+.bouton-flottant.secondaire { background: var(--carte); color: var(--accent); }
+.bouton-flottant.secondaire kbd { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.bouton-flottant.secondaire:hover { background: var(--accent-doux); }
+#passage-texte { width: 100%; min-height: 96px; resize: vertical; font: inherit; line-height: 1.5; }
 
 /* ---------------------------------------------------- Nom des fichiers */
 

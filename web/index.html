@@ -1213,6 +1213,36 @@
   <kbd data-i18n="ui.touche.entree"></kbd>
 </button>
 
+<!-- Second bouton flottant : reecrire ou supprimer la selection, de toute longueur -->
+<button class="bouton-flottant secondaire" id="btn-modifier-selection">
+  <span data-i18n="ui.passage.modifier"></span>
+  <kbd>E</kbd>
+</button>
+
+<div class="voile" id="modale-passage">
+  <div class="modale">
+    <div class="modale-entete">
+      <svg class="icone"><use href="#i-crayon"></use></svg>
+      <h2 id="titre-passage" data-i18n="ui.passage.titre"></h2>
+      <button class="bouton-icone" data-fermer><svg class="icone"><use href="#i-croix"></use></svg></button>
+    </div>
+    <div class="modale-corps">
+      <div class="champ">
+        <label for="passage-texte" data-i18n="ui.passage.libelle"></label>
+        <textarea id="passage-texte" rows="5" spellcheck="true"></textarea>
+        <span class="aide" data-i18n="ui.passage.aide"></span>
+      </div>
+      <div id="retour-passage"></div>
+    </div>
+    <div class="modale-pied">
+      <button class="bouton bouton-danger" id="btn-supprimer-passage" data-i18n="ui.passage.supprimer"></button>
+      <span class="pousse"></span>
+      <button class="bouton" data-fermer data-i18n="ui.bouton.annuler"></button>
+      <button class="bouton bouton-accent" id="btn-enregistrer-passage" data-i18n="ui.passage.enregistrer"></button>
+    </div>
+  </div>
+</div>
+
 <div class="voile" id="modale-correction">
   <div class="modale">
     <div class="modale-entete">
@@ -1348,6 +1378,7 @@
             <tr><td><kbd>Ctrl</kbd> + <kbd>F</kbd>, <kbd>F3</kbd></td><td data-i18n="ui.aide.r.chercher"></td></tr>
             <tr><td><kbd>N</kbd>, <kbd data-i18n="ui.touche.maj"></kbd> + <kbd>N</kbd></td><td data-i18n="ui.aide.r.point"></td></tr>
             <tr><td><kbd data-i18n="ui.touche.entree"></kbd></td><td data-i18n="ui.aide.r.corriger"></td></tr>
+            <tr><td><kbd>E</kbd>, <kbd data-i18n="ui.touche.suppr"></kbd></td><td data-i18n="ui.aide.r.passage"></td></tr>
             <tr><td><kbd>Ctrl</kbd> + <kbd>Z</kbd></td><td data-i18n="ui.aide.r.annuler"></td></tr>
             <tr class="groupe"><td colspan="2" data-i18n="ui.aide.r.vocabulaire"></td></tr>
             <tr><td><kbd>↑</kbd> <kbd>↓</kbd>, <kbd data-i18n="ui.touche.espace"></kbd></td><td data-i18n="ui.aide.r.voc_parcourir"></td></tr>

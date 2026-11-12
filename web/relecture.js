@@ -584,11 +584,12 @@ async function annulerRemplacementCourant() {
 
 function masquerBoutonCorrection() {
   $('#btn-corriger-selection').classList.remove('visible');
+  $('#btn-modifier-selection').classList.remove('visible');
 }
 
 /* Selection dans un seul paragraphe, courte : le bouton « Corriger » se pose
    dessous, et Entree fait la meme chose. */
-function lireSelection() {
+function lireSelection(longue) {
   const selection = window.getSelection();
   const zone = $('#rl-texte');
   if (!selection || selection.isCollapsed || !selection.rangeCount) return null;
@@ -599,7 +600,7 @@ function lireSelection() {
   if (!debutCorps || debutCorps !== finCorps) return null;
   const brut = selection.toString();
   const source = brut.trim().replace(/\s+/g, ' ');
-  if (!source || source.length > 80) return null;
+  if (!source || (source.length > 80 && !longue)) return null;
   const avant = document.createRange();
   avant.setStart(debutCorps, 0);
   avant.setEnd(plage.startContainer, plage.startOffset);
@@ -618,19 +619,87 @@ function lireSelection() {
     avant: avant.toString() + brut.slice(0, tete),
     apres: brut.slice(brut.length - queue) + apres.toString(),
     position: para ? { k: Number(para.dataset.p), debut: debut, fin: debut + brut.trim().length } : null,
+    longue: source.length > 80,
     rect: plage.getBoundingClientRect(),
   };
 }
 
+/* Sous une selection : « Corriger » (une forme courte, avec ses autres
+   endroits) et « Modifier » (reecrire ou supprimer le passage, de toute
+   longueur). Au-dela de 80 caracteres, seul « Modifier » reste. */
 function positionnerBoutonCorrection() {
   const bouton = $('#btn-corriger-selection');
-  const sel = lireSelection();
-  if (!sel) { bouton.classList.remove('visible'); lect.selection = null; return; }
-  lect.selection = sel;
-  const largeur = (etat.config.zoom || 1);
-  bouton.style.left = Math.max(8, Math.min(window.innerWidth / largeur - 150, sel.rect.left)) + 'px';
+  const second = $('#btn-modifier-selection');
+  const sel = lireSelection(true);
+  if (!sel) { masquerBoutonCorrection(); lect.selection = null; return; }
+  lect.selection = sel.longue ? null : sel;
+  const largeur = window.innerWidth / (etat.config.zoom || 1);
+  const gauche = Math.max(8, Math.min(largeur - 250, sel.rect.left));
+  bouton.classList.toggle('visible', !sel.longue);
+  bouton.style.left = gauche + 'px';
   bouton.style.top = (sel.rect.bottom + 6) + 'px';
-  bouton.classList.add('visible');
+  second.style.left = (sel.longue ? gauche : gauche + bouton.offsetWidth + 6) + 'px';
+  second.style.top = (sel.rect.bottom + 6) + 'px';
+  second.classList.add('visible');
+}
+
+/* ------------------------------------------------- Passage reecrit, supprime */
+
+/* Passage vise : la selection (toute longueur, un seul paragraphe), sinon le
+   paragraphe entier du mot vise ou lu. */
+function passageVise() {
+  const sel = lireSelection(true);
+  if (sel && sel.position) {
+    const p = sel.position;
+    return { k: p.k, debut: p.debut, fin: p.fin, texte: lect.textes[p.k].slice(p.debut, p.fin) };
+  }
+  const i = lect.vise >= 0 ? lect.vise : lect.courant;
+  if (i < 0 || !lect.mots[i]) return null;
+  const k = lect.mots[i].k;
+  return { k: k, debut: 0, fin: lect.textes[k].length, texte: lect.textes[k], entier: true };
+}
+
+function ouvrirPassage(passage) {
+  if (!passage || !lect.d) { statutRelecture(t('ui.passage.rien')); return; }
+  masquerBoutonCorrection();
+  lect.passage = passage;
+  if (!son().paused) son().pause();
+  $('#titre-passage').textContent = t(passage.entier ? 'ui.passage.titre_paragraphe' : 'ui.passage.titre');
+  $('#passage-texte').value = passage.texte;
+  $('#retour-passage').innerHTML = '';
+  ouvrirModale('#modale-passage');
+  setTimeout(() => { const champ = $('#passage-texte'); champ.focus(); champ.select(); }, 50);
+}
+
+async function enregistrerPassage(texte) {
+  const p = lect.passage;
+  if (!p || !lect.d) return;
+  const ouverte = $('#modale-passage').classList.contains('ouvert');
+  const r = await ecrireRelecture(() => appelPasserelle('editer_passage', lect.chemin, p.k, p.debut, p.fin,
+    p.texte, texte, lect.d.empreinte || ''));
+  if (!r || !r.ok) {
+    const message = (r && r.message) || t('ui.rl.code.' + ((r && r.code) || 'echec'));
+    if (ouverte) $('#retour-passage').innerHTML = encartAttention(message);
+    else statutRelecture(message, 'erreur');
+    return;
+  }
+  if (ouverte) fermerModale($('#modale-passage'));
+  lect.passage = null;
+  const message = t(String(texte || '').trim() ? 'ui.passage.reecrit' : 'ui.passage.supprime');
+  journaliser('ok', message);
+  await chargerLecture(lect.chemin, true);
+  statutRelecture(message, 'ok');
+}
+
+function supprimerSelection() {
+  const sel = lireSelection(true);
+  if (!sel || !sel.position) return false;
+  lect.passage = { k: sel.position.k, debut: sel.position.debut, fin: sel.position.fin,
+    texte: lect.textes[sel.position.k].slice(sel.position.debut, sel.position.fin) };
+  window.getSelection().removeAllRanges();
+  masquerBoutonCorrection();
+  enregistrerPassage('');
+  return true;
 }
 
 function ouvrirCorrection() {
@@ -942,6 +1011,9 @@ function clavierRelecture(e) {
     ouvrirCorrection();
     return;
   }
+  if ((touche === 'Delete' || touche === 'Backspace') && !e.ctrlKey && !e.altKey) {
+    if (supprimerSelection()) { e.preventDefault(); return; }
+  }
   if (e.ctrlKey || e.altKey || e.metaKey) return;
   if (touche === ' ' && !cible.closest('button')) {
     e.preventDefault();
@@ -956,6 +1028,9 @@ function clavierRelecture(e) {
   } else if (touche === 'n' || touche === 'N') {
     e.preventDefault();
     allerPoint(e.shiftKey ? -1 : 1);
+  } else if (touche === 'e' || touche === 'E') {
+    e.preventDefault();
+    ouvrirPassage(passageVise());
   }
 }
 
@@ -1041,7 +1116,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.addEventListener('mousedown', (e) => {
     if (!e.target.closest('.menu-conteneur')) fermerMenuExport();
-    if (!e.target.closest || !e.target.closest('#btn-corriger-selection')) masquerBoutonCorrection();
+    if (!e.target.closest || !e.target.closest('#btn-corriger-selection, #btn-modifier-selection')) masquerBoutonCorrection();
   });
   $('#btn-copier-ia').addEventListener('click', copierPourIA);
 
@@ -1077,6 +1152,13 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#rl-defilement').addEventListener('scroll', masquerBoutonCorrection, { passive: true });
   $('#btn-corriger-selection').addEventListener('mousedown', (e) => e.preventDefault());
   $('#btn-corriger-selection').addEventListener('click', ouvrirCorrection);
+  $('#btn-modifier-selection').addEventListener('mousedown', (e) => e.preventDefault());
+  $('#btn-modifier-selection').addEventListener('click', () => ouvrirPassage(passageVise()));
+  $('#btn-enregistrer-passage').addEventListener('click', () => enregistrerPassage($('#passage-texte').value));
+  $('#btn-supprimer-passage').addEventListener('click', () => enregistrerPassage(''));
+  $('#passage-texte').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enregistrerPassage(e.target.value); }
+  });
 
   // Correction
   $('#correction-cible').addEventListener('input', majQuestionRegle);

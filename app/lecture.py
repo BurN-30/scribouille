@@ -1272,6 +1272,36 @@ def appliquer_correction(chemin: str | Path, source: str, cible: str,
     return retour
 
 
+def editer_passage(chemin: str | Path, k: int, debut: int, fin: int, attendu: str, texte: str,
+                   empreinte_attendue: str = "") -> dict:
+    """
+    Réécrit librement un passage d'un paragraphe, ou le supprime (`texte`
+    vide) : positions dans le texte du paragraphe, et le texte qu'on y lisait
+    à l'écran, pour ne jamais écrire ailleurs. Un paragraphe vidé disparaît.
+    Même règle d'or qu'une correction, même annulation.
+    """
+    def calcul(etat: dict):
+        plan = etat["plan"]
+        try:
+            rang, a, b = int(k), int(debut), int(fin)
+        except (TypeError, ValueError):
+            raise Refus("introuvable")
+        if not (0 <= rang < len(plan)):
+            raise Refus("introuvable")
+        p = plan[rang]
+        a, b = p["debut"] + a, p["debut"] + b
+        if not (p["debut"] <= a <= b <= p["fin"]) or etat["corps"][a:b] != str(attendu or ""):
+            raise Refus("introuvable")
+        return calculer_plages(etat, [(a, b, str(texte or ""))])
+
+    retour = modifier(chemin, calcul, empreinte_attendue)
+    if retour.get("ok"):
+        retour.pop("ecrit", None)
+        journal.info("Passage %s dans %s", "supprimé" if not " ".join(str(texte or "").split()) else "réécrit",
+                     Path(chemin).name)
+    return retour
+
+
 def correction_annulable(chemin: str | Path) -> bool:
     return niveaux_annulables(chemin) > 0
 

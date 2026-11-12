@@ -1125,6 +1125,48 @@ def essai_vocabulaire_sur_demande(base: Path) -> None:
         vocabulaire_v2.FICHIER_PERSONNEL = personnel
 
 
+def essai_passage_libre(base: Path) -> None:
+    """Réécrire ou supprimer un passage : même règle d'égalité, même annulation."""
+    titre("Passage réécrit ou supprimé : l'écran reste le fichier")
+    dossier = base / "passage"
+    dossier.mkdir()
+    txt = ecrire(dossier, reunion_longue(2000), {"txt": True, "srt": True}, details={"nb_locuteurs": 3})
+    editer = getattr(lecture, "editer_passage", None)
+    if editer is None:
+        verifier(False, "la relecture sait réécrire un passage")
+        return
+    avant = txt.read_bytes()
+    vue = lecture.charger(txt)
+    k = next(n for n, p in enumerate(vue["paragraphes"]) if "pour moi, pour ma part," in p["texte"])
+    texte = vue["paragraphes"][k]["texte"]
+    debut = texte.index("pour moi, pour ma part,")
+    fin = debut + len("pour moi, pour ma part, c'est clair.")
+    retour = editer(txt, k, debut, fin, texte[debut:fin], "  à mon avis, rien n'est clair  ")
+    verifier(retour.get("ok") and "à mon avis, rien n'est clair" in txt.read_text(encoding="utf-8")
+             and egalite_ecran_fichier(txt) == "" and lecture.controler(txt) == "",
+             "une phrase réécrite à cheval sur deux segments : écran, fichier, compagnon égaux",
+             str(retour)[:160])
+    vue = lecture.charger(txt)
+    long_texte = vue["paragraphes"][1]["texte"]
+    retour = editer(txt, 1, 0, 120, long_texte[:120], "")
+    verifier(retour.get("ok") and egalite_ecran_fichier(txt) == "" and lecture.controler(txt) == ""
+             and lecture.charger(txt)["paragraphes"][1]["texte"] == long_texte[120:].strip(),
+             "120 caractères supprimés d'un coup : pas de limite à 80, l'écran suit", str(retour)[:160])
+    nb = len(vue["paragraphes"])
+    entier = vue["paragraphes"][2]["texte"]
+    retour = editer(txt, 2, 0, len(entier), entier, "")
+    vue = lecture.charger(txt)
+    verifier(retour.get("ok") and len(vue["paragraphes"]) == nb - 1 and egalite_ecran_fichier(txt) == ""
+             and lecture.controler(txt) == "",
+             "un paragraphe entier supprimé disparaît, avec son locuteur", str(retour)[:160])
+    refus = editer(txt, 0, 0, 5, "pas ça", "x")
+    verifier(refus.get("ok") is False and refus.get("code") == "introuvable",
+             "un passage qui ne correspond plus à l'écran n'est pas écrit", str(refus))
+    for _ in range(3):
+        lecture.annuler_correction(txt)
+    verifier(txt.read_bytes() == avant, "trois Ctrl+Z rendent le fichier d'origine à l'octet près")
+
+
 def principal() -> int:
     print(f"Vérification du parcours de l'utilisateur\n{'=' * 42}")
     with tempfile.TemporaryDirectory(prefix="scribouille-parcours-") as brut:
@@ -1153,6 +1195,7 @@ def principal() -> int:
         essai_modifie_dehors(base)
         essai_annulation_profonde(base)
         essai_vocabulaire_sur_demande(base)
+        essai_passage_libre(base)
         essai_accessibilite()
         essai_ecrans()
 
