@@ -117,7 +117,20 @@ def transcrire_puis_interrompre(audio: Path, dossier: Path, modele: str,
     })
     fini = threading.Event()
     file.demarrer(config, traitement.Rappels(file_terminee=lambda d: fini.set()))
-    threading.Timer(delai, file.arreter).start()
+
+    # Arrêt dès que trois segments sont sauvegardés (ou au bout de `delai`) :
+    # un délai fixe seul tombait tantôt avant le premier segment (modèle encore
+    # en chargement), tantôt après la fin d'un extrait court.
+    def guetter() -> None:
+        limite = time.monotonic() + delai
+        while not fini.is_set() and time.monotonic() < limite:
+            if any(r.get("nb_segments", 0) >= 3 for r in reprise.lister()
+                   if Path(r["chemin"]) in (audio, audio.resolve())):
+                break
+            time.sleep(0.05)
+        file.arreter()
+
+    threading.Thread(target=guetter, daemon=True).start()
     fini.wait(timeout=3600)
 
 
@@ -180,6 +193,12 @@ def _controler_reprise(audio: Path, bac: Path, modele: str) -> None:
     verifier(trouvee["nb_segments"] > 0, "des segments ont été sauvegardés")
     verifier(trouvee["ecoule"] > 0, "le temps écoulé est mémorisé")
 
+    # Ce qui était déjà transcrit, tel que la sauvegarde l'a gardé : c'est
+    # lui, et non un horodatage supposé de l'enregistrement, qui doit ouvrir le
+    # texte repris. (L'ancien contrôle exigeait un premier segment avant 1 s :
+    # avec le modèle tiny et son repli de température, le premier segment
+    # commence tantôt à 0 s, tantôt à 1 s, d'où un échec une fois sur deux.)
+    deja = reprise.lire_segments(trouvee["cle"])
     produits, duree_reprise = reprendre(audio, sortie, modele, trouvee["cle"])
     verifier(bool(produits), "la reprise produit bien un fichier")
     if not produits:
@@ -190,7 +209,10 @@ def _controler_reprise(audio: Path, bac: Path, modele: str) -> None:
              "le texte est complété, pas recommencé",
              f"{len(brut['segments'])} segments au total pour "
              f"{trouvee['nb_segments']} déjà transcrits")
-    verifier(brut["segments"][0]["d"] < 1.0, "le début de l'enregistrement est conservé")
+    debut = [(round(s["d"], 2), s["t"]) for s in brut["segments"][:len(deja)]]
+    attendu = [(round(s.debut, 2), s.texte) for s in deja]
+    verifier(bool(deja) and debut == attendu, "le début de l'enregistrement est conservé",
+             f"{len(deja)} segments sauvegardés, premier repris {debut[:1]} pour {attendu[:1]}")
     verifier(brut["segments"][-1]["f"] > trouvee["position"], "la fin a bien été transcrite")
     temps = brut["transcription"]["temps_calcul"]
     verifier(temps > duree_reprise, "le temps déjà écoulé est conservé dans le compteur",
