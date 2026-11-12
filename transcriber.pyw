@@ -2279,7 +2279,7 @@ def principal() -> None:
         f"{NOM_APPLICATION}",
         url=str(chemins.DOSSIER_WEB / "index.html"),
         js_api=passerelle,
-        width=1180, height=780, min_size=(920, 620),
+        width=1180, height=780, min_size=(720, 540),
         background_color="#12151b",
         text_select=True,
     )

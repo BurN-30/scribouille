@@ -4,6 +4,10 @@
    Le Python appelle les fonctions globales onXxx() definies plus bas.
    L'interface appelle Python via pywebview.api.*
 
+   Quatre ecrans, un seul visible : les reunions (depot, file, transcriptions),
+   la relecture (web/relecture.js), les reglages, le vocabulaire. L'espace disque
+   et l'effacement sont dans web/espace.js.
+
    Aucun libelle en dur ici : tout passe par t() et tn(), definis dans
    web/langues.js, jumeau de app/langues.py. Voir outils/verifier_traductions.py.
    ========================================================================= */
@@ -19,20 +23,24 @@ const etat = {
   extensionEnCours: false,   // installation de la separation des locuteurs en cours
   vitesse: {},               // moteur OpenVINO, reglage de vitesse, banc d'essai
   rythme: {},                // vitesse maximale, equilibre ou discret, adaptation
+  materiel: null,
+  avertissements: [],
   ovEnCours: false,          // installation d'OpenVINO en cours
   bancEnCours: false,        // banc d'essai en cours
   modeles: { dossier: '', presets: [] },
   versionInstallee: false,
   enCours: false,
+  passage: [],               // identifiants lances ensemble, pour « fichier 2 sur 4 »
   apercuChemin: null,
   importChemin: null,
   reprises: [],
-  lecture: null,          // transcription ouverte dans la vue de lecture
-  selection: '',          // expression selectionnee, en attente de correction
   surveillance: { actif: false, dossier: '', probleme: '' },
   maj: null,              // version plus recente annoncee par le bandeau
   version: '',            // version installee, affichee dans l'aide
   majEnCours: false,      // verification demandee a la main, en vol
+  vue: 'principale',
+  section: 'transcription',
+  accueil: false,         // premier lancement : fenetre d'accueil ouverte
   pret: false,
 };
 
@@ -49,6 +57,17 @@ function icone(nom, classe) {
   return `<svg class="icone ${classe || ''}"><use href="#${nom}"></use></svg>`;
 }
 
+/* Appel d'une fonction de passerelle. Celles qu'apporte la branche « moteur »
+   (espace disque, effacement, etat du moteur) n'existent pas encore ici : la
+   doublure de web/doublure-passerelle.js les remplace tant qu'elles manquent. */
+function appelPasserelle(nom, ...args) {
+  const api = window.pywebview && window.pywebview.api;
+  if (api && typeof api[nom] === 'function') return Promise.resolve(api[nom](...args));
+  const doublure = window.DOUBLURE_PASSERELLE;
+  if (doublure && typeof doublure[nom] === 'function') return Promise.resolve(doublure[nom](...args));
+  return Promise.reject(new Error(nom));
+}
+
 /* ------------------------------------------------------------ Demarrage */
 
 window.addEventListener('pywebviewready', async () => {
@@ -57,6 +76,8 @@ window.addEventListener('pywebviewready', async () => {
     initialiser(donnees);
     // Moment où la fenêtre devient utilisable, noté au journal (mesure du démarrage).
     pywebview.api.interface_prete();
+    const accueil = await appelPasserelle('accueil').catch(() => null);
+    if (accueil && accueil.premier_lancement) ouvrirAccueil(donnees.proposition);
   } catch (e) {
     journaliser('erreur', t('ui.journal.etat_perdu'));
     console.error(e);
@@ -73,12 +94,14 @@ function initialiser(d, silencieux) {
   etat.versionInstallee = !!d.version_installee;
   etat.vitesse = d.vitesse || etat.vitesse;
   etat.rythme = d.rythme || etat.rythme;
+  etat.materiel = d.materiel || etat.materiel;
 
   // Python fait autorite sur la langue : il l'a detectee au premier lancement
   // et l'a rangee dans la configuration. La langue provisoire posee au
   // chargement du document n'a servi qu'a eviter une fenetre vide.
   if (etat.config.langue_interface) definirLangue(etat.config.langue_interface);
   traduirePage();
+  remplirVitesses();
 
   etat.version = String(d.version || '');
   $('#version').textContent = 'v' + d.version;
@@ -86,8 +109,8 @@ function initialiser(d, silencieux) {
   appliquerTheme(etat.config.theme || 'auto');
   appliquerZoom(etat.config.zoom || 1);
 
-  dessinerMateriel(d.materiel, d.recommandation);
-  dessinerPresets(d.recommandation);
+  dessinerMateriel(d.materiel);
+  dessinerPresets();
   remplirModelesAvances(d.modeles_avances || []);
   appliquerConfig();
   majGlossaire(d.glossaire ? d.glossaire.resume : null);
@@ -96,7 +119,7 @@ function initialiser(d, silencieux) {
   majDiarisation();
   majVitesse();
   majRythme();
-  if (d.proposition) afficherProposition(d.proposition);
+  afficherProposition(d.proposition || null);
   majModeles();
   majSurveillance();
   majQualiteLangue();
@@ -124,12 +147,14 @@ function onMateriel(d) {
   etat.presets = d.presets || etat.presets;
   etat.vitesse = d.vitesse || etat.vitesse;
   etat.rythme = d.rythme || etat.rythme;
-  dessinerMateriel(d.materiel, d.recommandation);
-  dessinerPresets(d.recommandation);
+  etat.materiel = d.materiel || etat.materiel;
+  dessinerMateriel(d.materiel);
+  dessinerPresets();
   majVitesse();
   majRythme();
   afficherAvertissements(d.avertissements || []);
   if (d.proposition) afficherProposition(d.proposition);
+  if (etat.accueil) dessinerAccueil(d.proposition || null, true);
 }
 
 /* --------------------------------------------------- Langue de l'interface
@@ -150,14 +175,83 @@ async function changerLangueInterface(code) {
   } catch (e) {
     console.error(e);
   }
+  if (typeof relectureLangueChangee === 'function') relectureLangueChangee();
   journaliser('info', t('ui.journal.langue'));
+}
+
+/* ------------------------------------------------------------- Ecrans */
+
+const VUES = ['principale', 'relecture', 'reglages', 'vocabulaire'];
+
+/* Un seul ecran visible. Le pied (file, lancer, arreter) n'appartient qu'a
+   l'ecran des reunions ; ailleurs, une pastille de l'en-tete dit qu'une
+   transcription tourne et y ramene. */
+function afficherVue(nom, options) {
+  const opts = options || {};
+  const avant = etat.vue;
+  if (avant === 'relecture' && nom !== 'relecture' && typeof quitterRelecture === 'function') quitterRelecture();
+  etat.vue = nom;
+  VUES.forEach((v) => { $('#vue-' + v).hidden = v !== nom; });
+  $('#pied').hidden = nom !== 'principale';
+  $$('.bouton-nav').forEach((b) => {
+    if (b.dataset.vue === nom) b.setAttribute('aria-current', 'page');
+    else b.removeAttribute('aria-current');
+  });
+  majActivite();
+  if (nom === 'reglages') afficherSection(opts.section || etat.section, !opts.focus);
+  if (nom === 'vocabulaire') chargerVocabulaire();
+  if (opts.focus !== false) {
+    const cible = nom === 'principale' ? (opts.retourFocus || $('#zone-depot'))
+      : $('#vue-' + nom + ' h1');
+    if (cible) setTimeout(() => cible.focus({ preventScroll: true }), 0);
+  }
+}
+
+function retourPrincipale() {
+  afficherVue('principale');
+}
+
+/* Reglages : trois familles (usage courant, avance, mesures et diagnostic),
+   une section a la fois. */
+function afficherSection(nom, garderFocus) {
+  etat.section = nom;
+  $$('.reglages-nav [role=tab]').forEach((b) => {
+    const choisi = b.dataset.section === nom;
+    b.setAttribute('aria-selected', choisi ? 'true' : 'false');
+    b.tabIndex = choisi ? 0 : -1;
+  });
+  $$('.reglages-section').forEach((s) => { s.hidden = s.dataset.section !== nom; });
+  $('#vue-reglages').scrollTop = 0;
+  if (nom === 'espace' && typeof ouvrirEspace === 'function') ouvrirEspace();
+  if (nom !== 'espace' && typeof quitterEspace === 'function') quitterEspace();
+  if (nom === 'journal') { const j = $('#journal-contenu'); j.scrollTop = j.scrollHeight; }
+  if (!garderFocus) {
+    const tab = $(`.reglages-nav [data-section="${nom}"]`);
+    if (tab && document.activeElement && document.activeElement.closest('.reglages-nav')) tab.focus();
+  }
+}
+
+function ouvrirReglages(section) {
+  afficherVue('reglages', { section: section || etat.section });
+}
+
+/* Pastille d'activite : la transcription en cours, vue depuis un autre ecran. */
+function majActivite() {
+  const pastille = $('#indic-activite');
+  const visible = etat.enCours && etat.vue !== 'principale';
+  pastille.hidden = !visible;
+  if (!visible) return;
+  const actif = Array.from(etat.fichiers.values()).find((f) => ETATS_ACTIFS.includes(f.etat));
+  $('#indic-activite-texte').textContent = !actif ? t('ui.etat.demarrage')
+    : (actif.indetermine ? t('ui.activite.phase', { phase: actif.phase || '' })
+      : t('ui.activite.texte', { phase: actif.phase || '', pct: actif.pct || 0 }));
 }
 
 /* -------------------------------------------------------------- Materiel */
 
-function dessinerMateriel(mat, reco) {
+function dessinerMateriel(mat) {
+  if (!mat) return;
   $('#materiel-resume').textContent = mat.resume;
-  $('#materiel-conseil').textContent = reco.phrase;
 
   const lignes = [];
   const ajout = (cle, valeur, classe) =>
@@ -183,63 +277,69 @@ function dessinerMateriel(mat, reco) {
     ajout(t('ui.materiel.npu'), n.nom);
     if (n.note) ajout('', n.note, 'mention-honnete');
   });
-  if (!mat.gpus.length) ajout(t('ui.materiel.gpu'), t('ui.materiel.sans_gpu'));
+  if (!(mat.gpus || []).length) ajout(t('ui.materiel.gpu'), t('ui.materiel.sans_gpu'));
   ajout(t('ui.materiel.calcul'), mat.peripherique === 'cuda'
     ? t('ui.materiel.calcul_cuda')
     : t('ui.materiel.calcul_cpu'));
   ajout(t('ui.materiel.systeme'), mat.systeme);
-
-  lignes.push('<div style="height:8px"></div>');
-  (reco.estimations || []).forEach((e) => {
-    /* Une estimation mesuree sur le poste le dit : c'est la difference entre un
-       chiffre repris d'ailleurs et un chiffre releve ici. */
-    ajout(e.nom, t(e.mesure ? 'ui.materiel.estimation_mesuree' : 'ui.materiel.estimation', {
-      duree: e.pour_une_heure, facteur: nb(e.facteur),
-    }));
-  });
-  lignes.push(`<div class="materiel-ligne"><span class="cle"></span>
-    <span class="valeur" style="font-size:11.5px">${ech(t('ui.materiel.avis'))}</span></div>`);
-
   $('#materiel-detail').innerHTML = lignes.join('');
-}
-
-function basculerMateriel() {
-  const detail = $('#materiel-detail');
-  const ouvert = detail.classList.toggle('ouvert');
-  $('#materiel-entete').setAttribute('aria-expanded', ouvert ? 'true' : 'false');
-  $('#materiel-chevron').style.transform = ouvert ? 'rotate(180deg)' : '';
 }
 
 /* --------------------------------------------------------------- Presets */
 
-function dessinerPresets(reco) {
-  const conseille = reco ? reco.preset_conseille : null;
+function dessinerPresets() {
+  $('#presets').setAttribute('role', 'radiogroup');
+  $('#presets').setAttribute('aria-label', t('ui.section.qualite'));
   $('#presets').innerHTML = etat.presets.map((p) => `
-    <button class="preset" data-preset="${ech(p.cle)}" aria-pressed="false">
-      <span class="titre">
-        <span class="marqueur"></span>${ech(p.nom)}
-        ${p.cle === conseille ? `<span class="conseille">${ech(t('ui.preset.conseille'))}</span>` : ''}
-      </span>
+    <button class="preset" role="radio" data-preset="${ech(p.cle)}" aria-checked="false">
+      <span class="titre"><span class="marqueur"></span>${ech(p.nom)}</span>
       <span class="desc">${ech(p.resume)}</span>
       <span class="chiffres">${ech(t('ui.preset.chiffres', {
         modele: p.modele, duree: p.pour_une_heure, poids: p.telechargement,
       }))}</span>
     </button>`).join('');
+  $('#segments-qualite').innerHTML = etat.presets.map((p) => `
+    <button class="segment" role="radio" data-preset="${ech(p.cle)}" aria-checked="false">${ech(p.nom)}</button>`).join('');
 
-  $$('#presets .preset').forEach((b) => {
-    b.addEventListener('click', () => {
-      etat.config.preset = b.dataset.preset;
-      majPresetActif();
-      // Le rythme annonce la duree du preset choisi : tout est recalcule.
-      rafraichirRythme({ preset: etat.config.preset });
-    });
+  $$('[data-preset]').forEach((b) => {
+    b.addEventListener('click', () => choisirPreset(b.dataset.preset));
   });
+  brancherRadios('#presets');
+  brancherRadios('#segments-qualite');
   majPresetActif();
 }
 
+function choisirPreset(cle) {
+  if (cle === etat.config.preset) return;
+  etat.config.preset = cle;
+  majPresetActif();
+  // Le rythme annonce la duree du preset choisi : tout est recalcule.
+  rafraichirRythme({ preset: cle });
+}
+
 function majPresetActif() {
-  $$('#presets .preset').forEach((b) => {
-    b.setAttribute('aria-pressed', b.dataset.preset === etat.config.preset ? 'true' : 'false');
+  $$('[data-preset]').forEach((b) => {
+    const choisi = b.dataset.preset === etat.config.preset;
+    b.setAttribute('aria-checked', choisi ? 'true' : 'false');
+    b.tabIndex = choisi ? 0 : -1;
+  });
+}
+
+/* Groupe de boutons radio : fleches pour passer d'un choix a l'autre. */
+function brancherRadios(selecteur) {
+  const groupe = $(selecteur);
+  if (!groupe || groupe.dataset.radios) return;
+  groupe.dataset.radios = '1';
+  groupe.addEventListener('keydown', (e) => {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+    const boutons = Array.from(groupe.querySelectorAll('[role=radio]'));
+    const i = boutons.indexOf(document.activeElement);
+    if (i < 0) return;
+    e.preventDefault();
+    const pas = (e.key === 'ArrowLeft' || e.key === 'ArrowUp') ? -1 : 1;
+    const suivant = boutons[(i + pas + boutons.length) % boutons.length];
+    suivant.focus();
+    suivant.click();
   });
 }
 
@@ -253,12 +353,58 @@ function remplirModelesAvances(modeles) {
   if (choisi) sel.value = choisi;
 }
 
+/* -------------------------------------------- Bandeau de lancement
+
+   Les deux ou trois choix utiles a chaque lancement, et UNE duree : celle du
+   preset choisi au rythme en service, la meme que partout ailleurs. */
+
+function majLancement() {
+  const r = etat.rythme || {};
+  const choisi = r.choisi || 'vitesse';
+  $$('#segments-rythme .segment').forEach((b) => {
+    const actif = b.dataset.rythme === choisi;
+    b.setAttribute('aria-checked', actif ? 'true' : 'false');
+    b.tabIndex = actif ? 0 : -1;
+  });
+  const duree = (r.pour_une_heure || {})[choisi] || '--';
+  $('#lancement-duree').innerHTML = t('ui.lance.duree', { duree: `<strong>${ech(duree)}</strong>` })
+    + (r.auto && choisi !== 'vitesse' ? ech(t('ui.lance.auto')) : '');
+
+  // Voix : seulement si la separation est installee et repond.
+  const ext = (etat.diarisation || {}).extension || {};
+  const posee = !!ext.installee && !!etat.diarisation.disponible;
+  $('#choix-voix').hidden = !posee;
+  if (posee) {
+    const actif = !!etat.config.diarisation;
+    $('#opt-voix-lancement').checked = actif;
+    $('#voix-lancement-etat').textContent = actif ? t('ui.lance.voix_oui') : t('ui.lance.voix_non');
+  }
+}
+
+/* Avertissements : sur l'ecran des reunions, seulement ce qui change le
+   prochain lancement (telechargement a venir, memoire). Les notes sur le
+   materiel lui-meme (carte graphique non exploitee) vont dans « Poste », et
+   la separation non installee est dite par le choix « Voix ». */
+function afficherAvertissements(liste) {
+  etat.avertissements = liste || [];
+  const cartes = ((etat.materiel || {}).gpus || []).map((g) => g.nom).filter(Boolean);
+  const materiel = (m) => cartes.some((nom) => m.includes(nom));
+  const ext = (etat.diarisation || {}).extension || {};
+  const voixAbsente = etat.config.diarisation && !(ext.installee && etat.diarisation.disponible);
+  let utiles = etat.avertissements.filter((m) => !materiel(m));
+  if (voixAbsente && utiles.length) utiles = utiles.slice(0, -1);
+  $('#lancement-avis').innerHTML = utiles.map(encartAttention).join('');
+  $('#avertissements').innerHTML = etat.avertissements.filter((m) => !materiel(m)).map(encartAttention).join('');
+  $('#avertissements-poste').innerHTML = etat.avertissements.filter(materiel).map(encartAttention).join('');
+}
+
 /* -------------------------------------------------------------- Reglages */
 
 function appliquerConfig() {
   const c = etat.config;
   $('#langue').value = c.langue || 'fr';
   $('#langue-interface').value = langueCourante();
+  $('#choix-theme').value = c.theme || 'auto';
   $('#dossier-sortie').value = c.dossier_sortie || '';
   const f = c.formats || {};
   $('#fmt-txt').checked = f.txt !== false;
@@ -270,7 +416,6 @@ function appliquerConfig() {
   $('#opt-compagnon').checked = c.compagnon_confiance !== false;
   $('#opt-apprises').checked = c.corrections_apprises !== false;
   $('#opt-sauvegarde').checked = c.sauvegarde_progressive !== false;
-  $('#opt-lecture-audio').checked = !!c.lecture_audio;
   $('#motif-sortie').value = c.motif_sortie || '';
   $('#opt-surveillance').checked = !!c.surveillance;
   $('#dossier-surveille').value = c.dossier_surveille || '';
@@ -301,12 +446,6 @@ async function enregistrer(partiel) {
   } catch (e) { console.error(e); }
 }
 
-function afficherAvertissements(liste) {
-  $('#avertissements').innerHTML = (liste || []).map((m) => `
-    <div class="encart encart-attention">${icone('i-alerte', 'icone-s')}<span>${ech(m)}</span></div>`
-  ).join('');
-}
-
 function majGlossaire(resume) {
   if (!resume) return;
   const el = $('#etat-glossaire');
@@ -323,7 +462,7 @@ function majCorrections(donnees) {
   const compte = donnees.nb || 0;
   el.textContent = compte ? tn('ui.voc.regles', compte) : t('ui.voc.aucune_regle');
   if (donnees.erreurs && donnees.erreurs.length) {
-    el.textContent += t('ui.voc.lignes_erreur', { n: donnees.erreurs.length });
+    el.textContent += tn('ui.voc.lignes_erreur', donnees.erreurs.length);
   }
 }
 
@@ -345,6 +484,7 @@ function majDiarisation() {
   $('#ext-absente').style.display = (!posee && !enCours) ? 'block' : 'none';
   $('#ext-en-cours').style.display = enCours ? 'block' : 'none';
   $('#ext-installee').style.display = posee ? 'block' : 'none';
+  majLancement();
 
   if (!posee) {
     // Chiffres annonces avant tout clic : ce qui transite, ce qu'il faut de
@@ -399,6 +539,19 @@ function nombreLocal(valeur, decimales) {
   return Number(valeur || 0).toFixed(decimales).replace('.', t('format.decimal'));
 }
 
+/* Taille lisible, jumelle de langues.octets cote Python (puissances de 1024). */
+function formaterOctets(octets) {
+  const n = Math.max(0, Number(octets) || 0);
+  const unites = [['unite.go', 1024 ** 3], ['unite.mo', 1024 ** 2], ['unite.ko', 1024]];
+  for (const [cle, taille] of unites) {
+    if (n >= taille) {
+      const valeur = n / taille;
+      return nombreLocal(valeur, valeur >= 100 || cle === 'unite.ko' ? 0 : 1) + ' ' + t(cle);
+    }
+  }
+  return tn('unite.octets', Math.round(n));
+}
+
 /* Le jeton est demande a part, et seulement une fois les composants poses :
    c'est une etape distincte, pas la suite mecanique du telechargement. */
 function ouvrirModaleJeton() {
@@ -442,8 +595,7 @@ async function lancerInstallationLocuteurs() {
 /* Appelee par Python a chaque etape du processus de fond.
 
    Deux lignes, deux roles : la grande etape en cours ne bouge presque pas,
-   le detail defile. Une seule ligne qui change a chaque paquet serait
-   illisible, et ferait perdre de vue ou l'on en est. */
+   le detail defile. */
 function onExtensionLocuteurs(evenement) {
   if (!etat.extensionEnCours) return;
   switch (evenement.phase) {
@@ -525,7 +677,7 @@ function majVitesse() {
     });
   } else {
     $('#ov-etat').textContent = ov.hors_ligne
-      ? t('ui.ov.absent_hors_ligne', { n: ov.hors_ligne })
+      ? tn('ui.ov.absent_hors_ligne', ov.hors_ligne)
       : t('ui.ov.absent');
   }
 
@@ -641,7 +793,7 @@ function onFinBanc(bilan) {
 }
 
 /* Comparaison des deux moteurs sur un enregistrement de l'utilisateur.
-   Visible seulement quand OpenVINO est installe. La page cote a cote reste
+   Possible seulement quand OpenVINO est installe. La page cote a cote reste
    sur le poste ; le rapport de chiffres peut etre copie. */
 
 const comparaison = { fichier: '', reference: '', page: '', enCours: false };
@@ -649,6 +801,7 @@ const comparaison = { fichier: '', reference: '', page: '', enCours: false };
 function majComparaison() {
   const ov = (etat.vitesse || {}).openvino || {};
   $('#comp-bloc').style.display = ov.installee ? 'block' : 'none';
+  $('#comp-indisponible').hidden = !!ov.installee;
   $('#comp-en-cours').style.display = comparaison.enCours ? 'block' : 'none';
   $('#btn-comp-lancer').style.display = comparaison.enCours ? 'none' : '';
   $('#btn-comp-lancer').disabled = !comparaison.fichier || etat.enCours || etat.bancEnCours;
@@ -715,7 +868,9 @@ function majRythme() {
   const r = etat.rythme || {};
   const choisi = r.choisi || 'vitesse';
   $$('#bloc-rythme .rythme').forEach((b) => {
-    b.setAttribute('aria-checked', b.dataset.rythme === choisi ? 'true' : 'false');
+    const actif = b.dataset.rythme === choisi;
+    b.setAttribute('aria-checked', actif ? 'true' : 'false');
+    b.tabIndex = actif ? 0 : -1;
   });
   const duree = (r.pour_une_heure || {})[choisi] || '--';
   $('#rythme-desc').textContent = t('ui.rythme.desc.' + choisi, { duree });
@@ -727,11 +882,12 @@ function majRythme() {
   if (r.auto && r.batterie && choisi !== 'vitesse') notes.push(encartInfo(t('ui.rythme.batterie')));
   if (etat.enCours) notes.push(encartInfo(t('ui.rythme.prochaine')));
   $('#rythme-retour').innerHTML = notes.join('');
+  majLancement();
 }
 
 /* Preset ou rythme change : toutes les durees affichees en dependent (cartes,
-   rythme, fiche du materiel, conseil, file). Python les recalcule d'un bloc,
-   avec la meme fonction, pour qu'aucune ne reste en retard sur les autres. */
+   rythme, bandeau, file). Python les recalcule d'un bloc, avec la meme
+   fonction, pour qu'aucune ne reste en retard sur les autres. */
 async function rafraichirRythme(partiel) {
   await enregistrer(partiel);
   try {
@@ -741,11 +897,12 @@ async function rafraichirRythme(partiel) {
   rafraichirEstimations();
 }
 
-/* Reglage propose pour ce poste : au premier lancement, ou sur demande. */
+/* Reglage propose pour ce poste : au premier lancement (accueil), ou sur
+   demande depuis Reglages, Poste. Une seule recommandation, dite ici. */
 
 function afficherProposition(p) {
   const bloc = $('#bloc-proposition');
-  if (!p) { bloc.style.display = 'none'; return; }
+  if (!p) { bloc.hidden = true; return; }
   $('#proposition-phrase').textContent = p.phrase || '';
   $('#proposition-rythme').textContent = t('ui.proposition.rythme', {
     rythme: t('ui.rythme.' + (p.rythme || 'equilibre')),
@@ -753,22 +910,21 @@ function afficherProposition(p) {
   const notes = (p.notes || []).map((n) => encartInfo(n));
   if (p.deja) notes.unshift(encartSucces(t('ui.proposition.deja')));
   $('#proposition-notes').innerHTML = notes.join('');
-  $('#btn-proposition-appliquer').style.display = p.deja ? 'none' : '';
-  bloc.style.display = 'block';
+  $('#btn-proposition-appliquer').hidden = !!p.deja;
+  bloc.hidden = false;
 }
 
 async function reconnaitrePoste() {
   const bouton = $('#btn-reconnaitre');
   bouton.disabled = true;
-  $('#banc-retour').innerHTML = encartInfo(t('ui.proposition.recherche'));
+  $('#vitesse-alerte').innerHTML = encartInfo(t('ui.proposition.recherche'));
   try {
     const p = await pywebview.api.proposer_reglage();
-    $('#banc-retour').innerHTML = '';
+    majVitesse();
     afficherProposition(p);
-    $('#bloc-proposition').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch (e) {
     console.error(e);
-    $('#banc-retour').innerHTML = encartAttention(t('ui.ext.echec_lancement'));
+    $('#vitesse-alerte').innerHTML = encartAttention(t('ui.ext.echec_lancement'));
   }
   bouton.disabled = false;
 }
@@ -776,11 +932,13 @@ async function reconnaitrePoste() {
 async function appliquerProposition() {
   const r = await pywebview.api.appliquer_proposition();
   journaliser(r.ok ? 'ok' : 'attention', r.message);
-  if (!r.ok) return;
+  if (!r.ok) { setEtat(r.message, 'attention'); return false; }
   afficherProposition(null);
   const d = await pywebview.api.etat_initial();
   initialiser(d, true);
   rafraichirEstimations();   // la file aussi suit le nouveau reglage
+  setEtat(t('ui.proposition.appliquee'), 'succes');
+  return true;
 }
 
 async function appliquerBanc() {
@@ -788,8 +946,6 @@ async function appliquerBanc() {
   $('#banc-retour').innerHTML = r.ok ? encartSucces(r.message) : encartAttention(r.message);
   journaliser(r.ok ? 'ok' : 'attention', r.message);
   if (r.ok) {
-    // Les estimations, la recommandation et la fiche materiel en dependent :
-    // tout est redemande a Python, comme apres un changement de langue.
     const d = await pywebview.api.etat_initial();
     initialiser(d, true);
     rafraichirEstimations();
@@ -802,7 +958,67 @@ async function revenirReglageAuto() {
   const d = await pywebview.api.etat_initial();
   initialiser(d, true);
   rafraichirEstimations();
-  $('#banc-retour').innerHTML = encartInfo(r.message);
+  $('#vitesse-alerte').innerHTML = encartInfo(r.message);
+}
+
+/* ---------------------------------------------------- Premier lancement
+
+   Court : ce que fait l'application, le reglage propose pour ce poste en une
+   phrase, et commencer. Le reste (raisons, notes) est dans Reglages, Poste. */
+
+function ouvrirAccueil(proposition) {
+  etat.accueil = true;
+  dessinerAccueil(proposition || null, false);
+  ouvrirModale('#modale-accueil');
+  // Le materiel est relu en arriere-plan : sans nouvelles apres quelques
+  // secondes, le reglage en service convient.
+  setTimeout(() => { if (etat.accueil && !etat.propositionAccueil) dessinerAccueil(null, true); }, 15000);
+}
+
+function dessinerAccueil(p, definitif) {
+  const zone = $('#accueil-reglage');
+  etat.propositionAccueil = p;
+  const appliquer = $('#btn-accueil-appliquer');
+  const garder = $('#btn-accueil-garder');
+  if (p && !p.deja) {
+    // Une phrase : le reglage et sa duree. Les raisons sont dans Reglages, Poste ;
+    // ce que l'on y perd, s'il y a lieu, est dit ici.
+    const phrase = String(p.phrase || '').split(' : ')[0].replace(/[.\s]+$/, '') + '.';
+    const perte = (p.notes || []).find((n) => /confiance|confidence/i.test(n));
+    zone.innerHTML = `<span class="titre-section">${ech(t('ui.proposition.titre'))}</span>
+      <div>${ech(phrase)}</div>${perte ? `<div class="perte">${ech(perte)}</div>` : ''}`;
+    appliquer.hidden = false;
+    appliquer.textContent = t('ui.accueil.appliquer');
+    garder.textContent = t('ui.accueil.garder');
+    if (document.activeElement && document.activeElement.classList.contains('modale')) appliquer.focus();
+    return;
+  }
+  if (!definitif) {
+    zone.innerHTML = `<span class="titre-section">${ech(t('ui.proposition.titre'))}</span>
+      <div>${ech(t('ui.proposition.recherche'))}</div>`;
+    appliquer.hidden = true;
+    garder.textContent = t('ui.accueil.commencer');
+    return;
+  }
+  const preset = (etat.presets.find((x) => x.cle === etat.config.preset) || {}).nom || '';
+  const duree = ((etat.rythme || {}).pour_une_heure || {})[(etat.rythme || {}).choisi || 'vitesse'] || '--';
+  zone.innerHTML = `<span class="titre-section">${ech(t('ui.accueil.reglage_actuel'))}</span>
+    <div>${ech(t('ui.accueil.convient', { preset: preset, duree: duree }))}</div>`;
+  appliquer.hidden = true;
+  garder.textContent = t('ui.accueil.commencer');
+}
+
+async function fermerAccueil(appliquer) {
+  const p = etat.propositionAccueil;
+  if (appliquer && p && !p.deja) {
+    const ok = await appliquerProposition();
+    if (!ok) return;
+  } else if (p && !p.deja) {
+    pywebview.api.ecarter_proposition();
+  }
+  etat.accueil = false;
+  fermerModale($('#modale-accueil'));
+  $('#zone-depot').focus();
 }
 
 /* ------------------------------------------------------ Dossier des modeles */
@@ -853,10 +1069,8 @@ window.onDossierModeles = onDossierModeles;
 /* ------------------------------------------------- Qualite selon la langue
 
    Une mention d'une ligne sous le selecteur, rien de plus. Les paliers sont
-   cales sur les taux d'erreur (WER) publies par OpenAI pour large-v3 sur le
-   jeu multilingue FLEURS, regroupes en trois classes : sous 5 %, de 5 a 10 %,
-   au-dela de 10 %. Aucune proposition d'un autre modele : large-v3 est deja le
-   meilleur multilingue disponible, il n'y a rien a conseiller de mieux. */
+   cales sur les taux d'erreur publies par OpenAI pour large-v3 sur le jeu
+   multilingue FLEURS, regroupes en trois classes. */
 
 const QUALITE_LANGUES = {
   es: 'excellente', it: 'excellente', pt: 'excellente', en: 'excellente',
@@ -973,45 +1187,6 @@ window.onSurveillance = function (donnees) {
   majSurveillance();
 };
 
-/* ---------------------------------------------------------- Espace utilise */
-
-function onStockage(mesure) {
-  const zone = $('#contenu-stockage');
-  if (!mesure || mesure.erreur) {
-    zone.innerHTML = encartAttention(t('ui.stockage.echec'));
-    return;
-  }
-  zone.innerHTML = (mesure.postes || []).map((p) => `
-    <div class="stockage-poste">
-      <div class="entete">
-        <span class="libelle">${ech(p.libelle)}</span>
-        <span class="taille">${ech(p.taille)}</span>
-      </div>
-      <div class="chemin">${ech(p.chemin)}</div>
-      <div class="detail">${ech(p.detail)}</div>
-      <div class="actions-poste">
-        <button class="bouton bouton-discret" data-ouvrir-dossier="${ech(p.chemin)}"
-          ${p.existe ? '' : 'disabled'}>
-          ${icone('i-externe', 'icone-s')}
-          ${ech(p.existe ? t('ui.stockage.ouvrir') : t('ui.stockage.absent'))}
-        </button>
-      </div>
-    </div>`).join('')
-    + `<div class="stockage-total">
-         <span>${ech(t('ui.stockage.total'))}</span>
-         <span class="valeur">${ech(mesure.total_texte)}</span>
-         <span class="pousse"></span>
-         <span style="color:var(--texte-faible)">${ech(t('ui.stockage.libre', {
-           libre: mesure.libre,
-         }))}</span>
-       </div>`;
-
-  $$('#contenu-stockage [data-ouvrir-dossier]').forEach((b) => {
-    b.onclick = () => pywebview.api.ouvrir(b.dataset.ouvrirDossier);
-  });
-}
-window.onStockage = onStockage;
-
 /* ----------------------------------------------------- Mise a jour disponible */
 
 function onMiseAJour(info) {
@@ -1026,12 +1201,8 @@ function onMiseAJour(info) {
 }
 window.onMiseAJour = onMiseAJour;
 
-/* Verification demandee a la main depuis la fenetre d'aide.
-
-   Elle ne passe pas par le reglage d'opt-in : celui-ci ne gouverne que la
-   verification passive du demarrage, alors qu'ici l'utilisateur clique. Elle
-   ignore aussi la garde des 24 heures, cote Python. Le texte des resultats est
-   partage avec le bandeau : aucune formulation n'est ecrite deux fois. */
+/* Verification demandee a la main depuis la fenetre d'aide. Elle ne passe pas
+   par le reglage d'opt-in, qui ne gouverne que la verification du demarrage. */
 
 function ouvrirAide() {
   $('#aide-maj-version').textContent = etat.version;
@@ -1101,6 +1272,7 @@ function onApercuImport(retour) {
   if (!retour.ok) {
     $('#retour-donnees').innerHTML = encartAttention(retour.message);
     journaliser('erreur', t('ui.import.refuse', { message: retour.message }));
+    setEtat(t('ui.import.refuse', { message: retour.message }), 'erreur');
     return;
   }
   etat.importChemin = retour.chemin;
@@ -1121,15 +1293,13 @@ function apercuImportHTML(d) {
 
   bloc.push(`<h3>${ech(t('ui.import.contenu'))}</h3>`);
   bloc.push(ligne(t('ui.import.glossaire'),
-    t('ui.import.termes', { nb: d.glossaire.nb, actuel: d.glossaire.nb_actuel })));
+    tn('ui.import.termes', d.glossaire.nb, { actuel: d.glossaire.nb_actuel })));
   bloc.push(ligne(t('ui.import.corrections'),
-    t('ui.import.regles', { nb: d.corrections.nb, actuel: d.corrections.nb_actuel })));
+    tn('ui.import.regles', d.corrections.nb, { actuel: d.corrections.nb_actuel })));
   if (d.corrections.erreurs && d.corrections.erreurs.length) {
-    bloc.push(encartAttention(
-      t('ui.import.regles_fautives', { n: d.corrections.erreurs.length })));
+    bloc.push(encartAttention(tn('ui.import.regles_fautives', d.corrections.erreurs.length)));
   }
-  /* Le gabarit pour l'IA n'est annonce que s'il voyage dans l'archive : une
-     archive qui n'en porte pas laisse celui du poste intact. */
+  /* Le gabarit pour l'IA n'est annonce que s'il voyage dans l'archive. */
   if (d.gabarit && d.gabarit.present) bloc.push(encartInfo(d.gabarit.message));
 
   bloc.push(`<h3>${ech(t('ui.import.reglages'))}</h3>`);
@@ -1180,8 +1350,7 @@ async function confirmerImport() {
 }
 
 /* Recharge l'etat complet de l'interface : un import change les reglages, le
-   glossaire et les corrections d'un seul coup, et un redemarrage serait une
-   corvee pour rien. */
+   glossaire et les corrections d'un seul coup. */
 async function rechargerApresImport() {
   try {
     const d = await pywebview.api.etat_initial();
@@ -1207,14 +1376,20 @@ async function rafraichirEstimations() {
 
 /* ------------------------------------------------------------------ File */
 
+const ETATS_ACTIFS = ['decodage', 'transcription', 'locuteurs', 'ecriture'];
+
 function dessinerFile() {
   const vue = $('#vue-file');
-  $('#compteur-file').textContent = String(etat.fichiers.size);
+  const lignes = Array.from(etat.fichiers.values());
+  const aFaire = lignes.filter((f) => f.etat === 'attente' || ETATS_ACTIFS.includes(f.etat)).length;
+  const finis = lignes.filter((f) => ['termine', 'erreur', 'annule'].includes(f.etat)).length;
+  $('#compteur-file').textContent = String(aFaire);
+  $('#btn-vider').hidden = !finis;
+  // Le depot se reduit a une ligne des qu'il y a des fichiers : la file reste
+  // visible sans defiler.
+  $('#zone-depot').classList.toggle('compacte', !!etat.fichiers.size || !!etat.historique.length);
   if (!etat.fichiers.size) {
-    vue.innerHTML = `<div class="vide">${icone('i-depot')}
-      <div>${ech(t('ui.file.vide'))}</div>
-      <div style="font-size:12px;margin-top:4px">${ech(t('ui.file.vide_aide'))}</div>
-    </div>`;
+    vue.innerHTML = `<div class="vide">${ech(t('ui.file.vide'))}</div>`;
     return;
   }
   vue.innerHTML = Array.from(etat.fichiers.keys()).map(ligneHTML).join('');
@@ -1232,26 +1407,44 @@ const PASTILLES = {
   annule: ['annule', 'i-croix'],
 };
 
+function boutonLigne(attr, cleTitre, ic) {
+  const titre = ech(t(cleTitre));
+  return `<button class="bouton-ligne" ${attr} title="${titre}" aria-label="${titre}">${icone(ic, 'icone-s')}</button>`;
+}
+
 function ligneHTML(id) {
   const it = etat.fichiers.get(id);
   const [classe, ic] = PASTILLES[it.etat] || PASTILLES.attente;
-  const actif = ['decodage', 'transcription', 'locuteurs', 'ecriture'].includes(it.etat);
+  const actif = ETATS_ACTIFS.includes(it.etat);
+
+  if (actif) {
+    const pct = it.indetermine ? '' : `${it.pct || 0} %`;
+    return `<div class="ligne active" data-id="${ech(id)}">
+      <span class="pastille ${classe}">${icone(ic, 'icone-s')}</span>
+      <div class="infos">
+        <div class="nom" title="${ech(it.chemin)}">${ech(it.nom)}</div>
+        <div class="progression-tete"><span class="phase">${ech(it.phase || it.message || '')}</span>
+          <span class="pourcentage">${ech(pct)}</span></div>
+        <div class="barre ${it.indetermine ? 'indeterminee' : ''}" role="progressbar"
+          aria-valuemin="0" aria-valuemax="100" aria-label="${ech(it.nom)}"
+          ${it.indetermine ? '' : `aria-valuenow="${it.pct || 0}"`}><span style="width:${it.pct || 0}%"></span></div>
+        <div class="temps">${tempsActif(it)}</div>
+      </div>
+    </div>`;
+  }
 
   let meta = '', classeMeta = '';
   if (it.etat === 'attente') {
     meta = [it.duree, it.taille,
       it.estimation ? t('ui.ligne.calcul', { duree: it.estimation }) : '']
       .filter(Boolean).join(' · ');
-  } else if (actif) {
-    meta = metaActive(it);
   } else if (it.etat === 'termine') {
     // Voix demandees mais non separees : la ligne passe a l'ambre et le dit.
     classeMeta = it.voix_non_separees ? 'attention' : 'succes';
     meta = [t('ui.ligne.termine', { duree: it.duree_calcul || '?' }),
       it.voix_non_separees ? t('ui.ligne.voix_non_separees') : '',
-      it.facteur ? t('ui.ligne.facteur', { facteur: nb(it.facteur) }) : '',
-      it.locuteurs ? t('ui.ligne.locuteurs', { n: it.locuteurs }) : '',
-      it.corrections ? t('ui.ligne.corrections', { n: it.corrections }) : '']
+      it.locuteurs ? tn('ui.ligne.locuteurs', it.locuteurs) : '',
+      it.corrections ? tn('ui.ligne.corrections', it.corrections) : '']
       .filter(Boolean).join(' · ');
   } else if (it.etat === 'erreur') {
     classeMeta = 'erreur';
@@ -1260,36 +1453,66 @@ function ligneHTML(id) {
     meta = it.message || t('ui.ligne.annule');
   }
 
-  const sorties = (it.sorties || []).map((s) =>
-    `<button class="sortie" data-ouvrir="${ech(s.chemin)}">${ech(s.format)} · ${ech(s.nom)}</button>`
-  ).join('');
-
-  // Une transcription qui vient de se terminer se relit d'un clic, sans passer
-  // par l'onglet des transcriptions ni par un editeur exterieur.
+  // Une transcription terminee se relit d'un clic : bouton en toutes lettres.
   const texte = (it.sorties || []).find((s) => s.format === 'TXT');
+  const autres = (it.sorties || []).filter((s) => s.format !== 'TXT').map((s) =>
+    `<button class="etiquette-format" data-ouvrir="${ech(s.chemin)}" title="${ech(s.nom)}">${ech(s.format)}</button>`).join('');
+  const actions = [];
+  if (texte) actions.push(`<button class="bouton bouton-accent bouton-petit" data-lire="${ech(texte.chemin)}">${icone('i-fichier', 'icone-s')}<span>${ech(t('ui.ligne.relire'))}</span></button>`);
+  actions.push(autres);
+  if (['annule', 'erreur'].includes(it.etat)) actions.push(`<button class="bouton bouton-petit" data-relancer>${icone('i-reprise', 'icone-s')}<span>${ech(t('ui.ligne.relancer'))}</span></button>`);
+  if (it.etat === 'erreur') actions.push(boutonLigne('data-log', 'ui.ligne.journal', 'i-info'));
+  actions.push(boutonLigne('data-retirer', 'ui.ligne.retirer', 'i-croix'));
 
   return `<div class="ligne" data-id="${ech(id)}">
     <span class="pastille ${classe}">${icone(ic, 'icone-s')}</span>
     <div class="infos">
       <div class="nom" title="${ech(it.chemin)}">${ech(it.nom)}</div>
       <div class="meta ${classeMeta}">${ech(meta)}</div>
-      ${actif ? `<div class="barre ${it.indetermine ? 'indeterminee' : ''}" role="progressbar"
-        aria-valuemin="0" aria-valuemax="100" aria-label="${ech(it.nom)}"
-        ${it.indetermine ? '' : `aria-valuenow="${it.pct || 0}"`}><span style="width:${it.pct || 0}%"></span></div>` : ''}
-      ${sorties ? `<div class="sorties">${sorties}</div>` : ''}
     </div>
-    ${texte ? `<button class="bouton-ligne" data-lire="${ech(texte.chemin)}" title="${ech(t('ui.ligne.lire'))}" aria-label="${ech(t('ui.ligne.lire'))}">${icone('i-loupe', 'icone-s')}</button>` : ''}
-    ${['annule', 'erreur'].includes(it.etat) ? `<button class="bouton-ligne" data-relancer title="${ech(t('ui.ligne.relancer'))}" aria-label="${ech(t('ui.ligne.relancer'))}">${icone('i-reprise', 'icone-s')}</button>` : ''}
-    ${it.etat === 'erreur' ? `<button class="bouton-ligne" data-log title="${ech(t('ui.ligne.journal'))}" aria-label="${ech(t('ui.ligne.journal'))}">${icone('i-info', 'icone-s')}</button>` : ''}
-    ${actif ? '' : `<button class="bouton-ligne" data-retirer title="${ech(t('ui.ligne.retirer'))}" aria-label="${ech(t('ui.ligne.retirer'))}">${icone('i-croix', 'icone-s')}</button>`}
+    <div class="actions-ligne">${actions.join('')}</div>
   </div>`;
+}
+
+/* Temps d'un fichier en cours : ecoule qui avance chaque seconde, reste a
+   faire qui decompte entre deux releves de Python, heure de fin prevue. */
+function tempsActif(it) {
+  const maintenant = Date.now();
+  const ecoule = it.depart ? (maintenant - it.depart) / 1000 : 0;
+  const ecouleTexte = ecoule >= 1 ? formaterDuree(ecoule) : t('duree.secondes', { s: 0 });
+  const morceaux = [t('ui.ligne.ecoule', { duree: `<strong>${ech(ecouleTexte)}</strong>` })];
+  if (typeof it.restant_s === 'number') {
+    const reste = it.restant_s - (maintenant - (it.restant_recu || maintenant)) / 1000;
+    if (reste > 5) {
+      morceaux.push(t('ui.ligne.restant', { duree: `<strong>${ech(formaterDuree(reste))}</strong>` }));
+      const fin = new Date(maintenant + reste * 1000);
+      morceaux.push(ech(t('ui.ligne.fin_vers', { heure: formaterHeure(fin) })));
+    } else {
+      morceaux.push(ech(t('ui.ligne.bientot')));
+    }
+  }
+  return morceaux.join(' · ');
+}
+
+function formaterHeure(date) {
+  return t('format.heure_courte', { h: date.getHours(), m: String(date.getMinutes()).padStart(2, '0') });
 }
 
 function majLigne(id) {
   const ligne = document.querySelector(`#vue-file .ligne[data-id="${CSS.escape(id)}"]`);
   if (!ligne) { dessinerFile(); return; }
+  const focus = ligne.contains(document.activeElement)
+    ? Array.from(ligne.querySelectorAll('button')).indexOf(document.activeElement) : -1;
   ligne.outerHTML = ligneHTML(id);
   brancherLignes();
+  if (focus >= 0) {
+    const nouvelle = document.querySelector(`#vue-file .ligne[data-id="${CSS.escape(id)}"]`);
+    const bouton = nouvelle && nouvelle.querySelectorAll('button')[focus];
+    if (bouton) bouton.focus();
+  }
+  const lignes = Array.from(etat.fichiers.values());
+  $('#compteur-file').textContent = String(lignes.filter((f) => f.etat === 'attente' || ETATS_ACTIFS.includes(f.etat)).length);
+  $('#btn-vider').hidden = !lignes.some((f) => ['termine', 'erreur', 'annule'].includes(f.etat));
 }
 
 function brancherLignes() {
@@ -1325,252 +1548,102 @@ function brancherLignes() {
   });
 }
 
+/* Retire les lignes finies (terminees, en echec, arretees) ; celles qui
+   attendent restent, elles se retirent une a une. */
+function retirerTermines() {
+  Array.from(etat.fichiers.entries()).forEach(([id, it]) => {
+    if (['termine', 'erreur', 'annule'].includes(it.etat)) {
+      etat.fichiers.delete(id);
+      pywebview.api.retirer(id);
+    }
+  });
+  dessinerFile();
+  majBoutons();
+}
+
 /* ------------------------------------------------------------ Historique */
 
 function dessinerHistorique() {
   const vue = $('#vue-historique');
   $('#compteur-historique').textContent = String(etat.historique.length);
+  $('#zone-depot').classList.toggle('compacte', !!etat.fichiers.size || !!etat.historique.length);
   if (!etat.historique.length) {
-    vue.innerHTML = `<div class="vide">${icone('i-horloge')}
-      <div>${ech(t('ui.historique.vide'))}</div></div>`;
+    vue.innerHTML = `<div class="vide">${ech(t('ui.historique.vide'))}</div>`;
     return;
   }
-  /* Une ligne par transcription ; chaque format present s'ouvre a part. */
-  vue.innerHTML = etat.historique.map((h) => `
-    <div class="ligne" data-chemin="${ech(h.chemin)}" role="button" tabindex="0">
+  const filtre = normaliserRecherche($('#recherche-historique').value.trim());
+  const liste = filtre
+    ? etat.historique.filter((h) => normaliserRecherche(h.nom).includes(filtre))
+    : etat.historique;
+  if (!liste.length) {
+    vue.innerHTML = `<div class="vide">${ech(t('ui.historique.aucun_resultat'))}</div>`;
+    return;
+  }
+  /* Une ligne par transcription ; « Relire » en toutes lettres, chaque autre
+     format s'ouvre a part. */
+  vue.innerHTML = liste.map((h) => {
+    const formats = h.formats || [{ format: h.format, chemin: h.chemin }];
+    const texte = formats.find((f) => f.format === 'TXT');
+    return `<div class="ligne" data-chemin="${ech(h.chemin)}">
       <span class="pastille termine">${icone('i-coche', 'icone-s')}</span>
       <div class="infos">
         <div class="nom">${ech(h.nom)}</div>
         <div class="meta">${ech(h.date)} · ${ech(h.taille)}</div>
       </div>
-      ${(h.formats || [{ format: h.format, chemin: h.chemin }]).map((f) =>
-        `<button class="etiquette-format" data-ouvrir="${ech(f.chemin)}">${ech(f.format)}</button>`).join('')}
-    </div>`).join('');
+      <div class="actions-ligne">
+        ${texte ? `<button class="bouton bouton-petit" data-lire="${ech(texte.chemin)}">${icone('i-fichier', 'icone-s')}<span>${ech(t('ui.ligne.relire'))}</span></button>` : ''}
+        ${formats.filter((f) => f.format !== 'TXT').map((f) =>
+          `<button class="etiquette-format" data-ouvrir="${ech(f.chemin)}">${ech(f.format)}</button>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
   $$('#vue-historique .ligne').forEach((l) => {
-    l.onclick = () => ouvrirSortie(l.dataset.chemin);
-    l.onkeydown = (e) => {
-      if (e.target === l && (e.key === 'Enter' || e.key === ' ')) {
-        e.preventDefault();
-        ouvrirSortie(l.dataset.chemin);
-      }
-    };
+    l.onclick = (e) => { if (!e.target.closest('button')) ouvrirSortie(l.dataset.chemin); };
   });
   $$('#vue-historique [data-ouvrir]').forEach((b) => {
     b.onclick = (e) => { e.stopPropagation(); ouvrirSortie(b.dataset.ouvrir); };
   });
+  $$('#vue-historique [data-lire]').forEach((b) => {
+    b.onclick = (e) => { e.stopPropagation(); ouvrirLecture(b.dataset.lire); };
+  });
 }
 
-/* Le texte se relit dans la vue de lecture, les sous-titres restent en apercu
+/* Recherche sans casse ni accents : « reunion » trouve « Réunion ». Un
+   caractere en donne toujours un : les positions restent celles du texte. */
+function normaliserRecherche(texte) {
+  let sortie = '';
+  for (const c of String(texte || '')) {
+    const n = c.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    sortie += n.length === 1 ? n : c.toLowerCase().charAt(0) || c;
+  }
+  return sortie;
+}
+
+/* Le texte se relit dans la relecture, les sous-titres restent en apercu
    brut : personne ne lit un .srt en paragraphes. */
 function ouvrirSortie(chemin) {
   if (/\.txt$/i.test(chemin || '')) ouvrirLecture(chemin);
   else ouvrirApercu(chemin);
 }
 
-/* --------------------------------------------------------- Vue de lecture */
+/* ------------------------------------------------- Vocabulaire, format 2
 
-function formaterSecondes(valeur) {
-  const total = Math.max(0, Math.round(valeur || 0));
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  const deux = (n) => String(n).padStart(2, '0');
-  return h ? `${h}:${deux(m)}:${deux(s)}` : `${m}:${deux(s)}`;
-}
+   Un ecran a part, ouvert depuis l'en-tete. Revue par lots au clavier : fleches
+   pour parcourir, Espace pour cocher, A accepter, R refuser, M modifier. */
 
-async function ouvrirLecture(chemin) {
-  ouvrirModale('#modale-lecture');
-  $('#titre-lecture').textContent = String(chemin).split(/[\\/]/).pop();
-  $('#lecture-texte').innerHTML =
-    `<p style="color:var(--texte-faible)">${ech(t('ui.lecture.chargement'))}</p>`;
-  $('#lecture-meta').innerHTML = '';
-  $('#lecture-avis').innerHTML = '';
-  $('#lecture-retour').textContent = '';
-  $('#lecture-audio').innerHTML = '';
-  $('#lecture-legende').style.display = 'none';
-  $('#lecture-remplacements').hidden = true;
-  await chargerLecture(chemin);
-}
-
-async function chargerLecture(chemin) {
-  let d;
-  try {
-    d = await pywebview.api.lire_transcription(chemin);
-  } catch (e) {
-    console.error(e);
-    d = { ok: false, message: t('ui.lecture.non_lue') };
-  }
-  if (!d || !d.ok) {
-    etat.lecture = null;
-    $('#lecture-texte').innerHTML = '';
-    $('#lecture-avis').innerHTML =
-      encartAttention((d && d.message) || t('ui.lecture.impossible'));
-    return;
-  }
-  etat.lecture = d;
-  dessinerLecture();
-  majAnnulation();
-}
-
-function dessinerLecture() {
-  const d = etat.lecture;
-  if (!d) return;
-  const m = d.meta || {};
-
-  $('#titre-lecture').textContent = d.nom;
-  $('#lecture-meta').innerHTML = [
-    [t('ui.lecture.meta_fichier'), m.fichier],
-    [t('ui.lecture.meta_duree'), m.duree],
-    [t('ui.lecture.meta_date'), m.date],
-    [t('ui.lecture.meta_modele'), m.modele],
-    [t('ui.lecture.meta_locuteurs'), m.locuteurs_texte],
-  ].filter((x) => x[1]).map((x) =>
-    `<span><span class="cle">${ech(x[0])}</span> ${ech(x[1])}</span>`).join('');
-
-  $('#lecture-avis').innerHTML = d.message ? encartInfo(d.message) : '';
-
-  const stats = d.statistiques || {};
-  const legende = $('#lecture-legende');
-  legende.style.display = d.compagnon ? 'flex' : 'none';
-  // Un moteur sans confiance par mot (OpenVINO) ne surligne rien : la legende
-  // le dit, au lieu d'annoncer des mots surlignes qui n'existent pas.
-  const sansConfiance = !!(d.compagnon && !stats.mots && stats.sans_confiance);
-  $('#lecture-legende .exemple').style.display = sansConfiance ? 'none' : '';
-  if (sansConfiance) {
-    $('#lecture-legende-texte').textContent = t('ui.lecture.legende_sans_confiance');
-  } else if (d.compagnon && stats.mots) {
-    const part = (stats.signales ? nb(stats.signales / stats.mots * 100, 1) : '0')
-      + ' ' + t('unite.pourcent');
-    $('#lecture-legende-texte').textContent = t('ui.lecture.legende_chiffree', {
-      signales: stats.signales, total: stats.mots, part: part,
-    });
-  } else {
-    $('#lecture-legende-texte').textContent = t('ui.lecture.legende');
-  }
-
-  // Ecoute de l'extrait : le fichier d'origine peut avoir ete deplace depuis,
-  // auquel cas on le dit sobrement au lieu d'afficher un lecteur mort.
-  const zoneAudio = $('#lecture-audio');
-  zoneAudio.innerHTML = '';
-  if (d.lecture_audio) {
-    // L'adresse vient du serveur local de l'application : un « file:/// »
-    // est refuse par le navigateur integre depuis une page servie en http.
-    if (m.source_presente && d.audio_url) {
-      zoneAudio.innerHTML = `<audio id="lecture-son" controls preload="metadata"
-        src="${ech(d.audio_url)}"></audio>`;
-      const son = $('#lecture-son');
-      son.addEventListener('error', () => {
-        zoneAudio.innerHTML = encartInfo(t('ui.lecture.audio_illisible'));
-      });
-    } else {
-      zoneAudio.innerHTML = encartInfo(t(m.source_presente
-        ? 'ui.lecture.audio_illisible' : 'ui.lecture.audio_absent'));
-    }
-  }
-
-  dessinerRemplacements();
-
-  const seuils = d.seuils || { faible: 0.5, tres_faible: 0.3 };
-  const ecoutable = !!(d.lecture_audio && m.source_presente && d.audio_url);
-  $('#lecture-texte').innerHTML = (d.paragraphes || []).map((p) => `
-    <div class="lecture-para ${ecoutable ? 'ecoutable' : ''}" data-debut="${p.debut || 0}">
-      ${p.locuteur ? `<span class="locuteur">${ech(p.locuteur)}
-        ${ecoutable || p.debut ? `<span class="horodatage">${formaterSecondes(p.debut)}</span>` : ''}</span>` : ''}
-      ${p.mots.map((mot, i) => ech(mot.e !== undefined ? mot.e : (i ? ' ' : ''))
-        + motHTML(mot, seuils)).join('')}
-    </div>`).join('')
-    || `<p style="color:var(--texte-faible)">${ech(t('ui.lecture.sans_texte'))}</p>`;
-}
-
-function motHTML(mot, seuils) {
-  const texte = ech(mot.t);
-  // Mot change apres coup par le vocabulaire ou une correction : marque discrete.
-  if (mot.c) return `<span class="mot-corrige" title="${ech(t('ui.lecture.mot_corrige'))}">${texte}</span>`;
-  if (mot.p < 0) return texte;   // confiance inconnue : mot ordinaire
-  let classe = '';
-  if (mot.p < seuils.tres_faible) classe = ' mot-fort';
-  else if (mot.p < seuils.faible) classe = ' mot-doux';
-  return `<span class="mot${classe}" data-p="${Math.round(mot.p * 100)}">${texte}</span>`;
-}
-
-/* L'infobulle est posee au survol, pas a la construction : une reunion d'une
-   heure represente plusieurs milliers de mots, autant d'attributs inutiles. */
-function infobulleMot(evenement) {
-  const cible = evenement.target;
-  if (!cible || !cible.classList || !cible.classList.contains('mot')) return;
-  if (cible.hasAttribute('title')) return;
-  cible.setAttribute('title', t('ui.lecture.confiance', { pct: cible.dataset.p }));
-}
-
-/* Le texte copie est celui du fichier, en-tete retire, jamais une reconstruction
-   mot a mot : ce qui part dans le presse-papiers est ce que l'on relira. */
-function texteLecture() {
-  const d = etat.lecture;
-  if (!d) return '';
-  if (typeof d.corps === 'string') return d.corps;
-  return (d.paragraphes || []).map((p) =>
-    (p.locuteur ? p.locuteur + ' : ' : '') + p.texte).join('\n\n');
-}
-
-function retourLecture(texte, classe) {
-  const zone = $('#lecture-retour');
-  zone.textContent = texte;
-  zone.className = 'lecture-retour ' + (classe || '');
-  if (texte) setTimeout(() => { if (zone.textContent === texte) zone.textContent = ''; }, 8000);
-}
-
-async function copier(texte) {
-  try { await navigator.clipboard.writeText(texte); }
-  catch (e) { pywebview.api.copier(texte); }
-}
-
-/* ------------------------- Remplacements du vocabulaire, dans la lecture */
-
-function dessinerRemplacements() {
-  const d = etat.lecture;
-  const bloc = $('#lecture-remplacements');
-  const liste = (d && d.remplacements) || [];
-  bloc.hidden = !liste.length;
-  if (!liste.length) return;
-  $('#lecture-remplacements-titre').textContent = tn('ui.lecture.remplacements', liste.length);
-  $('#lecture-remplacements-liste').innerHTML = liste.map((r) => `
-    <div class="remplacement">
-      <span class="horodatage">${formaterSecondes(r.debut)}</span>
-      <span class="avant">${ech(r.avant)}</span>
-      <svg class="icone-s icone fleche"><use href="#i-chevron"></use></svg>
-      <span class="apres">${ech(r.apres)}</span>
-      <span class="regle">${ech(t('ui.lecture.regle.' + r.regle))}</span>
-      <span class="pousse"></span>
-      <button class="bouton-lien" data-annuler-remplacement="${r.rang}">${ech(t('ui.lecture.remplacement_annuler'))}</button>
-    </div>`).join('');
-}
-
-async function annulerRemplacement(rang) {
-  if (!etat.lecture) return;
-  const r = await pywebview.api.annuler_remplacement(etat.lecture.chemin, Number(rang));
-  if (r.ok) {
-    journaliser('ok', r.message);
-    await chargerLecture(etat.lecture.chemin);
-    retourLecture(r.message, 'ok');
-  } else {
-    retourLecture(r.message, 'erreur');
-  }
-}
-
-/* ------------------------------------------------- Vocabulaire, format 2 */
-
-const voc = { donnees: null, onglet: 'propose', edition: null };
+const voc = { donnees: null, onglet: 'propose', edition: null, active: -1 };
 
 function brancherVocabulaire() {
-  $('#btn-vocabulaire').addEventListener('click', ouvrirVocabulaire);
   document.querySelectorAll('[data-voc-onglet]').forEach((b) => b.addEventListener('click', () => {
     voc.onglet = b.dataset.vocOnglet;
+    voc.active = -1;
     fermerEditionVocabulaire();
     dessinerVocabulaire();
   }));
-  $('#voc-recherche').addEventListener('input', dessinerListeVocabulaire);
+  $('#voc-recherche').addEventListener('input', () => { voc.active = -1; dessinerListeVocabulaire(); });
   $('#voc-tout').addEventListener('change', (e) => {
     document.querySelectorAll('.voc-case').forEach((c) => { c.checked = e.target.checked; });
+    majSelectionVocabulaire();
   });
   $('#btn-voc-accepter').addEventListener('click', () => deciderSelection('accepter'));
   $('#btn-voc-refuser').addEventListener('click', () => deciderSelection('refuser'));
@@ -1584,6 +1657,12 @@ function brancherVocabulaire() {
   $('#opt-rapprochement').addEventListener('change', (e) =>
     enregistrer({ rapprochement_vocabulaire: e.target.checked }));
   $('#voc-liste').addEventListener('click', actionLigneVocabulaire);
+  $('#voc-liste').addEventListener('change', majSelectionVocabulaire);
+  $('#voc-liste').addEventListener('keydown', clavierVocabulaire);
+  $('#voc-liste').addEventListener('focusin', (e) => {
+    const ligne = e.target.closest('.voc-ligne');
+    if (ligne) activerLigneVocabulaire(Number(ligne.dataset.rang), false);
+  });
   $('#voc-avis').addEventListener('click', async (e) => {
     if (!e.target.closest('#btn-voc-convertir')) return;
     const r = await pywebview.api.vocabulaire_convertir();
@@ -1596,40 +1675,36 @@ function brancherVocabulaire() {
     await pywebview.api.vocabulaire_retirer_partage(b.dataset.retirerPartage);
     await chargerVocabulaire();
   });
-  $('#lecture-remplacements-liste').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-annuler-remplacement]');
-    if (b) annulerRemplacement(b.dataset.annulerRemplacement);
-  });
 }
 
 async function majCompteurVocabulaire() {
   try {
     const d = await pywebview.api.vocabulaire_etat();
     voc.donnees = d;
-    const n = d.resume.proposes;
-    const el = $('#voc-compteur-propositions');
-    el.hidden = !n;
-    el.textContent = t('ui.voc2.compteur', { n: n });
+    afficherCompteurVocabulaire(d.resume.proposes);
   } catch (e) { console.error(e); }
 }
 
-async function ouvrirVocabulaire() {
+function afficherCompteurVocabulaire(n) {
+  const el = $('#voc-compteur-propositions');
+  el.hidden = !n;
+  el.textContent = String(n || 0);
+  el.title = t('ui.voc2.compteur', { n: n || 0 });
+  $('#btn-nav-vocabulaire').setAttribute('aria-label',
+    t('ui.nav.vocabulaire') + (n ? ', ' + t('ui.voc2.compteur', { n: n }) : ''));
+}
+
+function ouvrirVocabulaire() {
   fermerEditionVocabulaire();
   $('#voc-retour').textContent = '';
-  ouvrirModale('#modale-vocabulaire');
-  await chargerVocabulaire();
-  if (voc.donnees && !voc.donnees.resume.proposes && voc.onglet === 'propose' && voc.donnees.resume.actifs) {
-    voc.onglet = 'actif';
-    dessinerVocabulaire();
-  }
+  afficherVue('vocabulaire');
 }
 
 async function chargerVocabulaire() {
   voc.donnees = await pywebview.api.vocabulaire_etat();
+  if (voc.onglet === 'propose' && !voc.donnees.resume.proposes && voc.donnees.resume.actifs) voc.onglet = 'actif';
   dessinerVocabulaire();
-  const n = voc.donnees.resume.proposes;
-  $('#voc-compteur-propositions').hidden = !n;
-  $('#voc-compteur-propositions').textContent = t('ui.voc2.compteur', { n: n });
+  afficherCompteurVocabulaire(voc.donnees.resume.proposes);
 }
 
 function dessinerVocabulaire() {
@@ -1637,16 +1712,17 @@ function dessinerVocabulaire() {
   if (!d) return;
   const r = d.resume;
   $('#voc-resume').textContent = t('ui.voc2.resume', {
-    actifs: r.actifs, proposes: r.proposes, refuses: r.refuses,
-    retenus: d.amorce.retenus, total: d.amorce.total, jetons: d.amorce.jetons,
+    actifs: tn('ui.voc2.n_actifs', r.actifs), proposes: tn('ui.voc2.n_proposes', r.proposes),
+    refuses: tn('ui.voc2.n_refuses', r.refuses), retenus: tn('ui.voc2.n_termes', d.amorce.retenus),
+    total: d.amorce.total, jetons: d.amorce.jetons,
   });
   const avis = [];
   if (d.format1) {
-    avis.push(`<div class="encart encart-info"><svg class="icone-s icone"><use href="#i-info"></use></svg>
+    avis.push(`<div class="encart encart-info">${icone('i-info', 'icone-s')}
       <span>${ech(t('ui.voc2.format1'))}</span><span class="pousse"></span>
       <button class="bouton" id="btn-voc-convertir">${ech(t('ui.voc2.convertir'))}</button></div>`);
   }
-  if (r.fautes_risquees) avis.push(encartAttention(t('ui.voc2.risquees', { n: r.fautes_risquees })));
+  if (r.fautes_risquees) avis.push(encartAttention(tn('ui.voc2.risquees', r.fautes_risquees)));
   if (!d.lexique) avis.push(encartAttention(t('ui.voc2.lexique_absent')));
   (d.problemes || []).forEach((p) => avis.push(encartAttention(t('ui.voc2.probleme', { detail: p }))));
   $('#voc-avis').innerHTML = avis.join('');
@@ -1655,9 +1731,11 @@ function dessinerVocabulaire() {
   ['propose', 'actif', 'refuse'].forEach((k) => { $('#voc-n-' + k).textContent = comptes[k]; });
   document.querySelectorAll('[data-voc-onglet]').forEach((b) =>
     b.setAttribute('aria-selected', String(b.dataset.vocOnglet === voc.onglet)));
-  $('#btn-voc-accepter').hidden = voc.onglet !== 'propose';
-  $('#btn-voc-refuser').hidden = voc.onglet !== 'propose';
-  $('#voc-tout').closest('label').hidden = voc.onglet !== 'propose';
+  const revue = voc.onglet === 'propose';
+  $('#btn-voc-accepter').hidden = !revue;
+  $('#btn-voc-refuser').hidden = !revue;
+  $('#voc-tout').closest('label').hidden = !revue;
+  $('#voc-clavier').hidden = !revue;
   $('#voc-tout').checked = false;
   $('#opt-rapprochement').checked = d.rapprochement;
   const categories = $('#voc-categorie');
@@ -1667,7 +1745,7 @@ function dessinerVocabulaire() {
   }
   $('#voc-partages-liste').innerHTML = d.partages.length
     ? d.partages.map((p) => `<div class="voc-partage"><span class="nom">${ech(p.nom)}</span>
-        <span class="meta">${ech(p.ok ? t('ui.voc2.partage_termes', { n: p.termes }) : t('ui.voc2.partage_illisible'))}</span>
+        <span class="meta">${ech(p.ok ? tn('ui.voc2.partage_termes', p.termes) : t('ui.voc2.partage_illisible'))}</span>
         <span class="pousse"></span>
         <button class="bouton-lien" data-retirer-partage="${ech(p.chemin)}">${ech(t('ui.voc2.partages.retirer'))}</button></div>`).join('')
     : `<p class="aide">${ech(t('ui.voc2.aucun_partage'))}</p>`;
@@ -1679,44 +1757,54 @@ function texteFaute(f) {
   const notes = [];
   if (f.voisins && f.voisins.length) notes.push(t('ui.voc2.pres_de', { voisins: f.voisins.join(', ') }));
   else if (f.forcer) notes.push(t('ui.voc2.forcee'));
-  if (f.vu) notes.push(t('ui.voc2.vu', { vu: f.vu, reunions: f.reunions || 1 }));
+  if (f.vu) notes.push(vuDans(f));
   if (notes.length) texte += ` <span class="note">(${ech(notes.join(' ; '))})</span>`;
   if (f.risquee && !f.forcer) texte = `<span class="risquee" title="${ech(t('ui.voc2.risquee'))}">${texte}</span>`;
   return texte;
 }
 
+function vuDans(e) {
+  return t('ui.voc2.vu', { vu: tn('ui.voc2.fois', e.vu), reunions: tn('ui.voc2.reunions', e.reunions || 1) });
+}
+
+function lignesVocabulaire() {
+  const d = voc.donnees;
+  const filtre = normaliserRecherche($('#voc-recherche').value.trim());
+  return d.entrees.filter((e) => e.etat === voc.onglet
+    && (!filtre || normaliserRecherche(e.forme).includes(filtre)
+        || e.fautes.some((f) => normaliserRecherche(f.forme).includes(filtre))));
+}
+
 function dessinerListeVocabulaire() {
   const d = voc.donnees;
   if (!d) return;
-  const filtre = $('#voc-recherche').value.trim().toLowerCase();
-  const lignes = d.entrees.filter((e) => e.etat === voc.onglet
-    && (!filtre || e.forme.toLowerCase().includes(filtre)
-        || e.fautes.some((f) => f.forme.toLowerCase().includes(filtre))));
+  const lignes = lignesVocabulaire();
   if (!lignes.length) {
     $('#voc-liste').innerHTML = `<p class="vide">${ech(t('ui.voc2.vide.' + voc.onglet))}</p>`;
     return;
   }
-  $('#voc-liste').innerHTML = lignes.map((e) => {
+  $('#voc-liste').innerHTML = lignes.map((e, rang) => {
     const index = d.entrees.indexOf(e);
     const source = e.source === 'personnel' ? ''
       : (e.source === 'format1' ? t('ui.voc2.source.format1')
         : t('ui.voc2.source.partage', { nom: e.source.replace(/^partage:/, '') }));
     const meta = [t('ui.voc2.cat.' + e.categorie), t('ui.voc2.origine.' + e.origine)];
-    if (e.vu) meta.push(t('ui.voc2.vu', { vu: e.vu, reunions: e.reunions || 1 }));
+    if (e.vu) meta.push(vuDans(e));
     if (source) meta.push(source);
     const actions = [];
     if (e.modifiable) {
       if (e.etat === 'propose') {
-        actions.push(`<button class="bouton-lien" data-voc-action="accepter" data-i="${index}">${ech(t('ui.voc2.accepter'))}</button>`);
-        actions.push(`<button class="bouton-lien" data-voc-action="refuser" data-i="${index}">${ech(t('ui.voc2.refuser'))}</button>`);
+        actions.push(`<button class="bouton-lien" tabindex="-1" data-voc-action="accepter" data-i="${index}">${ech(t('ui.voc2.accepter'))}</button>`);
+        actions.push(`<button class="bouton-lien" tabindex="-1" data-voc-action="refuser" data-i="${index}">${ech(t('ui.voc2.refuser'))}</button>`);
       }
-      actions.push(`<button class="bouton-lien" data-voc-action="modifier" data-i="${index}">${ech(t('ui.voc2.modifier'))}</button>`);
+      actions.push(`<button class="bouton-lien" tabindex="-1" data-voc-action="modifier" data-i="${index}">${ech(t('ui.voc2.modifier'))}</button>`);
       if (e.etat !== 'propose') {
-        actions.push(`<button class="bouton-lien" data-voc-action="supprimer" data-i="${index}">${ech(t('ui.voc2.supprimer'))}</button>`);
+        actions.push(`<button class="bouton-lien" tabindex="-1" data-voc-action="supprimer" data-i="${index}">${ech(t('ui.voc2.supprimer'))}</button>`);
       }
     }
-    return `<div class="voc-ligne">
-      ${e.etat === 'propose' && e.modifiable ? `<input type="checkbox" class="voc-case" data-i="${index}">` : '<span class="voc-case-vide"></span>'}
+    const cochable = e.etat === 'propose' && e.modifiable;
+    return `<div class="voc-ligne" role="option" aria-selected="false" tabindex="${rang === Math.max(0, voc.active) ? 0 : -1}" data-rang="${rang}" data-i="${index}">
+      ${cochable ? `<input type="checkbox" class="voc-case" tabindex="-1" data-i="${index}" aria-label="${ech(e.forme)}">` : '<span class="voc-case-vide"></span>'}
       <div class="voc-infos">
         <div class="voc-forme">${ech(e.forme)}${e.poids > 1 ? ` <span class="voc-poids">${'+'.repeat(e.poids - 1)}</span>` : ''}</div>
         <div class="voc-fautes">${e.fautes.length ? e.fautes.map(texteFaute).join(', ') : `<span class="note">${ech(t('ui.voc2.sans_faute'))}</span>`}</div>
@@ -1725,6 +1813,70 @@ function dessinerListeVocabulaire() {
       <div class="voc-actions">${actions.join('')}</div>
     </div>`;
   }).join('');
+  if (voc.active >= lignes.length) voc.active = lignes.length - 1;
+  if (voc.active >= 0) activerLigneVocabulaire(voc.active, true);
+}
+
+function activerLigneVocabulaire(rang, focus) {
+  const lignes = $$('#voc-liste .voc-ligne');
+  if (!lignes.length) return;
+  voc.active = Math.max(0, Math.min(lignes.length - 1, rang));
+  lignes.forEach((l, i) => {
+    l.classList.toggle('active', i === voc.active);
+    l.tabIndex = i === voc.active ? 0 : -1;
+  });
+  if (focus) {
+    lignes[voc.active].focus({ preventScroll: true });
+    lignes[voc.active].scrollIntoView({ block: 'nearest' });
+  }
+}
+
+function majSelectionVocabulaire() {
+  $$('#voc-liste .voc-ligne').forEach((l) => {
+    const c = l.querySelector('.voc-case');
+    l.setAttribute('aria-selected', c && c.checked ? 'true' : 'false');
+  });
+}
+
+/* Revue au clavier : la ligne active porte le focus, les decisions portent sur
+   les lignes cochees, ou sur la ligne active s'il n'y en a aucune. */
+async function clavierVocabulaire(e) {
+  if (e.target.closest('input, textarea, select') && !e.target.classList.contains('voc-case')) return;
+  const lignes = $$('#voc-liste .voc-ligne');
+  if (!lignes.length) return;
+  const touche = e.key.toLowerCase();
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    activerLigneVocabulaire(voc.active + (e.key === 'ArrowDown' ? 1 : -1), true);
+  } else if (e.key === 'Home' || e.key === 'End') {
+    e.preventDefault();
+    activerLigneVocabulaire(e.key === 'Home' ? 0 : lignes.length - 1, true);
+  } else if (e.key === ' ') {
+    e.preventDefault();
+    const c = lignes[voc.active] && lignes[voc.active].querySelector('.voc-case');
+    if (c) { c.checked = !c.checked; majSelectionVocabulaire(); }
+  } else if ((touche === 'a' || touche === 'r') && !e.ctrlKey && !e.altKey && voc.onglet === 'propose') {
+    e.preventDefault();
+    const cochees = $$('.voc-case:checked');
+    const decision = touche === 'a' ? 'accepter' : 'refuser';
+    if (cochees.length) { await deciderSelection(decision); return; }
+    const ligne = lignes[voc.active];
+    const entree = ligne && voc.donnees.entrees[Number(ligne.dataset.i)];
+    if (!entree || !entree.modifiable) return;
+    retourVocabulaire(await pywebview.api.vocabulaire_decider([entree.forme], decision));
+    await chargerVocabulaire();
+    activerLigneVocabulaire(voc.active, true);
+  } else if (touche === 'm' && !e.ctrlKey && !e.altKey) {
+    e.preventDefault();
+    const ligne = lignes[voc.active];
+    const entree = ligne && voc.donnees.entrees[Number(ligne.dataset.i)];
+    if (entree && entree.modifiable) ouvrirEditionVocabulaire(entree);
+  } else if (e.ctrlKey && touche === 'a') {
+    e.preventDefault();
+    $('#voc-tout').checked = true;
+    $$('.voc-case').forEach((c) => { c.checked = true; });
+    majSelectionVocabulaire();
+  }
 }
 
 async function actionLigneVocabulaire(e) {
@@ -1755,6 +1907,7 @@ async function deciderSelection(decision) {
   }
   retourVocabulaire(await pywebview.api.vocabulaire_decider(formes, decision));
   await chargerVocabulaire();
+  activerLigneVocabulaire(Math.max(0, voc.active), true);
 }
 
 function ouvrirEditionVocabulaire(entree) {
@@ -1772,8 +1925,10 @@ function ouvrirEditionVocabulaire(entree) {
 }
 
 function fermerEditionVocabulaire() {
+  const etaitOuverte = !$('#voc-edition').hidden;
   voc.edition = null;
   $('#voc-edition').hidden = true;
+  if (etaitOuverte) activerLigneVocabulaire(Math.max(0, voc.active), true);
 }
 
 function lireFautesSaisies() {
@@ -1822,123 +1977,9 @@ function retourVocabulaire(r) {
 /* Retour des boites de fichiers (import, export, fichier partage). */
 window.onVocabulaire = async function (r) {
   retourVocabulaire(r);
-  if ($('#modale-vocabulaire').classList.contains('ouvert')) await chargerVocabulaire();
+  if (etat.vue === 'vocabulaire') await chargerVocabulaire();
   else majCompteurVocabulaire();
 };
-
-/* ------------------------------------------- Correction depuis la lecture */
-
-function positionnerBoutonCorrection() {
-  const bouton = $('#btn-corriger-selection');
-  const selection = window.getSelection();
-  const zone = $('#lecture-texte');
-  if (!selection || selection.isCollapsed || !zone.contains(selection.anchorNode)) {
-    bouton.classList.remove('visible');
-    return;
-  }
-  const texte = selection.toString().trim().replace(/\s+/g, ' ');
-  if (!texte || texte.length > 80) {
-    bouton.classList.remove('visible');
-    return;
-  }
-  etat.selection = texte;
-  const rect = selection.getRangeAt(0).getBoundingClientRect();
-  bouton.style.left = Math.max(8, Math.min(window.innerWidth - 130, rect.left)) + 'px';
-  bouton.style.top = (rect.bottom + 6) + 'px';
-  bouton.classList.add('visible');
-}
-
-function masquerBoutonCorrection() {
-  $('#btn-corriger-selection').classList.remove('visible');
-}
-
-function ouvrirCorrection() {
-  masquerBoutonCorrection();
-  if (!etat.selection || !etat.lecture) return;
-  $('#correction-source').value = etat.selection;
-  $('#correction-cible').value = etat.selection;
-  // La regle vaut pour toutes les transcriptions a venir : c'est un choix
-  // explicite, jamais coche d'office.
-  $('#correction-regle').checked = false;
-  $('#case-regle').style.display = etat.config.corrections_apprises === false ? 'none' : '';
-  $('#retour-correction').innerHTML = '';
-  $('#apercu-correction').innerHTML = '';
-  majQuestionRegle();
-  ouvrirModale('#modale-correction');
-  setTimeout(() => { $('#correction-cible').focus(); $('#correction-cible').select(); }, 50);
-}
-
-function majQuestionRegle() {
-  const source = $('#correction-source').value.trim();
-  const cible = $('#correction-cible').value.trim();
-  $('#correction-question').textContent = t('ui.correction.question_detaillee', {
-    source: source, cible: cible || t('ui.correction.attente'),
-  });
-  clearTimeout(etat.minuterieApercu);
-  etat.minuterieApercu = setTimeout(majApercuCorrection, 200);
-}
-
-/* Avant d'appliquer : combien d'endroits du fichier changent, et lesquels. */
-async function majApercuCorrection() {
-  const zone = $('#apercu-correction');
-  const source = $('#correction-source').value.trim();
-  const cible = $('#correction-cible').value.trim();
-  if (!etat.lecture || !cible || cible === source) { zone.innerHTML = ''; return; }
-  let r;
-  try {
-    r = await pywebview.api.apercu_correction(etat.lecture.chemin, source, cible);
-  } catch (e) { console.error(e); zone.innerHTML = ''; return; }
-  if ($('#correction-cible').value.trim() !== cible) return;   // saisie depassee
-  if (!r.ok) { zone.innerHTML = encartAttention(r.message); return; }
-  const lignes = (r.extraits || []).map((x) => `<li>${x.debut_coupe ? '…' : ''}${ech(x.avant)}`
-    + `<mark>${ech(x.forme)}</mark>${ech(x.apres)}${x.fin_coupee ? '…' : ''}</li>`);
-  const reste = r.nombre - (r.extraits || []).length;
-  if (reste > 0) lignes.push(`<li class="reste">${ech(tn('ui.correction.autres', reste))}</li>`);
-  zone.innerHTML = `<div class="apercu-titre">${ech(r.message)}</div><ul>${lignes.join('')}</ul>`;
-}
-
-function majAnnulation() {
-  $('#btn-annuler-correction').hidden = !(etat.lecture && etat.lecture.annulable);
-}
-
-async function annulerCorrection() {
-  if (!etat.lecture || !etat.lecture.annulable) return;
-  const r = await pywebview.api.annuler_correction(etat.lecture.chemin);
-  if (r.nb_corrections !== undefined) majCorrections({ nb: r.nb_corrections, erreurs: [] });
-  journaliser(r.ok ? 'ok' : 'attention', r.message);
-  majCompteurVocabulaire();
-  await chargerLecture(etat.lecture.chemin);
-  retourLecture(r.message, r.ok ? 'ok' : 'erreur');
-}
-
-async function appliquerCorrection() {
-  if (!etat.lecture) return;
-  const bouton = $('#btn-appliquer-correction');
-  const source = $('#correction-source').value.trim();
-  const cible = $('#correction-cible').value.trim();
-  bouton.disabled = true;
-  try {
-    const r = await pywebview.api.corriger_transcription(
-      etat.lecture.chemin, source, cible, $('#correction-regle').checked);
-    if (!r.ok) {
-      $('#retour-correction').innerHTML = encartAttention(r.message);
-      return;
-    }
-    fermerModale($('#modale-correction'));
-    if (r.nb_corrections !== undefined) majCorrections({ nb: r.nb_corrections, erreurs: [] });
-    journaliser('ok', t('ui.correction.journal', {
-      source: source, cible: cible, message: r.message,
-    }));
-    majCompteurVocabulaire();
-    await chargerLecture(etat.lecture.chemin);
-    retourLecture(r.message, 'ok');
-  } catch (e) {
-    console.error(e);
-    $('#retour-correction').innerHTML = encartAttention(t('ui.correction.echec'));
-  } finally {
-    bouton.disabled = false;
-  }
-}
 
 /* --------------------------------------------------- Reprises en attente */
 
@@ -1955,8 +1996,8 @@ function dessinerReprises() {
           ecoule: r.ecoule_texte,
         }))}</div>
       </div>
-      <button class="bouton" data-reprendre>${ech(t('ui.reprise.reprendre'))}</button>
-      <button class="bouton bouton-discret" data-oublier>${ech(t('ui.reprise.oublier'))}</button>
+      <button class="bouton bouton-petit" data-reprendre>${ech(t('ui.reprise.reprendre'))}</button>
+      <button class="bouton bouton-discret bouton-petit" data-oublier>${ech(t('ui.reprise.oublier'))}</button>
     </div>`).join('');
 
   $$('#bloc-reprises [data-reprendre]').forEach((b) => {
@@ -1965,13 +2006,11 @@ function dessinerReprises() {
       const r = await pywebview.api.reprendre(cle);
       if (!r.ok) {
         // La carte reste : la reprise est toujours sur le disque, et le refus
-        // est dit la ou l'on regarde, pas seulement dans le journal replie.
+        // est dit la ou l'on regarde.
         journaliser('attention', r.message);
         setEtat(r.message, 'erreur');
         return;
       }
-      // La reprise reste sur le disque jusqu'a la fin du calcul, mais elle est
-      // maintenant dans la file : la proposer une seconde fois n'a plus de sens.
       etat.reprises = etat.reprises.filter((x) => x.cle !== cle);
       dessinerReprises();
       majBoutons();
@@ -2001,7 +2040,11 @@ async function ouvrirApercu(chemin) {
   }
 }
 
-/* --------------------------------------------------------------- Journal */
+/* --------------------------------------------------------------- Journal
+
+   Le journal vit dans Reglages, Journal. Un avertissement ou une erreur est
+   aussi dit dans la ligne d'etat, la ou l'on regarde, sauf pendant une
+   transcription, ou la ligne d'etat dit la progression. */
 
 function journaliser(niveau, texte) {
   const zone = $('#journal-contenu');
@@ -2012,23 +2055,16 @@ function journaliser(niveau, texte) {
   zone.appendChild(ligne);
   while (zone.childElementCount > 500) zone.removeChild(zone.firstChild);
   zone.scrollTop = zone.scrollHeight;
-  $('#journal-dernier').textContent = texte;
-}
-
-function basculerJournal() {
-  const entete = $('#journal-entete');
-  const contenu = $('#journal-contenu');
-  const ouvert = contenu.classList.toggle('ouvert');
-  entete.classList.toggle('ouvert', ouvert);
-  entete.setAttribute('aria-expanded', ouvert ? 'true' : 'false');
-  if (ouvert) contenu.scrollTop = contenu.scrollHeight;
-  enregistrer({ journal_ouvert: ouvert });
+  if ((niveau === 'attention' || niveau === 'erreur') && !etat.enCours && etat.pret) {
+    setEtat(texte, niveau === 'erreur' ? 'erreur' : 'attention');
+  }
 }
 
 /* ------------------------------------------------------------ Etat global */
 
 function setEtat(texte, classe) {
   $('#etat-texte').textContent = texte;
+  $('#etat-texte').title = texte;
   $('#etat-global').className = 'etat-global ' + (classe || '');
 }
 
@@ -2038,6 +2074,14 @@ function majBoutons() {
   $('#btn-arreter').disabled = !etat.enCours;
   $('#btn-lancer').innerHTML = icone('i-lecture', 'icone-s') + ' '
     + ech(enAttente > 1 ? t('ui.bouton.lancer_n', { n: enAttente }) : t('ui.bouton.lancer'));
+  majActivite();
+}
+
+/* « Fichier 2 sur 4 » : position du fichier en cours dans le lancement. */
+function etatPassage(id) {
+  const total = etat.passage.length;
+  const rang = etat.passage.indexOf(id) + 1;
+  return total > 1 && rang > 0 ? t('ui.etat.fichier_n', { rang: rang, total: total }) + ' · ' : '';
 }
 
 /* ------------------------------------------- Rappels appeles par Python */
@@ -2054,7 +2098,7 @@ window.onFichiersAjoutes = function (items) {
   items.forEach((it) => etat.fichiers.set(it.id, Object.assign({ pct: 0 }, it)));
   dessinerFile();
   majBoutons();
-  basculerVue('file');
+  if (etat.enCours) items.forEach((it) => { if (!etat.passage.includes(it.id)) etat.passage.push(it.id); });
 };
 
 window.onDuree = async function (id, secondes, texte) {
@@ -2093,32 +2137,15 @@ function formaterDuree(secondes) {
   return t('duree.secondes', { s: s });
 }
 
-/* Ligne d'un fichier en cours : phase, temps ecoule qui avance chaque seconde,
-   reste a faire qui decompte entre deux releves de Python. */
-function metaActive(it) {
-  const maintenant = Date.now();
-  const ecoule = it.depart ? (maintenant - it.depart) / 1000 : 0;
-  let restant = '';
-  if (typeof it.restant_s === 'number') {
-    const reste = it.restant_s - (maintenant - (it.restant_recu || maintenant)) / 1000;
-    restant = reste > 5 ? formaterDuree(reste) : t('ui.ligne.bientot');
-  }
-  return [it.phase || it.message,
-    ecoule >= 1 ? t('ui.ligne.ecoule', { duree: formaterDuree(ecoule) }) : '',
-    restant ? t('ui.ligne.restant', { duree: restant }) : '']
-    .filter(Boolean).join(' · ');
-}
-
-const ETATS_ACTIFS = ['decodage', 'transcription', 'locuteurs', 'ecriture'];
-
 /* Une fois par seconde, les lignes en cours se mettent a jour d'elles-memes :
    plus d'horloge figee entre deux paliers ni pendant le chargement du modele. */
 setInterval(() => {
   for (const [id, it] of etat.fichiers) {
     if (!ETATS_ACTIFS.includes(it.etat)) continue;
-    const meta = document.querySelector(`#vue-file .ligne[data-id="${CSS.escape(id)}"] .meta`);
-    if (meta) meta.textContent = metaActive(it);
+    const temps = document.querySelector(`#vue-file .ligne[data-id="${CSS.escape(id)}"] .temps`);
+    if (temps) temps.innerHTML = tempsActif(it);
   }
+  majActivite();
 }, 1000);
 
 window.onEtat = function (id, nouvelEtat, message) {
@@ -2126,18 +2153,21 @@ window.onEtat = function (id, nouvelEtat, message) {
   if (!it) return;
   if (nouvelEtat === 'decodage' || !it.depart) it.depart = Date.now();
   if (!ETATS_ACTIFS.includes(nouvelEtat)) { it.restant_s = undefined; it.indetermine = false; }
+  const devientActif = ETATS_ACTIFS.includes(nouvelEtat) && !ETATS_ACTIFS.includes(it.etat);
   it.etat = nouvelEtat;
   it.message = message;
   if (nouvelEtat !== 'attente') it.phase = message;
+  if (devientActif) it.indetermine = true;
   majLigne(id);
-  if (['decodage', 'transcription', 'locuteurs', 'ecriture'].includes(nouvelEtat)) {
-    setEtat(t('ui.etat.en_cours', { message: message, nom: it.nom }), 'actif');
+  if (ETATS_ACTIFS.includes(nouvelEtat)) {
+    setEtat(etatPassage(id) + t('ui.etat.en_cours', { message: message, nom: it.nom }), 'actif');
   }
 };
 
 window.onProgression = function (id, d) {
   const it = etat.fichiers.get(id);
   if (!it) return;
+  const changePhase = it.phase !== d.phase || it.indetermine !== !!d.indetermine;
   Object.assign(it, { pct: d.pct, phase: d.phase, ecoule: d.ecoule, restant: d.restant,
     indetermine: !!d.indetermine });
   // Python fait foi pour le temps ecoule (une reprise y ajoute le calcul deja
@@ -2146,22 +2176,19 @@ window.onProgression = function (id, d) {
   it.restant_s = typeof d.restant_s === 'number' ? d.restant_s : undefined;
   it.restant_recu = Date.now();
   const ligne = document.querySelector(`#vue-file .ligne[data-id="${CSS.escape(id)}"]`);
-  if (ligne) {
+  if (ligne && ligne.classList.contains('active') && !changePhase) {
     const barre = ligne.querySelector('.barre');
-    if (barre) {
-      barre.classList.toggle('indeterminee', it.indetermine);
-      barre.querySelector('span').style.width = d.pct + '%';
-      if (it.indetermine) barre.removeAttribute('aria-valuenow');
-      else barre.setAttribute('aria-valuenow', String(d.pct));
-    }
-    const meta = ligne.querySelector('.meta');
-    if (meta) meta.textContent = metaActive(it);
+    barre.querySelector('span').style.width = d.pct + '%';
+    barre.setAttribute('aria-valuenow', String(d.pct));
+    ligne.querySelector('.pourcentage').textContent = `${d.pct} %`;
+    ligne.querySelector('.temps').innerHTML = tempsActif(it);
   } else {
     majLigne(id);
   }
   // Un seul pourcentage : celui de la barre, repris tel quel par la ligne d'etat.
-  setEtat(it.indetermine ? t('ui.etat.en_cours', { message: d.phase, nom: it.nom })
-    : t('ui.etat.progression', { phase: d.phase, pct: d.pct, nom: it.nom }), 'actif');
+  setEtat(etatPassage(id) + (it.indetermine ? t('ui.etat.en_cours', { message: d.phase, nom: it.nom })
+    : t('ui.etat.progression', { phase: d.phase, pct: d.pct, nom: it.nom })), 'actif');
+  majActivite();
 };
 
 window.onFichierTermine = function (id, d) {
@@ -2189,20 +2216,23 @@ window.onFichierTermine = function (id, d) {
 
 window.onFileTerminee = function (d) {
   etat.enCours = false;
+  etat.passage = [];
   majBoutons();
   if (d.echecs) {
-    setEtat(t('ui.etat.bilan_echecs', { reussis: d.reussis, echecs: d.echecs }), 'erreur');
+    setEtat(t('ui.etat.bilan_echecs', { reussis: tn('ui.etat.reussies', d.reussis), echecs: tn('ui.etat.echecs', d.echecs) }), 'erreur');
   } else if (d.annules) {
-    setEtat(t('ui.etat.bilan_arrete', { reussis: d.reussis }), '');
+    setEtat(tn('ui.etat.bilan_arrete', d.reussis), '');
   } else if (d.voix_non_separees) {
-    setEtat(t('ui.etat.bilan_ok_sans_voix', { reussis: d.reussis }), 'attention');
+    setEtat(tn('ui.etat.bilan_ok_sans_voix', d.reussis), 'attention');
   } else {
-    setEtat(t('ui.etat.bilan_ok', { reussis: d.reussis }), 'succes');
+    setEtat(tn('ui.etat.bilan_ok', d.reussis), 'succes');
   }
   journaliser(d.echecs ? 'attention' : 'ok', t('ui.etat.file_terminee', {
-    reussis: d.reussis, echecs: d.echecs, annules: d.annules,
+    reussis: tn('ui.etat.reussies', d.reussis), echecs: tn('ui.etat.echecs', d.echecs),
+    annules: tn('ui.etat.annulees', d.annules),
   }));
   pywebview.api.charger_historique();
+  majRythme();
   // Un fichier arrete en route laisse une reprise : elle est proposee tout de
   // suite, sans attendre le prochain demarrage de l'application.
   pywebview.api.liste_reprises().then((liste) => {
@@ -2258,7 +2288,8 @@ function ouvrirModale(selecteur) {
   majInertie();
   setTimeout(() => {
     if (voile.contains(document.activeElement)) return;
-    const cible = voile.querySelector('input:not([readonly]):not([type=hidden]), textarea, select')
+    const cible = voile.querySelector('input:not([readonly]):not([type=hidden]):not([type=checkbox]), textarea, select')
+      || voile.querySelector('.modale-pied .bouton-accent:not([hidden])')
       || voile.querySelector('.modale');
     if (cible) {
       if (!cible.hasAttribute('tabindex') && cible.classList.contains('modale')) cible.setAttribute('tabindex', '-1');
@@ -2275,19 +2306,36 @@ function fermerModale(el) {
     const retour = pileFocus.pop();
     if (retour && retour.focus && document.contains(retour)) retour.focus({ preventScroll: true });
   }
-  if (el.id === 'modale-lecture') {
-    masquerBoutonCorrection();
-    const son = $('#lecture-son');
-    if (son) son.pause();
+  if (el.id === 'modale-correction' && typeof masquerBoutonCorrection === 'function') masquerBoutonCorrection();
+}
+
+/* Piege du focus : Tab et Maj+Tab tournent dans la fenetre du dessus. */
+function pieger(e) {
+  const ouvertes = $$('.voile.ouvert');
+  const voile = ouvertes[ouvertes.length - 1];
+  if (!voile || e.key !== 'Tab') return;
+  const focusables = Array.from(voile.querySelectorAll(
+    'button, input, select, textarea, [href], [tabindex]:not([tabindex="-1"])'))
+    .filter((x) => !x.disabled && !x.hidden && x.offsetParent !== null);
+  if (!focusables.length) return;
+  const premier = focusables[0];
+  const dernier = focusables[focusables.length - 1];
+  if (e.shiftKey && (document.activeElement === premier || !voile.contains(document.activeElement))) {
+    e.preventDefault(); dernier.focus();
+  } else if (!e.shiftKey && (document.activeElement === dernier || !voile.contains(document.activeElement))) {
+    e.preventDefault(); premier.focus();
   }
-  if (el.id === 'modale-correction') masquerBoutonCorrection();
 }
 
 /* Echap ferme la fenetre du dessus, pas la pile entiere : depuis la correction,
-   on revient a la lecture, on n'en est pas ejecte. */
+   on revient a la relecture, on n'en est pas ejecte. */
 function fermerDerniereModale() {
   const ouvertes = $$('.voile.ouvert');
-  if (ouvertes.length) fermerModale(ouvertes[ouvertes.length - 1]);
+  if (!ouvertes.length) return false;
+  const dessus = ouvertes[ouvertes.length - 1];
+  if (dessus.id === 'modale-accueil') { fermerAccueil(false); return true; }
+  fermerModale(dessus);
+  return true;
 }
 
 
@@ -2297,19 +2345,18 @@ function appliquerTheme(mode) {
   if (mode === 'auto') document.documentElement.removeAttribute('data-theme');
   else document.documentElement.setAttribute('data-theme', mode);
   etat.config.theme = mode;
+  const choix = $('#choix-theme');
+  if (choix) choix.value = mode;
 }
 
 function themeSuivant() {
-  /* Bascule sur le theme reellement affiche : l'ancien cycle auto -> clair -> sombre
-     produisait un clic sans effet visible quand « clair » coincidait avec le systeme. */
+  /* Bascule sur le theme reellement affiche ; « Automatique » se retrouve dans
+     Reglages, Application. */
   const affiche = document.documentElement.getAttribute('data-theme')
     || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'sombre' : 'clair');
   const suivant = affiche === 'sombre' ? 'clair' : 'sombre';
   appliquerTheme(suivant);
   enregistrer({ theme: suivant });
-  journaliser('info', t('ui.journal.theme', {
-    theme: t(suivant === 'sombre' ? 'ui.theme.sombre' : 'ui.theme.clair'),
-  }));
 }
 
 function appliquerZoom(valeur) {
@@ -2319,19 +2366,28 @@ function appliquerZoom(valeur) {
 }
 
 /* Taille de la fenetre divisee par le grossissement, publiee en variables CSS.
-
-   « zoom » multiplie tout ce que contient le corps de page, unites vh comprises :
-   sans cette division, une fenetre bornee a 85vh depassait par le bas des que le
-   grossissement montait, et le panneau d'aide sortait de l'ecran. Voir le
-   commentaire de :root dans styles.css. */
+   Voir le commentaire de :root dans styles.css. */
 function mesurerFenetre() {
   const grossissement = etat.config.zoom || 1;
   const style = document.documentElement.style;
   style.setProperty('--hauteur-fenetre', `${window.innerHeight / grossissement}px`);
   style.setProperty('--largeur-fenetre', `${window.innerWidth / grossissement}px`);
+  // Largeur utile, grossissement compris : elle choisit la disposition etroite.
+  const utile = window.innerWidth / grossissement;
+  document.documentElement.classList.toggle('etroit', utile < 900);
+  document.documentElement.classList.toggle('tres-etroit', utile < 660);
 }
 
 window.addEventListener('resize', mesurerFenetre);
+
+/* Vitesses de lecture, au separateur decimal de la langue. */
+function remplirVitesses() {
+  const choix = $('#rl-vitesse');
+  const valeur = choix.value || '1';
+  choix.innerHTML = [0.75, 1, 1.25, 1.5, 1.75, 2].map((v) =>
+    `<option value="${v}">${ech(t('ui.rl.vitesse_valeur', { v: String(v).replace('.', t('format.decimal')) }))}</option>`).join('');
+  choix.value = valeur;
+}
 
 /* ------------------------------------------------------------ Cablage UI */
 
@@ -2341,19 +2397,50 @@ document.addEventListener('DOMContentLoaded', () => {
   definirLangue(langueProvisoire());
   preparerModales();
   traduirePage();
+  remplirVitesses();
 
   dessinerFile();
   dessinerHistorique();
+  brancherRadios('#segments-rythme');
+  brancherRadios('#bloc-rythme .rythmes');
 
-  $('#materiel-entete').addEventListener('click', basculerMateriel);
-  $('#materiel-entete').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); basculerMateriel(); }
+  // Navigation
+  $('#btn-nav-reglages').addEventListener('click', () =>
+    (etat.vue === 'reglages' ? retourPrincipale() : ouvrirReglages()));
+  $('#btn-nav-vocabulaire').addEventListener('click', () =>
+    (etat.vue === 'vocabulaire' ? retourPrincipale() : ouvrirVocabulaire()));
+  $$('[data-retour]').forEach((b) => b.addEventListener('click', retourPrincipale));
+  $('#indic-activite').addEventListener('click', retourPrincipale);
+  $('#btn-tous-reglages').addEventListener('click', () => ouvrirReglages('transcription'));
+  $$('.reglages-nav [role=tab]').forEach((b) => {
+    b.addEventListener('click', () => afficherSection(b.dataset.section, true));
+  });
+  $('.reglages-nav').addEventListener('keydown', (e) => {
+    if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+    const onglets = $$('.reglages-nav [role=tab]');
+    const i = onglets.indexOf(document.activeElement);
+    if (i < 0) return;
+    e.preventDefault();
+    let j = i + ((e.key === 'ArrowDown' || e.key === 'ArrowRight') ? 1 : -1);
+    if (e.key === 'Home') j = 0;
+    if (e.key === 'End') j = onglets.length - 1;
+    const cible = onglets[(j + onglets.length) % onglets.length];
+    afficherSection(cible.dataset.section, true);
+    cible.focus();
   });
 
   $('#btn-theme').addEventListener('click', themeSuivant);
   $('#btn-aide').addEventListener('click', ouvrirAide);
   $('#btn-aide-maj').addEventListener('click', verifierMajDepuisAide);
   $('#btn-ouvrir-app').addEventListener('click', () => pywebview.api.ouvrir_dossier_application());
+  $('#choix-theme').addEventListener('change', (e) => {
+    appliquerTheme(e.target.value);
+    enregistrer({ theme: e.target.value });
+  });
+
+  // Accueil du premier lancement
+  $('#btn-accueil-appliquer').addEventListener('click', () => fermerAccueil(true));
+  $('#btn-accueil-garder').addEventListener('click', () => fermerAccueil(false));
 
   // Depot de fichiers. Le chemin reel est recupere cote Python : un navigateur
   // ne le communique jamais au JavaScript.
@@ -2376,16 +2463,20 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Onglets
-  $('#onglet-file').addEventListener('click', () => basculerVue('file'));
-  $('#onglet-historique').addEventListener('click', () => basculerVue('historique'));
-  $('#btn-vider').addEventListener('click', () => {
-    Array.from(etat.fichiers.entries()).forEach(([id, it]) => {
-      if (['attente', 'termine', 'erreur', 'annule'].includes(it.etat)) etat.fichiers.delete(id);
+  // File et transcriptions
+  $('#btn-vider').addEventListener('click', retirerTermines);
+  $('#recherche-historique').addEventListener('input', dessinerHistorique);
+  $('#btn-ouvrir-sorties').addEventListener('click', () => pywebview.api.ouvrir_dossier_sortie());
+
+  // Bandeau de lancement
+  $$('#segments-rythme .segment').forEach((b) => {
+    b.addEventListener('click', () => {
+      if ((etat.rythme || {}).choisi !== b.dataset.rythme) rafraichirRythme({ rythme: b.dataset.rythme });
     });
-    pywebview.api.vider_file();
-    dessinerFile();
-    majBoutons();
+  });
+  $('#opt-voix-lancement').addEventListener('change', (e) => {
+    $('#opt-diarisation').checked = e.target.checked;
+    $('#opt-diarisation').dispatchEvent(new Event('change'));
   });
 
   // Reglages simples
@@ -2394,7 +2485,7 @@ document.addEventListener('DOMContentLoaded', () => {
     majQualiteLangue();
   });
 
-  // Langue de l'interface : sans effet sur la langue parlee ci-dessus.
+  // Langue de l'interface : sans effet sur la langue parlee.
   $('#langue-interface').addEventListener('change', (e) => {
     changerLangueInterface(e.target.value);
   });
@@ -2427,14 +2518,6 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#btn-oublier-surveilles').addEventListener('click', async () => {
     const r = await pywebview.api.oublier_fichiers_surveilles();
     retourSurveillance(r);
-  });
-
-  // Espace utilise
-  $('#btn-stockage').addEventListener('click', () => {
-    $('#contenu-stockage').innerHTML =
-      `<p style="color:var(--texte-faible)">${ech(t('ui.stockage.mesure'))}</p>`;
-    ouvrirModale('#modale-stockage');
-    pywebview.api.mesurer_stockage();
   });
 
   // Verification de mise a jour et barre des taches
@@ -2523,7 +2606,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#opt-processeur').addEventListener('change', (e) =>
     enregistrer({ forcer_processeur: e.target.checked }));
 
-  // Glossaire et corrections
+  // Glossaire et corrections (ancien format)
   $('#btn-glossaire').addEventListener('click', async () => {
     const d = await pywebview.api.etat_initial();
     $('#zone-glossaire').value = d.glossaire.contenu || '';
@@ -2550,25 +2633,21 @@ document.addEventListener('DOMContentLoaded', () => {
     majCorrections(r);
     $('#retour-corrections').innerHTML = r.erreurs.length
       ? r.erreurs.map(encartAttention).join('')
-      : encartSucces(t('ui.voc.regles_enregistrees', { n: r.nb }));
-    journaliser('ok', t('ui.voc.regles_enregistrees', { n: r.nb }));
+      : encartSucces(tn('ui.voc.regles_enregistrees', r.nb));
+    journaliser('ok', tn('ui.voc.regles_enregistrees', r.nb));
     if (!r.erreurs.length) setTimeout(() => fermerModale($('#modale-corrections')), 700);
   });
 
   // Vocabulaire, format 2
   brancherVocabulaire();
 
-  // Relecture
+  // Relecture : options
   $('#opt-compagnon').addEventListener('change', (e) =>
     enregistrer({ compagnon_confiance: e.target.checked }));
   $('#opt-apprises').addEventListener('change', (e) =>
     enregistrer({ corrections_apprises: e.target.checked }));
   $('#opt-sauvegarde').addEventListener('change', (e) =>
     enregistrer({ sauvegarde_progressive: e.target.checked }));
-  $('#opt-lecture-audio').addEventListener('change', (e) => {
-    enregistrer({ lecture_audio: e.target.checked });
-    if (etat.lecture) { etat.lecture.lecture_audio = e.target.checked; dessinerLecture(); }
-  });
 
   // Gabarit d'instructions pour l'IA
   $('#btn-gabarit').addEventListener('click', async () => {
@@ -2582,61 +2661,6 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#retour-gabarit').innerHTML = encartSucces(r.message);
     journaliser('ok', t('ui.gabarit.enregistre'));
     setTimeout(() => fermerModale($('#modale-gabarit')), 700);
-  });
-
-  // Vue de lecture
-  $('#btn-ouvrir-lecture').addEventListener('click', () => {
-    if (etat.lecture) pywebview.api.ouvrir(etat.lecture.chemin);
-  });
-  $('#btn-copier-lecture').addEventListener('click', async () => {
-    await copier(texteLecture());
-    retourLecture(t('ui.lecture.texte_copie'), 'ok');
-    journaliser('ok', t('ui.lecture.texte_copie_journal'));
-  });
-  $('#btn-copier-ia').addEventListener('click', async () => {
-    if (!etat.lecture) return;
-    const bouton = $('#btn-copier-ia');
-    bouton.disabled = true;
-    try {
-      const r = await pywebview.api.copier_pour_ia(etat.lecture.chemin);
-      if (!r.ok) {
-        retourLecture(r.message || t('ui.lecture.copie_impossible'), 'erreur');
-        return;
-      }
-      retourLecture(t('ui.lecture.ia_copie'), 'ok');
-      journaliser('ok', r.message);
-    } catch (e) {
-      console.error(e);
-      retourLecture(t('ui.lecture.copie_impossible'), 'erreur');
-    } finally {
-      bouton.disabled = false;
-    }
-  });
-
-  // Confiance au survol, correction sur selection : un seul ecouteur pour tout
-  // le texte, quel que soit le nombre de mots affiches.
-  $('#lecture-texte').addEventListener('mouseover', infobulleMot);
-  $('#lecture-texte').addEventListener('mouseup', () => setTimeout(positionnerBoutonCorrection, 0));
-  $('#lecture-texte').addEventListener('keyup', () => setTimeout(positionnerBoutonCorrection, 0));
-  $('#modale-lecture .modale-corps').addEventListener('scroll', masquerBoutonCorrection);
-  $('#btn-corriger-selection').addEventListener('mousedown', (e) => e.preventDefault());
-  $('#btn-corriger-selection').addEventListener('click', ouvrirCorrection);
-  $('#correction-cible').addEventListener('input', majQuestionRegle);
-  $('#correction-cible').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); appliquerCorrection(); }
-  });
-  $('#btn-appliquer-correction').addEventListener('click', appliquerCorrection);
-  $('#btn-annuler-correction').addEventListener('click', annulerCorrection);
-
-  // Ecoute de l'extrait correspondant au paragraphe clique.
-  $('#lecture-texte').addEventListener('click', (e) => {
-    const son = $('#lecture-son');
-    const para = e.target.closest ? e.target.closest('.lecture-para') : null;
-    if (!son || !para) return;
-    const selection = window.getSelection();
-    if (selection && !selection.isCollapsed) return;   // l'utilisateur selectionne
-    son.currentTime = parseFloat(para.dataset.debut || '0') || 0;
-    son.play().catch(() => { /* pas de lecture possible, sans consequence */ });
   });
 
   // Installation de la separation des locuteurs
@@ -2661,7 +2685,7 @@ document.addEventListener('DOMContentLoaded', () => {
     majDiarisation();
   });
 
-  // Vitesse de cette machine : moteur OpenVINO et banc d'essai
+  // Moteur OpenVINO, banc d'essai, poste
   $('#btn-installer-openvino').addEventListener('click', installerOpenvino);
   $('#btn-annuler-openvino').addEventListener('click', () => pywebview.api.annuler_installation_openvino());
   $('#btn-retirer-openvino').addEventListener('click', async () => {
@@ -2689,7 +2713,9 @@ document.addEventListener('DOMContentLoaded', () => {
     pywebview.api.ecarter_proposition();
   });
   $$('#bloc-rythme .rythme').forEach((b) => {
-    b.addEventListener('click', () => rafraichirRythme({ rythme: b.dataset.rythme }));
+    b.addEventListener('click', () => {
+      if ((etat.rythme || {}).choisi !== b.dataset.rythme) rafraichirRythme({ rythme: b.dataset.rythme });
+    });
   });
   $('#opt-rythme-auto').addEventListener('change', (e) =>
     rafraichirRythme({ rythme_auto: e.target.checked }));
@@ -2740,14 +2766,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Journal
-  $('#journal-entete').addEventListener('click', (e) => {
-    if (e.target.id === 'btn-fichier-log') return;
-    basculerJournal();
-  });
-  $('#btn-fichier-log').addEventListener('click', (e) => {
-    e.stopPropagation();
-    pywebview.api.ouvrir_journal();
-  });
+  $('#btn-fichier-log').addEventListener('click', () => pywebview.api.ouvrir_journal());
 
   // Actions
   $('#btn-lancer').addEventListener('click', lancer);
@@ -2762,15 +2781,22 @@ document.addEventListener('DOMContentLoaded', () => {
     b.addEventListener('click', () => fermerModale(b.closest('.voile')));
   });
   $$('.voile').forEach((v) => {
-    v.addEventListener('mousedown', (e) => { if (e.target === v) fermerModale(v); });
-  });
-  document.addEventListener('mousedown', (e) => {
-    if (!e.target.closest || !e.target.closest('#btn-corriger-selection')) masquerBoutonCorrection();
+    v.addEventListener('mousedown', (e) => {
+      if (e.target === v && v.id !== 'modale-accueil') fermerModale(v);
+    });
   });
 
-  // Raccourcis. Trois utiles, et rien de plus : parcourir, lancer, fermer.
+  // Raccourcis de toute l'application. Ceux de la relecture sont dans
+  // web/relecture.js, ceux du vocabulaire sur sa liste.
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { fermerDerniereModale(); return; }
+    if (e.key === 'Tab') { pieger(e); return; }
+    if (e.key === 'Escape') {
+      if (fermerDerniereModale()) return;
+      if (etat.vue === 'relecture' && typeof echapRelecture === 'function' && echapRelecture()) return;
+      if (etat.vue === 'vocabulaire' && !$('#voc-edition').hidden) { fermerEditionVocabulaire(); return; }
+      if (etat.vue !== 'principale') { retourPrincipale(); return; }
+      return;
+    }
     const modaleOuverte = !!$('.voile.ouvert');
     if (e.ctrlKey && (e.key === 'o' || e.key === 'O')) {
       e.preventDefault();
@@ -2780,15 +2806,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.ctrlKey && e.key === 'Enter') {
       e.preventDefault();
       if (!modaleOuverte && !$('#btn-lancer').disabled) lancer();
-    }
-    // Ctrl+Z dans la relecture : defait la derniere correction, sauf dans un
-    // champ de saisie, ou il garde son sens habituel.
-    if (e.ctrlKey && (e.key === 'z' || e.key === 'Z')
-        && $('#modale-lecture').classList.contains('ouvert')
-        && !$('#modale-correction').classList.contains('ouvert')
-        && !/^(INPUT|TEXTAREA)$/.test((document.activeElement || {}).tagName || '')) {
-      e.preventDefault();
-      annulerCorrection();
       return;
     }
     if (e.ctrlKey && (e.key === '+' || e.key === '=')) { e.preventDefault(); zoom(0.1); }
@@ -2809,15 +2826,6 @@ function zoom(delta) {
   enregistrer({ zoom: etat.config.zoom });
 }
 
-function basculerVue(vue) {
-  const file = vue === 'file';
-  $('#vue-file').style.display = file ? 'flex' : 'none';
-  $('#vue-historique').style.display = file ? 'none' : 'flex';
-  $('#onglet-file').setAttribute('aria-selected', file ? 'true' : 'false');
-  $('#onglet-historique').setAttribute('aria-selected', file ? 'false' : 'true');
-  $('#btn-vider').style.display = file ? '' : 'none';
-}
-
 async function lancer() {
   if (etat.enCours) return;
   const retour = await pywebview.api.demarrer();
@@ -2827,7 +2835,9 @@ async function lancer() {
     return;
   }
   etat.enCours = true;
+  etat.passage = Array.from(etat.fichiers.entries()).filter(([, f]) => f.etat === 'attente').map(([id]) => id);
   majBoutons();
+  majRythme();
   setEtat(t('ui.etat.demarrage'), 'actif');
 }
 

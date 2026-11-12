@@ -190,6 +190,16 @@ def essai_parite_js(source: str) -> None:
 # 3 et 4. Les clés citées par le code existent
 # ---------------------------------------------------------------------------
 
+#: Scripts de l'interface soumis aux contrôles : tous ceux de `web/`, sauf le
+#: catalogue lui-même et la doublure provisoire de la passerelle (données
+#: fictives des essais à l'écran, retirée à la fusion avec la branche moteur).
+EXCLUS_INTERFACE = {"langues.js", "doublure-passerelle.js"}
+
+
+def scripts_interface() -> list[Path]:
+    return sorted(f for f in (RACINE / "web").glob("*.js") if f.name not in EXCLUS_INTERFACE)
+
+
 _MOTIF_APPEL_PY = re.compile(r"\blangues\.tn?\(\s*(['\"])([A-Za-z0-9_.]+)\1\s*[,)]")
 _MOTIF_APPEL_JS = re.compile(r"(?<![\w.])tn?\(\s*(['\"])([A-Za-z0-9_.]+)\1\s*[,)]")
 _MOTIF_I18N = re.compile(r'data-i18n(?:-html|-title|-aria|-placeholder)?="([A-Za-z0-9_.]+)"')
@@ -223,13 +233,13 @@ def essai_cles_citees_js(source_catalogue: str) -> None:
 
     connues = cles_js(source_catalogue, "fr")
 
-    app = sans_commentaires_js((RACINE / "web" / "app.js").read_text(encoding="utf-8"))
+    app = "\n".join(sans_commentaires_js(f.read_text(encoding="utf-8")) for f in scripts_interface())
     citees = {cle for _, cle in _MOTIF_APPEL_JS.findall(app)}
     inconnues = sorted(
         cle for cle in citees
         if cle not in connues and not {cle + ".un", cle + ".autres"} <= connues
     )
-    verifier(not inconnues, "app.js : toutes les clés citées existent",
+    verifier(not inconnues, "scripts de l'interface : toutes les clés citées existent",
              ", ".join(inconnues[:6]))
 
     html = (RACINE / "web" / "index.html").read_text(encoding="utf-8")
@@ -247,14 +257,14 @@ def essai_cles_citees_js(source_catalogue: str) -> None:
 def essai_francais_en_dur() -> None:
     titre("Français en dur dans l'interface")
 
-    app = (RACINE / "web" / "app.js").read_text(encoding="utf-8")
-    code = sans_commentaires_js(app)
-    restants = accents(code)
-    verifier(
-        not restants,
-        "app.js : aucun littéral accentué hors commentaires",
-        " ".join(sorted(restants)) + " ; " + " | ".join(lignes_avec(code, "".join(restants))),
-    )
+    for fichier in scripts_interface():
+        code = sans_commentaires_js(fichier.read_text(encoding="utf-8"))
+        restants = accents(code)
+        verifier(
+            not restants,
+            f"{fichier.name} : aucun littéral accentué hors commentaires",
+            " ".join(sorted(restants)) + " ; " + " | ".join(lignes_avec(code, "".join(restants))),
+        )
 
     html = (RACINE / "web" / "index.html").read_text(encoding="utf-8")
     corps = sans_commentaires_html(html)
@@ -295,11 +305,11 @@ def essai_tirets(source_catalogue: str) -> None:
             " | ".join(lignes_avec(bloc, TIRETS_INTERDITS)),
         )
 
-    for relatif in ("web/app.js", "web/index.html", "web/styles.css"):
-        texte = (RACINE / relatif).read_text(encoding="utf-8")
+    for chemin in [*scripts_interface(), RACINE / "web" / "index.html", RACINE / "web" / "styles.css"]:
+        texte = chemin.read_text(encoding="utf-8")
         verifier(
             not any(t in texte for t in TIRETS_INTERDITS),
-            f"{relatif}",
+            f"web/{chemin.name}",
             " | ".join(lignes_avec(texte, TIRETS_INTERDITS)),
         )
 

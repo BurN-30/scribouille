@@ -20,8 +20,13 @@
   <symbol id="i-alerte" viewBox="0 0 24 24"><path d="M12 3.5 1.8 20.5h20.4z"/><path d="M12 10v4.5M12 17.6v.1"/></symbol>
   <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.1"/></symbol>
   <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-haut" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></symbol>
+  <symbol id="i-retour" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
   <symbol id="i-dossier" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
   <symbol id="i-lecture" viewBox="0 0 24 24"><path d="M6 4.5v15L19.5 12z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+  <symbol id="i-recul" viewBox="0 0 24 24"><path d="M11 7 6 12l5 5M18 7l-5 5 5 5"/></symbol>
+  <symbol id="i-avance" viewBox="0 0 24 24"><path d="m13 7 5 5-5 5M6 7l5 5-5 5"/></symbol>
   <symbol id="i-arret" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
   <symbol id="i-livre" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H19v3H6.5"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
@@ -40,12 +45,13 @@
   <symbol id="i-crayon" viewBox="0 0 24 24"><path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17z"/><path d="M14.5 6.5l3 3"/></symbol>
   <symbol id="i-reprise" viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3.5 4.5V10h5.5"/></symbol>
   <symbol id="i-langue" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3.2 9.5h17.6M3.2 14.5h17.6"/><path d="M12 3c2.4 2.6 3.6 5.6 3.6 9s-1.2 6.4-3.6 9c-2.4-2.6-3.6-5.6-3.6-9S9.6 5.6 12 3z"/></symbol>
+  <symbol id="i-disque" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></symbol>
 </svg>
 
 <header class="entete">
   <div class="marque">
     <svg class="icone-l icone"><use href="#i-onde"></use></svg>
-    <h1>Scribouille</h1>
+    <span class="nom-appli">Scribouille</span>
     <span class="version" id="version"></span>
   </div>
   <span class="confidentialite" data-i18n-title="ui.entete.local_titre">
@@ -56,7 +62,22 @@
     <svg class="icone-s icone"><use href="#i-dossier"></use></svg>
     <span id="indic-surveillance-texte"></span>
   </span>
+  <!-- Transcription en cours, vue depuis un autre ecran : un clic y ramene. -->
+  <button class="activite" id="indic-activite" hidden>
+    <span class="point"></span><span id="indic-activite-texte"></span>
+  </button>
   <span class="pousse"></span>
+  <nav class="navigation" data-i18n-aria="ui.nav.titre">
+    <button class="bouton bouton-nav" id="btn-nav-vocabulaire" data-vue="vocabulaire" data-i18n-aria="ui.nav.vocabulaire">
+      <svg class="icone-s icone"><use href="#i-livre"></use></svg>
+      <span data-i18n="ui.nav.vocabulaire"></span>
+      <span class="voc-compteur" id="voc-compteur-propositions" hidden></span>
+    </button>
+    <button class="bouton bouton-nav" id="btn-nav-reglages" data-vue="reglages" data-i18n-aria="ui.nav.reglages">
+      <svg class="icone-s icone"><use href="#i-reglages"></use></svg>
+      <span data-i18n="ui.nav.reglages"></span>
+    </button>
+  </nav>
   <button class="bouton-icone" id="btn-theme"
           data-i18n-title="ui.entete.theme" data-i18n-aria="ui.entete.theme">
     <svg class="icone"><use href="#i-theme"></use></svg>
@@ -83,704 +104,828 @@
   </button>
 </div>
 
-<main class="corps">
+<!-- ======================== Ecran principal : les reunions ================== -->
+<main class="vue vue-principale" id="vue-principale" data-vue="principale">
+  <div class="colonne-centre">
 
-  <!-- ============================ Colonne principale ==================== -->
-  <section class="colonne colonne-principale">
-
-    <!-- Materiel -->
-    <div class="carte">
-      <div class="materiel" id="materiel-entete" role="button" tabindex="0"
-           aria-expanded="false" aria-controls="materiel-detail">
-        <svg class="icone puce"><use href="#i-puce"></use></svg>
-        <div class="contenu">
-          <div class="resume" id="materiel-resume" data-i18n="ui.materiel.analyse"></div>
-          <div class="conseil" id="materiel-conseil"></div>
+    <!-- Les seuls choix utiles a chaque lancement. Le reste est dans Reglages. -->
+    <section class="carte lancement" id="bloc-lancement" aria-labelledby="titre-lancement">
+      <h1 class="masque" id="titre-lancement" data-i18n="ui.lance.titre"></h1>
+      <div class="lancement-choix">
+        <div class="choix">
+          <span class="choix-libelle" id="lbl-qualite" data-i18n="ui.lance.qualite"></span>
+          <div class="segments" id="segments-qualite" role="radiogroup" aria-labelledby="lbl-qualite"></div>
         </div>
-        <svg class="icone chevron" id="materiel-chevron"><use href="#i-chevron"></use></svg>
+        <div class="choix">
+          <span class="choix-libelle" id="lbl-rythme" data-i18n="ui.lance.rythme"></span>
+          <div class="segments" id="segments-rythme" role="radiogroup" aria-labelledby="lbl-rythme">
+            <button class="segment" role="radio" data-rythme="vitesse" aria-checked="true" data-i18n="ui.rythme.vitesse"></button>
+            <button class="segment" role="radio" data-rythme="equilibre" aria-checked="false" data-i18n="ui.rythme.equilibre"></button>
+            <button class="segment" role="radio" data-rythme="discret" aria-checked="false" data-i18n="ui.rythme.discret"></button>
+          </div>
+        </div>
+        <div class="choix" id="choix-voix" hidden>
+          <span class="choix-libelle" id="lbl-voix" data-i18n="ui.lance.voix"></span>
+          <label class="bascule bascule-compacte">
+            <input type="checkbox" id="opt-voix-lancement" aria-labelledby="lbl-voix">
+            <span class="piste"></span>
+            <span id="voix-lancement-etat"></span>
+          </label>
+        </div>
       </div>
-      <div class="materiel-detail" id="materiel-detail"></div>
-    </div>
+      <p class="lancement-resume">
+        <span id="lancement-duree"></span>
+        <button class="bouton-lien" id="btn-tous-reglages" data-i18n="ui.lance.tous_reglages"></button>
+      </p>
+      <div id="lancement-avis"></div>
+    </section>
 
-    <!-- Reglage propose pour ce poste (app/adaptation.py) : au premier
-         lancement, ou sur le bouton « Reconnaitre ce poste ». Rien ne change
-         sans un clic sur « Appliquer ». -->
-    <div class="carte proposition" id="bloc-proposition" style="display:none">
-      <div class="proposition-titre">
-        <svg class="icone-s icone"><use href="#i-etincelle"></use></svg>
-        <span data-i18n="ui.proposition.titre"></span>
-      </div>
-      <p class="proposition-phrase" id="proposition-phrase"></p>
-      <p class="sous-libelle" id="proposition-rythme"></p>
-      <div id="proposition-notes"></div>
-      <div class="proposition-actions">
-        <button class="bouton bouton-accent" id="btn-proposition-appliquer">
-          <svg class="icone-s icone"><use href="#i-coche"></use></svg>
-          <span data-i18n="ui.proposition.appliquer"></span>
-        </button>
-        <button class="bouton bouton-discret" id="btn-proposition-plus-tard">
-          <span data-i18n="ui.proposition.plus_tard"></span>
-        </button>
-      </div>
-    </div>
-
-    <!-- Depot -->
     <div class="zone-depot" id="zone-depot" role="button" tabindex="0">
-      <svg class="icone" style="width:32px;height:32px"><use href="#i-depot"></use></svg>
-      <div class="principal" data-i18n="ui.depot.principal"></div>
-      <div class="secondaire" data-i18n="ui.depot.secondaire"></div>
+      <svg class="icone grande-icone"><use href="#i-depot"></use></svg>
+      <div class="depot-textes">
+        <div class="principal" data-i18n="ui.depot.principal"></div>
+        <div class="secondaire" data-i18n="ui.depot.secondaire"></div>
+      </div>
       <div class="formats" data-i18n="ui.depot.formats"></div>
     </div>
 
     <!-- Transcriptions interrompues, proposees a la reprise -->
     <div id="bloc-reprises"></div>
 
-    <!-- File et historique -->
-    <div class="carte" style="flex:1;display:flex;flex-direction:column;min-height:220px">
-      <div class="onglets" role="tablist">
-        <button class="onglet" role="tab" id="onglet-file" aria-selected="true" aria-controls="vue-file">
-          <span data-i18n="ui.onglet.file"></span> <span class="compteur" id="compteur-file">0</span>
-        </button>
-        <button class="onglet" role="tab" id="onglet-historique" aria-selected="false" aria-controls="vue-historique">
-          <span data-i18n="ui.onglet.historique"></span> <span class="compteur" id="compteur-historique">0</span>
-        </button>
+    <section class="carte section-liste" aria-labelledby="titre-file">
+      <div class="section-entete">
+        <h2 id="titre-file"><span data-i18n="ui.onglet.file"></span>
+          <span class="compteur" id="compteur-file">0</span></h2>
         <span class="pousse"></span>
-        <button class="bouton-discret bouton" id="btn-vider" style="margin:4px 6px">
+        <button class="bouton bouton-discret bouton-petit" id="btn-vider" hidden>
           <svg class="icone-s icone"><use href="#i-corbeille"></use></svg>
-          <span data-i18n="ui.bouton.vider"></span>
+          <span data-i18n="ui.file.retirer_termines"></span>
         </button>
       </div>
-      <div class="liste" id="vue-file" role="tabpanel" style="overflow-y:auto;flex:1"></div>
-      <div class="liste historique" id="vue-historique" role="tabpanel" style="overflow-y:auto;flex:1;display:none"></div>
-    </div>
+      <div class="liste" id="vue-file"></div>
+    </section>
 
-  </section>
-
-  <!-- ============================== Reglages ============================ -->
-  <aside class="colonne colonne-laterale">
-
-    <div class="bloc-reglage">
-      <span class="titre-section" data-i18n="ui.section.qualite"></span>
-      <div class="presets" id="presets"></div>
-      <div id="avertissements" style="margin-top:10px"></div>
-    </div>
-
-    <!-- Rythme : ce que la transcription prend au poste pendant que l'on
-         travaille a cote (voir app/rythme.py). Vitesse maximale par defaut. -->
-    <div class="bloc-reglage" id="bloc-rythme">
-      <span class="titre-section" data-i18n="ui.section.rythme"></span>
-      <div class="rythmes" role="radiogroup" data-i18n-aria="ui.section.rythme">
-        <button class="rythme" data-rythme="vitesse" role="radio" aria-checked="true">
-          <span data-i18n="ui.rythme.vitesse"></span></button>
-        <button class="rythme" data-rythme="equilibre" role="radio" aria-checked="false">
-          <span data-i18n="ui.rythme.equilibre"></span></button>
-        <button class="rythme" data-rythme="discret" role="radio" aria-checked="false">
-          <span data-i18n="ui.rythme.discret"></span></button>
-      </div>
-      <div class="rythme-desc" id="rythme-desc">--</div>
-      <label class="bascule" style="margin-top:10px">
-        <input type="checkbox" id="opt-rythme-auto">
-        <span class="piste"></span>
-        <span>
-          <span class="libelle" data-i18n="ui.rythme.auto"></span><br>
-          <span class="sous-libelle" id="rythme-auto-aide"></span>
-        </span>
-      </label>
-      <div id="rythme-retour"></div>
-    </div>
-
-    <div class="bloc-reglage">
-      <span class="titre-section" data-i18n="ui.section.langue_sortie"></span>
-      <div class="champ">
-        <label for="langue" data-i18n="ui.champ.langue_parlee"></label>
-        <select id="langue">
-          <option value="fr" data-i18n="ui.langue.fr"></option>
-          <option value="en" data-i18n="ui.langue.en"></option>
-          <option value="es" data-i18n="ui.langue.es"></option>
-          <option value="de" data-i18n="ui.langue.de"></option>
-          <option value="it" data-i18n="ui.langue.it"></option>
-          <option value="nl" data-i18n="ui.langue.nl"></option>
-          <option value="pt" data-i18n="ui.langue.pt"></option>
-          <option value="pl" data-i18n="ui.langue.pl"></option>
-          <option value="ro" data-i18n="ui.langue.ro"></option>
-          <option value="ar" data-i18n="ui.langue.ar"></option>
-          <option value="auto" data-i18n="ui.langue.auto"></option>
-        </select>
-        <span class="aide" id="qualite-langue"></span>
-      </div>
-      <div class="champ">
-        <label for="dossier-sortie" data-i18n="ui.champ.dossier_sortie"></label>
-        <div class="ligne-champ">
-          <input type="text" id="dossier-sortie" readonly>
-          <button class="bouton" id="btn-dossier" data-i18n-title="ui.titre.choisir_dossier">
-            <svg class="icone-s icone"><use href="#i-dossier"></use></svg>
-          </button>
-          <button class="bouton" id="btn-ouvrir-dossier" data-i18n-title="ui.titre.ouvrir_dossier">
-            <svg class="icone-s icone"><use href="#i-externe"></use></svg>
-          </button>
-        </div>
-      </div>
-      <div class="champ">
-        <label for="motif-sortie" data-i18n="ui.champ.motif"></label>
-        <input type="text" id="motif-sortie" spellcheck="false" placeholder="{date}-{nom}">
-        <span class="aide apercu-motif" id="apercu-motif"></span>
-        <span class="aide" data-i18n-html="ui.aide.motif"></span>
-      </div>
-      <div class="champ">
-        <label data-i18n="ui.champ.formats"></label>
-        <div class="cases">
-          <label class="case"><input type="checkbox" id="fmt-txt" checked> <span data-i18n="ui.format.txt"></span></label>
-          <label class="case"><input type="checkbox" id="fmt-srt"> <span data-i18n="ui.format.srt"></span></label>
-          <label class="case"><input type="checkbox" id="fmt-vtt"> <span data-i18n="ui.format.vtt"></span></label>
-        </div>
-        <label class="case" style="margin-top:6px">
-          <input type="checkbox" id="fmt-horodatage"> <span data-i18n="ui.format.horodatage"></span>
-        </label>
-      </div>
-    </div>
-
-    <div class="bloc-reglage">
-      <span class="titre-section" data-i18n="ui.section.veille"></span>
-      <label class="bascule">
-        <input type="checkbox" id="opt-surveillance">
-        <span class="piste"></span>
-        <span>
-          <span class="libelle" data-i18n="ui.veille.bascule"></span><br>
-          <span class="sous-libelle" id="etat-surveillance"></span>
-        </span>
-      </label>
-      <div id="bloc-surveillance" style="display:none;margin-top:10px">
-        <div class="champ">
-          <label for="dossier-surveille" data-i18n="ui.veille.champ"></label>
-          <div class="ligne-champ">
-            <input type="text" id="dossier-surveille" readonly>
-            <button class="bouton" id="btn-dossier-surveille" data-i18n-title="ui.titre.choisir_dossier">
-              <svg class="icone-s icone"><use href="#i-dossier"></use></svg>
-            </button>
-            <button class="bouton" id="btn-ouvrir-surveille" data-i18n-title="ui.titre.ouvrir_dossier">
-              <svg class="icone-s icone"><use href="#i-externe"></use></svg>
-            </button>
-          </div>
-        </div>
-        <button class="bouton bouton-discret" id="btn-oublier-surveilles" style="width:100%">
-          <svg class="icone-s icone"><use href="#i-reprise"></use></svg>
-          <span data-i18n="ui.veille.reprendre_tout"></span>
-        </button>
-      </div>
-      <span class="aide" data-i18n="ui.aide.veille"></span>
-      <div id="retour-surveillance"></div>
-    </div>
-
-    <div class="bloc-reglage">
-      <span class="titre-section" data-i18n="ui.section.vocabulaire"></span>
-      <p class="aide" style="font-size:12.5px;color:var(--texte-doux);margin-bottom:10px"
-         data-i18n="ui.aide.vocabulaire"></p>
-      <label class="bascule">
-        <input type="checkbox" id="opt-glossaire" checked>
-        <span class="piste"></span>
-        <span>
-          <span class="libelle" data-i18n="ui.voc.glossaire"></span><br>
-          <span class="sous-libelle" id="etat-glossaire">--</span>
-        </span>
-      </label>
-      <label class="bascule">
-        <input type="checkbox" id="opt-corrections" checked>
-        <span class="piste"></span>
-        <span>
-          <span class="libelle" data-i18n="ui.voc.corrections"></span><br>
-          <span class="sous-libelle" id="etat-corrections">--</span>
-        </span>
-      </label>
-      <div style="display:flex;gap:8px;margin-top:10px">
-        <button class="bouton" id="btn-glossaire" style="flex:1">
-          <svg class="icone-s icone"><use href="#i-livre"></use></svg>
-          <span data-i18n="ui.bouton.glossaire"></span>
-        </button>
-        <button class="bouton" id="btn-corrections" style="flex:1">
-          <svg class="icone-s icone"><use href="#i-reglages"></use></svg>
-          <span data-i18n="ui.bouton.corrections"></span>
-        </button>
-      </div>
-      <button class="bouton" id="btn-vocabulaire" style="width:100%;margin-top:8px">
-        <svg class="icone-s icone"><use href="#i-livre"></use></svg>
-        <span data-i18n="ui.bouton.vocabulaire"></span>
-        <span class="voc-compteur" id="voc-compteur-propositions" hidden></span>
-      </button>
-    </div>
-
-    <div class="bloc-reglage">
-      <span class="titre-section" data-i18n="ui.section.relecture"></span>
-      <p class="aide" style="font-size:12.5px;color:var(--texte-doux);margin-bottom:10px"
-         data-i18n="ui.aide.relecture"></p>
-      <label class="bascule">
-        <input type="checkbox" id="opt-compagnon" checked>
-        <span class="piste"></span>
-        <span>
-          <span class="libelle" data-i18n="ui.relecture.compagnon"></span><br>
-          <span class="sous-libelle" data-i18n="ui.relecture.compagnon_aide"></span>
-        </span>
-      </label>
-      <label class="bascule">
-        <input type="checkbox" id="opt-apprises" checked>
-        <span class="piste"></span>
-        <span>
-          <span class="libelle" data-i18n="ui.relecture.apprises"></span><br>
-          <span class="sous-libelle" data-i18n="ui.relecture.apprises_aide"></span>
-        </span>
-      </label>
-      <label class="bascule">
-        <input type="checkbox" id="opt-sauvegarde" checked>
-        <span class="piste"></span>
-        <span>
-          <span class="libelle" data-i18n="ui.relecture.sauvegarde"></span><br>
-          <span class="sous-libelle" data-i18n="ui.relecture.sauvegarde_aide"></span>
-        </span>
-      </label>
-      <label class="bascule">
-        <input type="checkbox" id="opt-lecture-audio">
-        <span class="piste"></span>
-        <span>
-          <span class="libelle" data-i18n="ui.relecture.audio"></span><br>
-          <span class="sous-libelle" data-i18n="ui.relecture.audio_aide"></span>
-        </span>
-      </label>
-      <button class="bouton" id="btn-gabarit" style="width:100%;margin-top:10px">
-        <svg class="icone-s icone"><use href="#i-etincelle"></use></svg>
-        <span data-i18n="ui.bouton.gabarit"></span>
-      </button>
-      <span class="aide" data-i18n="ui.aide.gabarit"></span>
-    </div>
-
-    <div class="bloc-reglage">
-      <span class="titre-section" data-i18n="ui.section.locuteurs"></span>
-
-      <!-- Premiere etape : poser les composants. Un seul bouton, qui fait tout,
-           dans les deux modes. Le panneau enchaine ensuite sur le jeton. -->
-      <div id="ext-absente" class="etape-extension" style="display:none">
-        <div class="sous-libelle" data-i18n="ui.ext.absente"></div>
-        <div class="sous-libelle ext-chiffres" id="ext-chiffres">--</div>
-        <button class="bouton bouton-accent" id="btn-installer-locuteurs" style="width:100%;margin-top:8px">
-          <svg class="icone-s icone"><use href="#i-import"></use></svg>
-          <span data-i18n="ui.ext.installer"></span>
-        </button>
-        <span class="aide" data-i18n="ui.ext.aide"></span>
-      </div>
-
-      <!-- Pendant le telechargement. L'application reste utilisable. -->
-      <div id="ext-en-cours" class="etape-extension" style="display:none">
-        <div class="sous-libelle" id="ext-message">--</div>
-        <div class="barre"><span id="ext-barre" style="width:0%"></span></div>
-        <div class="sous-libelle ext-chiffres" id="ext-detail">--</div>
-        <button class="bouton" id="btn-annuler-locuteurs" style="width:100%;margin-top:8px">
-          <svg class="icone-s icone"><use href="#i-croix"></use></svg>
-          <span data-i18n="ui.ext.annuler"></span>
-        </button>
-        <span class="aide" data-i18n="ui.ext.aide_en_cours"></span>
-      </div>
-
-      <!-- Composants en place : les reglages habituels reprennent la main. -->
-      <div id="ext-installee" class="etape-extension" style="display:none">
-        <label class="bascule">
-          <input type="checkbox" id="opt-diarisation">
-          <span class="piste"></span>
-          <span>
-            <span class="libelle" data-i18n="ui.loc.bascule"></span><br>
-            <span class="sous-libelle" id="etat-diarisation">--</span>
-          </span>
-        </label>
-        <div id="bloc-locuteurs" style="display:none;margin-top:10px">
-          <div class="champ">
-            <label for="nb-locuteurs" data-i18n="ui.loc.nombre"></label>
-            <select id="nb-locuteurs">
-              <option value="0" data-i18n="ui.loc.auto"></option>
-              <option value="2">2</option><option value="3">3</option>
-              <option value="4">4</option><option value="5">5</option>
-              <option value="6">6</option><option value="7">7</option>
-              <option value="8">8</option><option value="10">10</option>
-            </select>
-            <span class="aide" data-i18n="ui.aide.locuteurs"></span>
-          </div>
-        </div>
-        <button class="bouton" id="btn-jeton" style="width:100%;margin-top:8px">
-          <svg class="icone-s icone"><use href="#i-personnes"></use></svg>
-          <span id="libelle-jeton"></span>
-        </button>
-        <button class="bouton bouton-discret" id="btn-retirer-locuteurs" style="width:100%;margin-top:8px;display:none">
-          <svg class="icone-s icone"><use href="#i-corbeille"></use></svg>
-          <span id="libelle-retirer-locuteurs"></span>
-        </button>
-        <span class="aide" id="ext-note-installee"></span>
-      </div>
-
-      <div id="ext-retour" style="margin-top:8px"></div>
-    </div>
-
-    <!-- Vitesse de cette machine : moteur OpenVINO (option) et banc d'essai.
-         Rien ne change sans un clic sur « Appliquer ». -->
-    <div class="bloc-reglage" id="bloc-vitesse">
-      <span class="titre-section" data-i18n="ui.section.vitesse"></span>
-      <div class="sous-libelle" id="vitesse-reglage">--</div>
-      <div id="vitesse-alerte"></div>
-      <button class="bouton" id="btn-reconnaitre" style="width:100%;margin-top:8px">
-        <svg class="icone-s icone"><use href="#i-puce"></use></svg>
-        <span data-i18n="ui.vitesse.reconnaitre"></span>
-      </button>
-
-      <div id="ov-bloc" class="etape-extension" style="margin-top:10px">
-        <div class="sous-libelle" id="ov-etat">--</div>
-        <button class="bouton" id="btn-installer-openvino" style="width:100%;margin-top:8px">
-          <svg class="icone-s icone"><use href="#i-import"></use></svg>
-          <span id="libelle-installer-openvino"></span>
-        </button>
-        <div id="ov-en-cours" class="etape-extension" style="display:none;margin-top:8px">
-          <div class="sous-libelle" id="ov-message">--</div>
-          <div class="barre"><span id="ov-barre" style="width:0%"></span></div>
-          <div class="sous-libelle ext-chiffres" id="ov-detail">--</div>
-          <button class="bouton" id="btn-annuler-openvino" style="width:100%;margin-top:8px">
-            <svg class="icone-s icone"><use href="#i-croix"></use></svg>
-            <span data-i18n="ui.ext.annuler"></span>
-          </button>
-        </div>
-        <button class="bouton bouton-discret" id="btn-retirer-openvino" style="width:100%;margin-top:8px;display:none">
-          <svg class="icone-s icone"><use href="#i-corbeille"></use></svg>
-          <span data-i18n="ui.ov.retirer"></span>
-        </button>
-        <span class="aide" data-i18n="ui.ov.aide"></span>
-        <div id="ov-retour" style="margin-top:8px"></div>
-      </div>
-
-      <div class="etape-extension" style="margin-top:12px">
-        <label class="bascule">
-          <input type="checkbox" id="opt-banc-telecharger">
-          <span class="piste"></span>
-          <span>
-            <span class="libelle" data-i18n="ui.banc.telecharger"></span><br>
-            <span class="sous-libelle" id="banc-manquants">--</span>
-          </span>
-        </label>
-        <label class="bascule" id="ligne-banc-npu" style="display:none">
-          <input type="checkbox" id="opt-banc-npu">
-          <span class="piste"></span>
-          <span>
-            <span class="libelle" data-i18n="ui.banc.npu"></span><br>
-            <span class="sous-libelle" data-i18n="ui.banc.npu_aide"></span>
-          </span>
-        </label>
-        <button class="bouton bouton-accent" id="btn-lancer-banc" style="width:100%;margin-top:8px">
-          <svg class="icone-s icone"><use href="#i-horloge"></use></svg>
-          <span data-i18n="ui.banc.lancer"></span>
-        </button>
-        <div id="banc-en-cours" class="etape-extension" style="display:none;margin-top:8px">
-          <div class="sous-libelle" id="banc-message">--</div>
-          <div class="barre"><span id="banc-barre" style="width:0%"></span></div>
-          <button class="bouton" id="btn-arreter-banc" style="width:100%;margin-top:8px">
-            <svg class="icone-s icone"><use href="#i-arret"></use></svg>
-            <span data-i18n="ui.banc.arreter"></span>
-          </button>
-        </div>
-        <div id="banc-resultat" class="etape-extension" style="display:none;margin-top:8px">
-          <div class="sous-libelle" id="banc-conseil">--</div>
-          <textarea id="banc-rapport" readonly spellcheck="false" rows="9"
-                    style="width:100%;margin-top:6px;font-size:11px"></textarea>
-          <div style="display:flex;gap:8px;margin-top:6px">
-            <button class="bouton bouton-accent" id="btn-appliquer-banc" style="flex:1">
-              <svg class="icone-s icone"><use href="#i-coche"></use></svg>
-              <span data-i18n="ui.banc.appliquer"></span>
-            </button>
-            <button class="bouton" id="btn-copier-banc" data-i18n-title="ui.banc.copier">
-              <svg class="icone-s icone"><use href="#i-copie"></use></svg>
-            </button>
-          </div>
-        </div>
-        <button class="bouton bouton-discret" id="btn-reglage-auto" style="width:100%;margin-top:8px;display:none">
-          <svg class="icone-s icone"><use href="#i-reprise"></use></svg>
-          <span data-i18n="ui.vitesse.auto"></span>
-        </button>
-        <span class="aide" data-i18n="ui.banc.aide"></span>
-        <div id="banc-retour" style="margin-top:8px"></div>
-      </div>
-
-      <div class="etape-extension" id="comp-bloc" style="margin-top:12px;display:none">
-        <span class="libelle" data-i18n="ui.comp.titre"></span>
-        <button class="bouton" id="btn-comp-fichier" style="width:100%;margin-top:8px">
-          <svg class="icone-s icone"><use href="#i-import"></use></svg>
-          <span data-i18n="ui.comp.fichier"></span>
-        </button>
-        <div class="sous-libelle" id="comp-fichier-nom" data-i18n="ui.comp.aucun"></div>
-        <button class="bouton bouton-discret" id="btn-comp-reference" style="width:100%;margin-top:6px">
-          <svg class="icone-s icone"><use href="#i-import"></use></svg>
-          <span data-i18n="ui.comp.reference"></span>
-        </button>
-        <div class="sous-libelle" id="comp-reference-nom" data-i18n="ui.comp.aucun"></div>
-        <div style="display:flex;gap:8px;margin-top:6px">
-          <label style="flex:1"><span class="sous-libelle" data-i18n="ui.comp.debut"></span>
-            <input type="text" id="comp-debut" value="00:05:00" style="width:100%"></label>
-          <label style="flex:1"><span class="sous-libelle" data-i18n="ui.comp.duree"></span>
-            <input type="number" id="comp-duree" value="10" min="1" max="240" style="width:100%"></label>
-        </div>
-        <button class="bouton bouton-accent" id="btn-comp-lancer" style="width:100%;margin-top:8px">
-          <svg class="icone-s icone"><use href="#i-horloge"></use></svg>
-          <span data-i18n="ui.comp.lancer"></span>
-        </button>
-        <div id="comp-en-cours" class="etape-extension" style="display:none;margin-top:8px">
-          <div class="sous-libelle" id="comp-message">--</div>
-          <div class="barre"><span id="comp-barre" style="width:0%"></span></div>
-          <button class="bouton" id="btn-comp-arreter" style="width:100%;margin-top:8px">
-            <svg class="icone-s icone"><use href="#i-arret"></use></svg>
-            <span data-i18n="ui.comp.arreter"></span>
-          </button>
-        </div>
-        <div id="comp-resultat" class="etape-extension" style="display:none;margin-top:8px">
-          <textarea id="comp-rapport" readonly spellcheck="false" rows="9"
-                    style="width:100%;font-size:11px"></textarea>
-          <div style="display:flex;gap:8px;margin-top:6px">
-            <button class="bouton bouton-accent" id="btn-comp-ouvrir" style="flex:1">
-              <svg class="icone-s icone"><use href="#i-coche"></use></svg>
-              <span data-i18n="ui.comp.ouvrir"></span>
-            </button>
-            <button class="bouton" id="btn-comp-copier" data-i18n-title="ui.comp.copier">
-              <svg class="icone-s icone"><use href="#i-copie"></use></svg>
-            </button>
-          </div>
-        </div>
-        <span class="aide" data-i18n="ui.comp.aide"></span>
-        <div id="comp-retour" style="margin-top:8px"></div>
-      </div>
-    </div>
-
-    <div class="bloc-reglage">
-      <span class="titre-section" data-i18n="ui.section.modeles"></span>
-      <div class="sous-libelle" id="etat-modeles">--</div>
-      <div class="chemin-modeles" id="chemin-modeles" title="">--</div>
-      <div style="display:flex;gap:8px;margin-top:8px">
-        <button class="bouton" id="btn-dossier-modeles" style="flex:1">
+    <section class="carte section-liste" aria-labelledby="titre-historique">
+      <div class="section-entete">
+        <h2 id="titre-historique"><span data-i18n="ui.onglet.historique"></span>
+          <span class="compteur" id="compteur-historique">0</span></h2>
+        <span class="pousse"></span>
+        <input type="search" id="recherche-historique" class="recherche-courte" spellcheck="false"
+               data-i18n-placeholder="ui.historique.filtrer" data-i18n-aria="ui.historique.filtrer">
+        <button class="bouton bouton-discret bouton-petit" id="btn-ouvrir-sorties">
           <svg class="icone-s icone"><use href="#i-dossier"></use></svg>
-          <span data-i18n="ui.bouton.changer"></span>
-        </button>
-        <button class="bouton" id="btn-ouvrir-modeles" data-i18n-title="ui.titre.ouvrir_dossier">
-          <svg class="icone-s icone"><use href="#i-externe"></use></svg>
+          <span data-i18n="ui.historique.dossier"></span>
         </button>
       </div>
-      <button class="bouton" id="btn-stockage" style="width:100%;margin-top:8px">
-        <svg class="icone-s icone"><use href="#i-loupe"></use></svg>
-        <span data-i18n="ui.bouton.stockage"></span>
-      </button>
-      <span class="aide" id="aide-modeles"></span>
-      <div id="retour-modeles"></div>
-    </div>
-
-    <div class="bloc-reglage">
-      <span class="titre-section" data-i18n="ui.section.donnees"></span>
-      <div class="sous-libelle" data-i18n="ui.donnees.etat"></div>
-      <!-- Empilés : côte à côte, les libellés nowrap débordaient des 380 px de la colonne (scroll horizontal). -->
-      <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
-        <button class="bouton" id="btn-exporter-donnees" style="justify-content:center">
-          <svg class="icone-s icone"><use href="#i-export"></use></svg>
-          <span data-i18n="ui.bouton.exporter"></span>
-        </button>
-        <button class="bouton" id="btn-importer-donnees" style="justify-content:center">
-          <svg class="icone-s icone"><use href="#i-import"></use></svg>
-          <span data-i18n="ui.bouton.importer"></span>
-        </button>
-      </div>
-      <span class="aide" data-i18n="ui.aide.donnees"></span>
-      <div id="retour-donnees"></div>
-    </div>
-
-    <div class="bloc-reglage">
-      <span class="titre-section" data-i18n="ui.section.application"></span>
-
-      <!-- Langue de l'interface. Sans rapport avec la langue parlee choisie
-           plus haut : celle-ci pilote le moteur, celle-la l'affichage. -->
-      <div class="champ">
-        <label for="langue-interface" data-i18n="ui.champ.langue_interface"></label>
-        <div class="ligne-champ">
-          <svg class="icone-s icone" style="flex:none;opacity:.75"><use href="#i-langue"></use></svg>
-          <select id="langue-interface" style="flex:1">
-            <option value="fr" data-i18n="ui.langue.fr"></option>
-            <option value="en" data-i18n="ui.langue.en"></option>
-          </select>
-        </div>
-        <span class="aide" data-i18n="ui.aide.langue_interface"></span>
-      </div>
-
-      <label class="bascule">
-        <input type="checkbox" id="opt-maj">
-        <span class="piste"></span>
-        <span>
-          <span class="libelle" data-i18n="ui.app.maj"></span><br>
-          <span class="sous-libelle" data-i18n="ui.app.maj_aide"></span>
-        </span>
-      </label>
-      <label class="bascule">
-        <input type="checkbox" id="opt-barre-taches" checked>
-        <span class="piste"></span>
-        <span>
-          <span class="libelle" data-i18n="ui.app.barre"></span><br>
-          <span class="sous-libelle" data-i18n="ui.app.barre_aide"></span>
-        </span>
-      </label>
-      <span class="aide" data-i18n="ui.aide.maj"></span>
-      <div id="retour-maj"></div>
-    </div>
-
-    <div class="bloc-reglage">
-      <label class="bascule">
-        <input type="checkbox" id="opt-avance">
-        <span class="piste"></span>
-        <span>
-          <span class="libelle" data-i18n="ui.avance.bascule"></span><br>
-          <span class="sous-libelle" data-i18n="ui.avance.bascule_aide"></span>
-        </span>
-      </label>
-      <div id="bloc-avance" style="display:none;margin-top:12px">
-        <div class="champ">
-          <label for="modele-avance" data-i18n="ui.avance.modele"></label>
-          <select id="modele-avance"></select>
-          <span class="aide" data-i18n="ui.avance.modele_aide"></span>
-        </div>
-        <div class="champ">
-          <label for="beam">
-            <span data-i18n="ui.avance.beam"></span>
-            <span id="valeur-beam" style="color:var(--texte-faible)"></span>
-          </label>
-          <input type="number" id="beam" min="1" max="10" step="1">
-          <span class="aide" data-i18n="ui.avance.beam_aide"></span>
-        </div>
-        <label class="bascule">
-          <input type="checkbox" id="opt-contexte" checked>
-          <span class="piste"></span>
-          <span>
-            <span class="libelle" data-i18n="ui.avance.contexte"></span><br>
-            <span class="sous-libelle" data-i18n="ui.avance.contexte_aide"></span>
-          </span>
-        </label>
-        <label class="bascule">
-          <input type="checkbox" id="opt-salle">
-          <span class="piste"></span>
-          <span>
-            <span class="libelle" data-i18n="ui.avance.salle"></span><br>
-            <span class="sous-libelle" data-i18n="ui.avance.salle_aide"></span>
-          </span>
-        </label>
-        <label class="bascule">
-          <input type="checkbox" id="opt-processeur">
-          <span class="piste"></span>
-          <span>
-            <span class="libelle" data-i18n="ui.avance.processeur"></span><br>
-            <span class="sous-libelle" data-i18n="ui.avance.processeur_aide"></span>
-          </span>
-        </label>
-      </div>
-    </div>
-
-  </aside>
+      <div class="liste historique" id="vue-historique"></div>
+    </section>
+  </div>
 </main>
 
-<!-- ================================= Pied ============================== -->
-<footer class="pied">
-  <div class="journal-entete" id="journal-entete" role="button" tabindex="0" aria-expanded="false">
-    <svg class="icone-s icone chevron"><use href="#i-chevron"></use></svg>
-    <span class="journal-titre" data-i18n="ui.pied.journal"></span>
-    <span class="journal-dernier" id="journal-dernier" data-i18n="ui.pied.pret_point"></span>
-    <button class="bouton-lien" id="btn-fichier-log" data-i18n="ui.pied.fichier_detaille"></button>
-  </div>
-  <div class="journal-contenu" id="journal-contenu"></div>
-  <div class="actions">
-    <div class="etat-global" id="etat-global" role="status" aria-live="polite">
-      <span class="point"></span>
-      <span class="texte" id="etat-texte" data-i18n="ui.pied.pret"></span>
+<!-- ============================== Relecture =============================== -->
+<main class="vue vue-relecture" id="vue-relecture" data-vue="relecture" hidden aria-labelledby="rl-titre">
+  <div class="rl-entete">
+    <button class="bouton bouton-discret" id="rl-retour">
+      <svg class="icone-s icone"><use href="#i-retour"></use></svg>
+      <span data-i18n="ui.bouton.retour"></span>
+    </button>
+    <div class="rl-titres">
+      <h1 id="rl-titre" tabindex="-1"></h1>
+      <div class="rl-meta" id="rl-meta"></div>
     </div>
     <span class="pousse"></span>
-    <button class="bouton bouton-danger" id="btn-arreter" disabled>
-      <svg class="icone-s icone"><use href="#i-arret"></use></svg>
-      <span data-i18n="ui.bouton.arreter"></span>
+    <button class="bouton bouton-discret" id="rl-annuler" hidden>
+      <svg class="icone-s icone"><use href="#i-reprise"></use></svg>
+      <span data-i18n="ui.rl.annuler"></span>
     </button>
-    <button class="bouton bouton-accent" id="btn-lancer" disabled>
-      <svg class="icone-s icone"><use href="#i-lecture"></use></svg>
-      <span data-i18n="ui.bouton.lancer"></span>
-    </button>
-  </div>
-</footer>
-
-<!-- ================================ Modales =========================== -->
-
-<div class="voile" id="modale-glossaire">
-  <div class="modale modale-large">
-    <div class="modale-entete">
-      <svg class="icone"><use href="#i-livre"></use></svg>
-      <h2 data-i18n="ui.modale.glossaire.titre"></h2>
-      <button class="bouton-icone" data-fermer><svg class="icone"><use href="#i-croix"></use></svg></button>
-    </div>
-    <div class="modale-corps">
-      <p data-i18n="ui.modale.glossaire.intro"></p>
-      <div class="encart encart-info" style="margin-bottom:12px">
-        <svg class="icone-s icone"><use href="#i-info"></use></svg>
-        <span data-i18n-html="ui.modale.glossaire.limite"></span>
+    <div class="menu-conteneur">
+      <button class="bouton" id="rl-exporter" aria-haspopup="menu" aria-expanded="false" aria-controls="rl-menu-export">
+        <svg class="icone-s icone"><use href="#i-export"></use></svg>
+        <span data-i18n="ui.rl.exporter"></span>
+        <svg class="icone-s icone"><use href="#i-chevron"></use></svg>
+      </button>
+      <div class="menu" id="rl-menu-export" role="menu" hidden>
+        <button role="menuitem" data-export="texte" data-i18n="ui.rl.export.texte"></button>
+        <button role="menuitem" data-export="heures" data-i18n="ui.rl.export.heures"></button>
+        <button role="menuitem" data-export="markdown" data-i18n="ui.rl.export.markdown"></button>
+        <button role="menuitem" data-export="enregistrer_md" data-i18n="ui.rl.export.enregistrer_md"></button>
+        <hr>
+        <button role="menuitem" data-export="ouvrir" data-i18n="ui.rl.export.ouvrir"></button>
+        <button role="menuitem" data-export="dossier" data-i18n="ui.rl.export.dossier"></button>
       </div>
-      <textarea id="zone-glossaire" spellcheck="false"></textarea>
-      <div id="retour-glossaire" style="margin-top:10px"></div>
     </div>
-    <div class="modale-pied">
-      <span class="pousse"></span>
-      <button class="bouton" data-fermer data-i18n="ui.bouton.annuler"></button>
-      <button class="bouton bouton-accent" id="btn-enregistrer-glossaire" data-i18n="ui.bouton.enregistrer"></button>
+    <button class="bouton bouton-accent" id="btn-copier-ia">
+      <svg class="icone-s icone"><use href="#i-etincelle"></use></svg>
+      <span data-i18n="ui.lecture.copier_ia"></span>
+    </button>
+  </div>
+
+  <div class="rl-outils" role="toolbar" data-i18n-aria="ui.rl.outils">
+    <div class="rl-groupe rl-lecteur" id="rl-lecteur">
+      <button class="bouton rl-lire" id="rl-lire" aria-pressed="false">
+        <svg class="icone-s icone" id="rl-lire-icone"><use href="#i-lecture"></use></svg>
+        <span id="rl-lire-texte" data-i18n="ui.rl.lire"></span>
+      </button>
+      <button class="bouton-icone" id="rl-reculer" data-i18n-title="ui.rl.reculer" data-i18n-aria="ui.rl.reculer">
+        <svg class="icone-s icone"><use href="#i-recul"></use></svg>
+      </button>
+      <button class="bouton-icone" id="rl-avancer" data-i18n-title="ui.rl.avancer" data-i18n-aria="ui.rl.avancer">
+        <svg class="icone-s icone"><use href="#i-avance"></use></svg>
+      </button>
+      <span class="rl-temps" id="rl-temps">0:00</span>
+      <input type="range" id="rl-position" min="0" max="1" step="0.1" value="0" data-i18n-aria="ui.rl.position">
+      <select id="rl-vitesse" data-i18n-aria="ui.rl.vitesse" data-i18n-title="ui.rl.vitesse">
+
+      </select>
+      <label class="case rl-suivre"><input type="checkbox" id="rl-suivre" checked><span data-i18n="ui.rl.suivre"></span></label>
+    </div>
+    <div class="rl-groupe rl-recherche" role="search">
+      <svg class="icone-s icone rl-loupe"><use href="#i-loupe"></use></svg>
+      <input type="search" id="rl-chercher" spellcheck="false"
+             data-i18n-placeholder="ui.rl.chercher" data-i18n-aria="ui.rl.chercher_aria">
+      <span class="rl-compte" id="rl-compte" aria-live="polite"></span>
+      <button class="bouton-icone" id="rl-chercher-prec" data-i18n-title="ui.rl.precedent" data-i18n-aria="ui.rl.precedent">
+        <svg class="icone-s icone"><use href="#i-haut"></use></svg>
+      </button>
+      <button class="bouton-icone" id="rl-chercher-suiv" data-i18n-title="ui.rl.suivant" data-i18n-aria="ui.rl.suivant">
+        <svg class="icone-s icone"><use href="#i-chevron"></use></svg>
+      </button>
+    </div>
+    <div class="rl-groupe rl-verifier">
+      <select id="rl-categorie" data-i18n-aria="ui.rl.verifier"></select>
+      <span class="rl-compte" id="rl-point" aria-live="polite"></span>
+      <button class="bouton-icone" id="rl-point-prec" data-i18n-title="ui.rl.point_prec" data-i18n-aria="ui.rl.point_prec">
+        <svg class="icone-s icone"><use href="#i-haut"></use></svg>
+      </button>
+      <button class="bouton-icone" id="rl-point-suiv" data-i18n-title="ui.rl.point_suiv" data-i18n-aria="ui.rl.point_suiv">
+        <svg class="icone-s icone"><use href="#i-chevron"></use></svg>
+      </button>
+      <button class="bouton bouton-discret bouton-petit" id="rl-annuler-remplacement" hidden data-i18n="ui.rl.annuler_remplacement"></button>
     </div>
   </div>
-</div>
 
-<div class="voile" id="modale-corrections">
-  <div class="modale modale-large">
-    <div class="modale-entete">
-      <svg class="icone"><use href="#i-reglages"></use></svg>
-      <h2 data-i18n="ui.modale.corrections.titre"></h2>
-      <button class="bouton-icone" data-fermer><svg class="icone"><use href="#i-croix"></use></svg></button>
-    </div>
-    <div class="modale-corps">
-      <p data-i18n-html="ui.modale.corrections.intro"></p>
-      <textarea id="zone-corrections" spellcheck="false"></textarea>
-      <div id="retour-corrections" style="margin-top:10px"></div>
-    </div>
-    <div class="modale-pied">
-      <span class="pousse"></span>
-      <button class="bouton" data-fermer data-i18n="ui.bouton.annuler"></button>
-      <button class="bouton bouton-accent" id="btn-enregistrer-corrections" data-i18n="ui.bouton.enregistrer"></button>
+  <div class="rl-avis" id="rl-avis"></div>
+  <div class="rl-defilement" id="rl-defilement">
+    <div class="rl-texte" id="rl-texte"></div>
+  </div>
+  <div class="rl-statut" id="rl-statut" role="status" aria-live="polite"></div>
+  <audio id="rl-son" preload="metadata"></audio>
+</main>
+
+<!-- ============================== Reglages ================================ -->
+<main class="vue vue-reglages" id="vue-reglages" data-vue="reglages" hidden aria-labelledby="titre-reglages">
+  <div class="vue-entete">
+    <button class="bouton bouton-discret" data-retour>
+      <svg class="icone-s icone"><use href="#i-retour"></use></svg>
+      <span data-i18n="ui.bouton.retour"></span>
+    </button>
+    <h1 id="titre-reglages" tabindex="-1" data-i18n="ui.nav.reglages"></h1>
+  </div>
+  <div class="reglages">
+    <nav class="reglages-nav" role="tablist" aria-orientation="vertical" data-i18n-aria="ui.nav.reglages">
+      <span class="nav-groupe" data-i18n="ui.reg.groupe.courant"></span>
+      <button role="tab" data-section="transcription" data-i18n="ui.reg.transcription"></button>
+      <button role="tab" data-section="fichiers" data-i18n="ui.reg.fichiers"></button>
+      <button role="tab" data-section="relecture" data-i18n="ui.reg.relecture"></button>
+      <button role="tab" data-section="application" data-i18n="ui.reg.application"></button>
+      <span class="nav-groupe" data-i18n="ui.reg.groupe.avance"></span>
+      <button role="tab" data-section="moteur" data-i18n="ui.reg.moteur"></button>
+      <button role="tab" data-section="espace" data-i18n="ui.reg.espace"></button>
+      <span class="nav-groupe" data-i18n="ui.reg.groupe.mesures"></span>
+      <button role="tab" data-section="poste" data-i18n="ui.reg.poste"></button>
+      <button role="tab" data-section="banc" data-i18n="ui.reg.banc"></button>
+      <button role="tab" data-section="comparaison" data-i18n="ui.reg.comparaison"></button>
+      <button role="tab" data-section="journal" data-i18n="ui.reg.journal"></button>
+    </nav>
+
+    <div class="reglages-contenu" id="reglages-contenu">
+
+      <!-- ------------------------------------------------ Transcription -->
+      <section class="reglages-section" role="tabpanel" data-section="transcription">
+        <h2 data-i18n="ui.reg.transcription"></h2>
+
+        <div class="bloc-reglage">
+          <span class="titre-section" data-i18n="ui.section.qualite"></span>
+          <div class="presets" id="presets"></div>
+          <div id="avertissements"></div>
+        </div>
+
+        <div class="bloc-reglage" id="bloc-rythme">
+          <span class="titre-section" data-i18n="ui.section.rythme"></span>
+          <div class="rythmes" role="radiogroup" data-i18n-aria="ui.section.rythme">
+            <button class="rythme" data-rythme="vitesse" role="radio" aria-checked="true">
+              <span data-i18n="ui.rythme.vitesse"></span></button>
+            <button class="rythme" data-rythme="equilibre" role="radio" aria-checked="false">
+              <span data-i18n="ui.rythme.equilibre"></span></button>
+            <button class="rythme" data-rythme="discret" role="radio" aria-checked="false">
+              <span data-i18n="ui.rythme.discret"></span></button>
+          </div>
+          <div class="rythme-desc" id="rythme-desc">--</div>
+          <label class="bascule">
+            <input type="checkbox" id="opt-rythme-auto">
+            <span class="piste"></span>
+            <span>
+              <span class="libelle" data-i18n="ui.rythme.auto"></span><br>
+              <span class="sous-libelle" id="rythme-auto-aide"></span>
+            </span>
+          </label>
+          <div id="rythme-retour"></div>
+        </div>
+
+        <div class="bloc-reglage">
+          <span class="titre-section" data-i18n="ui.champ.langue_parlee"></span>
+          <div class="champ">
+            <select id="langue" data-i18n-aria="ui.champ.langue_parlee">
+              <option value="fr" data-i18n="ui.langue.fr"></option>
+              <option value="en" data-i18n="ui.langue.en"></option>
+              <option value="es" data-i18n="ui.langue.es"></option>
+              <option value="de" data-i18n="ui.langue.de"></option>
+              <option value="it" data-i18n="ui.langue.it"></option>
+              <option value="nl" data-i18n="ui.langue.nl"></option>
+              <option value="pt" data-i18n="ui.langue.pt"></option>
+              <option value="pl" data-i18n="ui.langue.pl"></option>
+              <option value="ro" data-i18n="ui.langue.ro"></option>
+              <option value="ar" data-i18n="ui.langue.ar"></option>
+              <option value="auto" data-i18n="ui.langue.auto"></option>
+            </select>
+            <span class="aide" id="qualite-langue"></span>
+          </div>
+        </div>
+
+        <div class="bloc-reglage">
+          <span class="titre-section" data-i18n="ui.section.locuteurs"></span>
+
+          <!-- Premiere etape : poser les composants. Un seul bouton, qui fait tout,
+               dans les deux modes. Le panneau enchaine ensuite sur le jeton. -->
+          <div id="ext-absente" class="etape-extension" style="display:none">
+            <div class="sous-libelle" data-i18n="ui.ext.absente"></div>
+            <div class="sous-libelle ext-chiffres" id="ext-chiffres">--</div>
+            <button class="bouton" id="btn-installer-locuteurs">
+              <svg class="icone-s icone"><use href="#i-import"></use></svg>
+              <span data-i18n="ui.ext.installer"></span>
+            </button>
+          </div>
+
+          <!-- Pendant le telechargement. L'application reste utilisable. -->
+          <div id="ext-en-cours" class="etape-extension" style="display:none">
+            <div class="sous-libelle" id="ext-message">--</div>
+            <div class="barre"><span id="ext-barre" style="width:0%"></span></div>
+            <div class="sous-libelle ext-chiffres" id="ext-detail">--</div>
+            <button class="bouton" id="btn-annuler-locuteurs">
+              <svg class="icone-s icone"><use href="#i-croix"></use></svg>
+              <span data-i18n="ui.ext.annuler"></span>
+            </button>
+            <span class="aide" data-i18n="ui.ext.aide_en_cours"></span>
+          </div>
+
+          <!-- Composants en place : les reglages habituels reprennent la main. -->
+          <div id="ext-installee" class="etape-extension" style="display:none">
+            <label class="bascule">
+              <input type="checkbox" id="opt-diarisation">
+              <span class="piste"></span>
+              <span>
+                <span class="libelle" data-i18n="ui.loc.bascule"></span><br>
+                <span class="sous-libelle" id="etat-diarisation">--</span>
+              </span>
+            </label>
+            <div id="bloc-locuteurs" style="display:none">
+              <div class="champ">
+                <label for="nb-locuteurs" data-i18n="ui.loc.nombre"></label>
+                <select id="nb-locuteurs">
+                  <option value="0" data-i18n="ui.loc.auto"></option>
+                  <option value="2">2</option><option value="3">3</option>
+                  <option value="4">4</option><option value="5">5</option>
+                  <option value="6">6</option><option value="7">7</option>
+                  <option value="8">8</option><option value="10">10</option>
+                </select>
+                <span class="aide" data-i18n="ui.aide.locuteurs"></span>
+              </div>
+            </div>
+            <div class="rangee-boutons">
+              <button class="bouton" id="btn-jeton">
+                <svg class="icone-s icone"><use href="#i-personnes"></use></svg>
+                <span id="libelle-jeton"></span>
+              </button>
+              <button class="bouton bouton-discret" id="btn-retirer-locuteurs" style="display:none">
+                <svg class="icone-s icone"><use href="#i-corbeille"></use></svg>
+                <span id="libelle-retirer-locuteurs"></span>
+              </button>
+            </div>
+            <span class="aide" id="ext-note-installee"></span>
+          </div>
+          <div id="ext-retour"></div>
+        </div>
+
+        <div class="bloc-reglage">
+          <label class="bascule">
+            <input type="checkbox" id="opt-sauvegarde" checked>
+            <span class="piste"></span>
+            <span>
+              <span class="libelle" data-i18n="ui.relecture.sauvegarde"></span><br>
+              <span class="sous-libelle" data-i18n="ui.relecture.sauvegarde_aide"></span>
+            </span>
+          </label>
+        </div>
+      </section>
+
+      <!-- ------------------------------------------------------ Fichiers -->
+      <section class="reglages-section" role="tabpanel" data-section="fichiers" hidden>
+        <h2 data-i18n="ui.reg.fichiers"></h2>
+        <div class="bloc-reglage">
+          <div class="champ">
+            <label for="dossier-sortie" data-i18n="ui.champ.dossier_sortie"></label>
+            <div class="ligne-champ">
+              <input type="text" id="dossier-sortie" readonly>
+              <button class="bouton" id="btn-dossier" data-i18n-title="ui.titre.choisir_dossier" data-i18n-aria="ui.titre.choisir_dossier">
+                <svg class="icone-s icone"><use href="#i-dossier"></use></svg>
+              </button>
+              <button class="bouton" id="btn-ouvrir-dossier" data-i18n-title="ui.titre.ouvrir_dossier" data-i18n-aria="ui.titre.ouvrir_dossier">
+                <svg class="icone-s icone"><use href="#i-externe"></use></svg>
+              </button>
+            </div>
+          </div>
+          <div class="champ">
+            <label for="motif-sortie" data-i18n="ui.champ.motif"></label>
+            <input type="text" id="motif-sortie" spellcheck="false" placeholder="{date}-{nom}">
+            <span class="aide apercu-motif" id="apercu-motif"></span>
+            <span class="aide" data-i18n-html="ui.aide.motif"></span>
+          </div>
+          <div class="champ">
+            <span class="champ-libelle" data-i18n="ui.champ.formats"></span>
+            <div class="cases">
+              <label class="case"><input type="checkbox" id="fmt-txt" checked> <span data-i18n="ui.format.txt"></span></label>
+              <label class="case"><input type="checkbox" id="fmt-srt"> <span data-i18n="ui.format.srt"></span></label>
+              <label class="case"><input type="checkbox" id="fmt-vtt"> <span data-i18n="ui.format.vtt"></span></label>
+            </div>
+            <label class="case">
+              <input type="checkbox" id="fmt-horodatage"> <span data-i18n="ui.format.horodatage"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="bloc-reglage">
+          <span class="titre-section" data-i18n="ui.section.veille"></span>
+          <label class="bascule">
+            <input type="checkbox" id="opt-surveillance">
+            <span class="piste"></span>
+            <span>
+              <span class="libelle" data-i18n="ui.veille.bascule"></span><br>
+              <span class="sous-libelle" id="etat-surveillance"></span>
+            </span>
+          </label>
+          <div id="bloc-surveillance" style="display:none">
+            <div class="champ">
+              <label for="dossier-surveille" data-i18n="ui.veille.champ"></label>
+              <div class="ligne-champ">
+                <input type="text" id="dossier-surveille" readonly>
+                <button class="bouton" id="btn-dossier-surveille" data-i18n-title="ui.titre.choisir_dossier" data-i18n-aria="ui.titre.choisir_dossier">
+                  <svg class="icone-s icone"><use href="#i-dossier"></use></svg>
+                </button>
+                <button class="bouton" id="btn-ouvrir-surveille" data-i18n-title="ui.titre.ouvrir_dossier" data-i18n-aria="ui.titre.ouvrir_dossier">
+                  <svg class="icone-s icone"><use href="#i-externe"></use></svg>
+                </button>
+              </div>
+            </div>
+            <button class="bouton bouton-discret" id="btn-oublier-surveilles">
+              <svg class="icone-s icone"><use href="#i-reprise"></use></svg>
+              <span data-i18n="ui.veille.reprendre_tout"></span>
+            </button>
+          </div>
+          <span class="aide" data-i18n="ui.aide.veille"></span>
+          <div id="retour-surveillance"></div>
+        </div>
+      </section>
+
+      <!-- ----------------------------------------------------- Relecture -->
+      <section class="reglages-section" role="tabpanel" data-section="relecture" hidden>
+        <h2 data-i18n="ui.reg.relecture"></h2>
+        <div class="bloc-reglage">
+          <label class="bascule">
+            <input type="checkbox" id="opt-compagnon" checked>
+            <span class="piste"></span>
+            <span>
+              <span class="libelle" data-i18n="ui.relecture.compagnon"></span><br>
+              <span class="sous-libelle" data-i18n="ui.relecture.compagnon_aide"></span>
+            </span>
+          </label>
+          <label class="bascule">
+            <input type="checkbox" id="opt-apprises" checked>
+            <span class="piste"></span>
+            <span>
+              <span class="libelle" data-i18n="ui.relecture.apprises"></span><br>
+              <span class="sous-libelle" data-i18n="ui.relecture.apprises_aide"></span>
+            </span>
+          </label>
+        </div>
+        <div class="bloc-reglage">
+          <span class="titre-section" data-i18n="ui.bouton.gabarit"></span>
+          <p class="aide" data-i18n="ui.aide.gabarit"></p>
+          <button class="bouton" id="btn-gabarit">
+            <svg class="icone-s icone"><use href="#i-etincelle"></use></svg>
+            <span data-i18n="ui.gabarit.modifier"></span>
+          </button>
+        </div>
+      </section>
+
+      <!-- --------------------------------------------------- Application -->
+      <section class="reglages-section" role="tabpanel" data-section="application" hidden>
+        <h2 data-i18n="ui.reg.application"></h2>
+        <div class="bloc-reglage">
+          <div class="champ">
+            <label for="langue-interface" data-i18n="ui.champ.langue_interface"></label>
+            <select id="langue-interface">
+              <option value="fr" data-i18n="ui.langue.fr"></option>
+              <option value="en" data-i18n="ui.langue.en"></option>
+            </select>
+          </div>
+          <div class="champ">
+            <label for="choix-theme" data-i18n="ui.champ.theme"></label>
+            <select id="choix-theme">
+              <option value="auto" data-i18n="ui.theme.auto"></option>
+              <option value="clair" data-i18n="ui.theme.clair_nom"></option>
+              <option value="sombre" data-i18n="ui.theme.sombre_nom"></option>
+            </select>
+          </div>
+          <label class="bascule">
+            <input type="checkbox" id="opt-barre-taches" checked>
+            <span class="piste"></span>
+            <span>
+              <span class="libelle" data-i18n="ui.app.barre"></span><br>
+              <span class="sous-libelle" data-i18n="ui.app.barre_aide"></span>
+            </span>
+          </label>
+          <label class="bascule">
+            <input type="checkbox" id="opt-maj">
+            <span class="piste"></span>
+            <span>
+              <span class="libelle" data-i18n="ui.app.maj"></span><br>
+              <span class="sous-libelle" data-i18n="ui.app.maj_aide"></span>
+            </span>
+          </label>
+          <div id="retour-maj"></div>
+        </div>
+        <div class="bloc-reglage">
+          <span class="titre-section" data-i18n="ui.section.donnees"></span>
+          <p class="aide" data-i18n="ui.aide.donnees"></p>
+          <div class="rangee-boutons">
+            <button class="bouton" id="btn-exporter-donnees">
+              <svg class="icone-s icone"><use href="#i-export"></use></svg>
+              <span data-i18n="ui.bouton.exporter"></span>
+            </button>
+            <button class="bouton" id="btn-importer-donnees">
+              <svg class="icone-s icone"><use href="#i-import"></use></svg>
+              <span data-i18n="ui.bouton.importer"></span>
+            </button>
+            <button class="bouton bouton-discret" id="btn-ouvrir-app">
+              <svg class="icone-s icone"><use href="#i-dossier"></use></svg>
+              <span data-i18n="ui.aide.ouvrir_donnees"></span>
+            </button>
+          </div>
+          <div id="retour-donnees"></div>
+        </div>
+      </section>
+
+      <!-- ----------------------------------------------- Moteur et modeles -->
+      <section class="reglages-section" role="tabpanel" data-section="moteur" hidden>
+        <h2 data-i18n="ui.reg.moteur"></h2>
+        <div class="bloc-reglage">
+          <span class="titre-section" data-i18n="ui.section.modeles"></span>
+          <div class="sous-libelle" id="etat-modeles">--</div>
+          <div class="chemin-modeles" id="chemin-modeles" title="">--</div>
+          <div class="rangee-boutons">
+            <button class="bouton" id="btn-dossier-modeles">
+              <svg class="icone-s icone"><use href="#i-dossier"></use></svg>
+              <span data-i18n="ui.bouton.changer"></span>
+            </button>
+            <button class="bouton" id="btn-ouvrir-modeles">
+              <svg class="icone-s icone"><use href="#i-externe"></use></svg>
+              <span data-i18n="ui.titre.ouvrir_dossier"></span>
+            </button>
+          </div>
+          <span class="aide" id="aide-modeles"></span>
+          <div id="retour-modeles"></div>
+        </div>
+
+        <div class="bloc-reglage" id="ov-bloc">
+          <span class="titre-section" data-i18n="ui.section.openvino"></span>
+          <div class="sous-libelle" id="ov-etat">--</div>
+          <button class="bouton" id="btn-installer-openvino">
+            <svg class="icone-s icone"><use href="#i-import"></use></svg>
+            <span id="libelle-installer-openvino"></span>
+          </button>
+          <div id="ov-en-cours" class="etape-extension" style="display:none">
+            <div class="sous-libelle" id="ov-message">--</div>
+            <div class="barre"><span id="ov-barre" style="width:0%"></span></div>
+            <div class="sous-libelle ext-chiffres" id="ov-detail">--</div>
+            <button class="bouton" id="btn-annuler-openvino">
+              <svg class="icone-s icone"><use href="#i-croix"></use></svg>
+              <span data-i18n="ui.ext.annuler"></span>
+            </button>
+          </div>
+          <button class="bouton bouton-discret" id="btn-retirer-openvino" style="display:none">
+            <svg class="icone-s icone"><use href="#i-corbeille"></use></svg>
+            <span data-i18n="ui.ov.retirer"></span>
+          </button>
+          <span class="aide" data-i18n="ui.ov.aide"></span>
+          <div id="ov-retour"></div>
+        </div>
+
+        <div class="bloc-reglage">
+          <label class="bascule">
+            <input type="checkbox" id="opt-avance">
+            <span class="piste"></span>
+            <span>
+              <span class="libelle" data-i18n="ui.avance.bascule"></span><br>
+              <span class="sous-libelle" data-i18n="ui.avance.bascule_aide"></span>
+            </span>
+          </label>
+          <div id="bloc-avance" style="display:none">
+            <div class="champ">
+              <label for="modele-avance" data-i18n="ui.avance.modele"></label>
+              <select id="modele-avance"></select>
+              <span class="aide" data-i18n="ui.avance.modele_aide"></span>
+            </div>
+            <div class="champ">
+              <label for="beam">
+                <span data-i18n="ui.avance.beam"></span>
+                <span id="valeur-beam"></span>
+              </label>
+              <input type="number" id="beam" min="1" max="10" step="1">
+              <span class="aide" data-i18n="ui.avance.beam_aide"></span>
+            </div>
+            <label class="bascule">
+              <input type="checkbox" id="opt-contexte" checked>
+              <span class="piste"></span>
+              <span>
+                <span class="libelle" data-i18n="ui.avance.contexte"></span><br>
+                <span class="sous-libelle" data-i18n="ui.avance.contexte_aide"></span>
+              </span>
+            </label>
+            <label class="bascule">
+              <input type="checkbox" id="opt-salle">
+              <span class="piste"></span>
+              <span>
+                <span class="libelle" data-i18n="ui.avance.salle"></span><br>
+                <span class="sous-libelle" data-i18n="ui.avance.salle_aide"></span>
+              </span>
+            </label>
+            <label class="bascule">
+              <input type="checkbox" id="opt-processeur">
+              <span class="piste"></span>
+              <span>
+                <span class="libelle" data-i18n="ui.avance.processeur"></span><br>
+                <span class="sous-libelle" data-i18n="ui.avance.processeur_aide"></span>
+              </span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <!-- ------------------------------------------------ Espace disque -->
+      <section class="reglages-section" role="tabpanel" data-section="espace" hidden>
+        <h2 data-i18n="ui.reg.espace"></h2>
+        <div class="bloc-reglage">
+          <div class="espace-bilan" id="espace-bilan" aria-live="polite"></div>
+          <div class="espace-postes" id="espace-postes"></div>
+          <div class="rangee-boutons">
+            <button class="bouton bouton-accent" id="btn-espace-liberer" disabled></button>
+            <button class="bouton bouton-discret" id="btn-espace-mesurer">
+              <svg class="icone-s icone"><use href="#i-reprise"></use></svg>
+              <span data-i18n="ui.espace.mesurer"></span>
+            </button>
+          </div>
+          <div id="espace-retour"></div>
+        </div>
+        <div class="bloc-reglage" id="bloc-ressources" hidden>
+          <span class="titre-section" data-i18n="ui.espace.ressources"></span>
+          <div class="ressources" id="ressources"></div>
+        </div>
+        <div class="bloc-reglage">
+          <span class="titre-section" data-i18n="ui.eff.titre"></span>
+          <p class="aide" data-i18n="ui.eff.intro"></p>
+          <label class="case"><input type="checkbox" id="eff-transcriptions">
+            <span data-i18n="ui.eff.aussi_transcriptions"></span></label>
+          <div class="rangee-boutons">
+            <button class="bouton bouton-danger" id="btn-eff-apercu">
+              <svg class="icone-s icone"><use href="#i-corbeille"></use></svg>
+              <span data-i18n="ui.eff.apercu"></span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- -------------------------------------------------------- Poste -->
+      <section class="reglages-section" role="tabpanel" data-section="poste" hidden>
+        <h2 data-i18n="ui.reg.poste"></h2>
+        <div class="bloc-reglage">
+          <div class="materiel-resume" id="materiel-resume" data-i18n="ui.materiel.analyse"></div>
+          <div class="materiel-detail" id="materiel-detail"></div>
+          <div id="avertissements-poste"></div>
+        </div>
+        <div class="bloc-reglage" id="bloc-vitesse">
+          <span class="titre-section" data-i18n="ui.section.vitesse"></span>
+          <div class="sous-libelle" id="vitesse-reglage">--</div>
+          <div id="vitesse-alerte"></div>
+          <div class="proposition" id="bloc-proposition" hidden>
+            <div class="proposition-titre">
+              <svg class="icone-s icone"><use href="#i-etincelle"></use></svg>
+              <span data-i18n="ui.proposition.titre"></span>
+            </div>
+            <p class="proposition-phrase" id="proposition-phrase"></p>
+            <p class="sous-libelle" id="proposition-rythme"></p>
+            <div id="proposition-notes"></div>
+            <div class="rangee-boutons">
+              <button class="bouton bouton-accent" id="btn-proposition-appliquer">
+                <svg class="icone-s icone"><use href="#i-coche"></use></svg>
+                <span data-i18n="ui.proposition.appliquer"></span>
+              </button>
+              <button class="bouton bouton-discret" id="btn-proposition-plus-tard">
+                <span data-i18n="ui.proposition.plus_tard"></span>
+              </button>
+            </div>
+          </div>
+          <div class="rangee-boutons">
+            <button class="bouton" id="btn-reconnaitre">
+              <svg class="icone-s icone"><use href="#i-puce"></use></svg>
+              <span data-i18n="ui.vitesse.reconnaitre"></span>
+            </button>
+            <button class="bouton bouton-discret" id="btn-reglage-auto" style="display:none">
+              <svg class="icone-s icone"><use href="#i-reprise"></use></svg>
+              <span data-i18n="ui.vitesse.auto"></span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- --------------------------------------------------------- Banc -->
+      <section class="reglages-section" role="tabpanel" data-section="banc" hidden>
+        <h2 data-i18n="ui.reg.banc"></h2>
+        <div class="bloc-reglage">
+          <p class="aide" data-i18n="ui.banc.aide"></p>
+          <label class="bascule">
+            <input type="checkbox" id="opt-banc-telecharger">
+            <span class="piste"></span>
+            <span>
+              <span class="libelle" data-i18n="ui.banc.telecharger"></span><br>
+              <span class="sous-libelle" id="banc-manquants">--</span>
+            </span>
+          </label>
+          <label class="bascule" id="ligne-banc-npu" style="display:none">
+            <input type="checkbox" id="opt-banc-npu">
+            <span class="piste"></span>
+            <span>
+              <span class="libelle" data-i18n="ui.banc.npu"></span><br>
+              <span class="sous-libelle" data-i18n="ui.banc.npu_aide"></span>
+            </span>
+          </label>
+          <button class="bouton bouton-accent" id="btn-lancer-banc">
+            <svg class="icone-s icone"><use href="#i-horloge"></use></svg>
+            <span data-i18n="ui.banc.lancer"></span>
+          </button>
+          <div id="banc-en-cours" class="etape-extension" style="display:none">
+            <div class="sous-libelle" id="banc-message">--</div>
+            <div class="barre"><span id="banc-barre" style="width:0%"></span></div>
+            <button class="bouton" id="btn-arreter-banc">
+              <svg class="icone-s icone"><use href="#i-arret"></use></svg>
+              <span data-i18n="ui.banc.arreter"></span>
+            </button>
+          </div>
+          <div id="banc-resultat" class="etape-extension" style="display:none">
+            <div class="sous-libelle" id="banc-conseil">--</div>
+            <textarea id="banc-rapport" readonly spellcheck="false" rows="9" data-i18n-aria="ui.banc.rapport"></textarea>
+            <div class="rangee-boutons">
+              <button class="bouton bouton-accent" id="btn-appliquer-banc">
+                <svg class="icone-s icone"><use href="#i-coche"></use></svg>
+                <span data-i18n="ui.banc.appliquer"></span>
+              </button>
+              <button class="bouton" id="btn-copier-banc">
+                <svg class="icone-s icone"><use href="#i-copie"></use></svg>
+                <span data-i18n="ui.banc.copier"></span>
+              </button>
+            </div>
+          </div>
+          <div id="banc-retour"></div>
+        </div>
+      </section>
+
+      <!-- --------------------------------------------------- Comparaison -->
+      <section class="reglages-section" role="tabpanel" data-section="comparaison" hidden>
+        <h2 data-i18n="ui.reg.comparaison"></h2>
+        <div class="bloc-reglage">
+          <p class="aide" id="comp-indisponible" data-i18n="ui.comp.indisponible"></p>
+          <div class="etape-extension" id="comp-bloc" style="display:none">
+            <p class="aide" data-i18n="ui.comp.aide"></p>
+            <div class="rangee-boutons">
+              <button class="bouton" id="btn-comp-fichier">
+                <svg class="icone-s icone"><use href="#i-import"></use></svg>
+                <span data-i18n="ui.comp.fichier"></span>
+              </button>
+              <span class="sous-libelle" id="comp-fichier-nom" data-i18n="ui.comp.aucun"></span>
+            </div>
+            <div class="rangee-boutons">
+              <button class="bouton bouton-discret" id="btn-comp-reference">
+                <svg class="icone-s icone"><use href="#i-import"></use></svg>
+                <span data-i18n="ui.comp.reference"></span>
+              </button>
+              <span class="sous-libelle" id="comp-reference-nom" data-i18n="ui.comp.aucun"></span>
+            </div>
+            <div class="comp-plage">
+              <label><span class="sous-libelle" data-i18n="ui.comp.debut"></span>
+                <input type="text" id="comp-debut" value="00:05:00"></label>
+              <label><span class="sous-libelle" data-i18n="ui.comp.duree"></span>
+                <input type="number" id="comp-duree" value="10" min="1" max="240"></label>
+            </div>
+            <button class="bouton bouton-accent" id="btn-comp-lancer">
+              <svg class="icone-s icone"><use href="#i-horloge"></use></svg>
+              <span data-i18n="ui.comp.lancer"></span>
+            </button>
+            <div id="comp-en-cours" class="etape-extension" style="display:none">
+              <div class="sous-libelle" id="comp-message">--</div>
+              <div class="barre"><span id="comp-barre" style="width:0%"></span></div>
+              <button class="bouton" id="btn-comp-arreter">
+                <svg class="icone-s icone"><use href="#i-arret"></use></svg>
+                <span data-i18n="ui.comp.arreter"></span>
+              </button>
+            </div>
+            <div id="comp-resultat" class="etape-extension" style="display:none">
+              <textarea id="comp-rapport" readonly spellcheck="false" rows="9" data-i18n-aria="ui.comp.copier"></textarea>
+              <div class="rangee-boutons">
+                <button class="bouton bouton-accent" id="btn-comp-ouvrir">
+                  <svg class="icone-s icone"><use href="#i-coche"></use></svg>
+                  <span data-i18n="ui.comp.ouvrir"></span>
+                </button>
+                <button class="bouton" id="btn-comp-copier">
+                  <svg class="icone-s icone"><use href="#i-copie"></use></svg>
+                  <span data-i18n="ui.comp.copier"></span>
+                </button>
+              </div>
+            </div>
+            <div id="comp-retour"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ------------------------------------------------------ Journal -->
+      <section class="reglages-section" role="tabpanel" data-section="journal" hidden>
+        <h2 data-i18n="ui.reg.journal"></h2>
+        <div class="bloc-reglage">
+          <div class="rangee-boutons">
+            <button class="bouton" id="btn-fichier-log">
+              <svg class="icone-s icone"><use href="#i-externe"></use></svg>
+              <span data-i18n="ui.pied.fichier_detaille"></span>
+            </button>
+          </div>
+          <div class="journal-contenu" id="journal-contenu" tabindex="0" data-i18n-aria="ui.reg.journal"></div>
+        </div>
+      </section>
     </div>
   </div>
-</div>
+</main>
 
-<!-- Vocabulaire, format 2 : termes, fautes connues, propositions a relire -->
-<div class="voile" id="modale-vocabulaire">
-  <div class="modale modale-large modale-vocabulaire">
-    <div class="modale-entete">
-      <svg class="icone"><use href="#i-livre"></use></svg>
-      <h2 data-i18n="ui.modale.vocabulaire.titre"></h2>
-      <button class="bouton-icone" data-fermer><svg class="icone"><use href="#i-croix"></use></svg></button>
-    </div>
-    <div class="modale-corps">
+<!-- ============================== Vocabulaire ============================== -->
+<main class="vue vue-vocabulaire" id="vue-vocabulaire" data-vue="vocabulaire" hidden aria-labelledby="titre-vocabulaire">
+  <div class="vue-entete">
+    <button class="bouton bouton-discret" data-retour>
+      <svg class="icone-s icone"><use href="#i-retour"></use></svg>
+      <span data-i18n="ui.bouton.retour"></span>
+    </button>
+    <h1 id="titre-vocabulaire" tabindex="-1" data-i18n="ui.modale.vocabulaire.titre"></h1>
+    <span class="pousse"></span>
+    <button class="bouton" id="btn-voc-importer">
+      <svg class="icone-s icone"><use href="#i-import"></use></svg>
+      <span data-i18n="ui.voc2.importer"></span>
+    </button>
+    <button class="bouton" id="btn-voc-exporter">
+      <svg class="icone-s icone"><use href="#i-export"></use></svg>
+      <span data-i18n="ui.voc2.exporter"></span>
+    </button>
+  </div>
+  <div class="vocabulaire">
+    <div class="voc-principal">
       <p class="voc-intro" data-i18n="ui.voc2.intro"></p>
       <div class="voc-resume" id="voc-resume"></div>
       <div id="voc-avis"></div>
       <div class="onglets voc-onglets" role="tablist">
-        <button class="onglet" role="tab" data-voc-onglet="propose" aria-selected="true">
+        <button class="onglet" role="tab" data-voc-onglet="propose" aria-selected="true" aria-controls="voc-liste">
           <span data-i18n="ui.voc2.onglet.propose"></span><span class="compteur" id="voc-n-propose">0</span>
         </button>
-        <button class="onglet" role="tab" data-voc-onglet="actif" aria-selected="false">
+        <button class="onglet" role="tab" data-voc-onglet="actif" aria-selected="false" aria-controls="voc-liste">
           <span data-i18n="ui.voc2.onglet.actif"></span><span class="compteur" id="voc-n-actif">0</span>
         </button>
-        <button class="onglet" role="tab" data-voc-onglet="refuse" aria-selected="false">
+        <button class="onglet" role="tab" data-voc-onglet="refuse" aria-selected="false" aria-controls="voc-liste">
           <span data-i18n="ui.voc2.onglet.refuse"></span><span class="compteur" id="voc-n-refuse">0</span>
         </button>
         <span class="pousse"></span>
-        <input type="text" id="voc-recherche" class="voc-recherche" spellcheck="false"
-               data-i18n-placeholder="ui.voc2.rechercher">
+        <input type="search" id="voc-recherche" class="recherche-courte" spellcheck="false"
+               data-i18n-placeholder="ui.voc2.rechercher" data-i18n-aria="ui.voc2.rechercher">
       </div>
       <div class="voc-outils" id="voc-outils">
         <label class="case"><input type="checkbox" id="voc-tout"><span data-i18n="ui.voc2.tout"></span></label>
+        <span class="voc-clavier" id="voc-clavier" data-i18n="ui.voc2.clavier"></span>
         <span class="pousse"></span>
-        <button class="bouton bouton-discret" id="btn-voc-refuser" data-i18n="ui.voc2.refuser_selection"></button>
-        <button class="bouton bouton-accent" id="btn-voc-accepter" data-i18n="ui.voc2.accepter_selection"></button>
-        <button class="bouton" id="btn-voc-ajouter">
+        <button class="bouton bouton-discret bouton-petit" id="btn-voc-refuser" data-i18n="ui.voc2.refuser_selection"></button>
+        <button class="bouton bouton-accent bouton-petit" id="btn-voc-accepter" data-i18n="ui.voc2.accepter_selection"></button>
+        <button class="bouton bouton-petit" id="btn-voc-ajouter">
           <svg class="icone-s icone"><use href="#i-plus"></use></svg>
           <span data-i18n="ui.voc2.ajouter"></span>
         </button>
@@ -817,37 +962,139 @@
         </div>
         <div id="voc-edition-retour"></div>
       </div>
-      <div class="voc-liste" id="voc-liste"></div>
+      <div class="voc-liste" id="voc-liste" role="listbox" aria-multiselectable="true" data-i18n-aria="ui.voc2.liste"></div>
+      <div class="lecture-retour" id="voc-retour" role="status" aria-live="polite"></div>
+    </div>
+
+    <aside class="voc-reglages" aria-labelledby="titre-voc-reglages">
+      <h2 class="titre-section" id="titre-voc-reglages" data-i18n="ui.voc.reglages"></h2>
+      <label class="bascule">
+        <input type="checkbox" id="opt-glossaire" checked>
+        <span class="piste"></span>
+        <span>
+          <span class="libelle" data-i18n="ui.voc.glossaire"></span><br>
+          <span class="sous-libelle" id="etat-glossaire">--</span>
+        </span>
+      </label>
+      <label class="bascule">
+        <input type="checkbox" id="opt-corrections" checked>
+        <span class="piste"></span>
+        <span>
+          <span class="libelle" data-i18n="ui.voc.corrections"></span><br>
+          <span class="sous-libelle" id="etat-corrections">--</span>
+        </span>
+      </label>
+      <label class="bascule">
+        <input type="checkbox" id="opt-rapprochement" checked>
+        <span class="piste"></span>
+        <span>
+          <span class="libelle" data-i18n="ui.voc2.rapprochement"></span><br>
+          <span class="sous-libelle" data-i18n="ui.voc2.rapprochement_aide"></span>
+        </span>
+      </label>
+      <div class="rangee-boutons">
+        <button class="bouton bouton-petit" id="btn-glossaire">
+          <svg class="icone-s icone"><use href="#i-livre"></use></svg>
+          <span data-i18n="ui.bouton.glossaire"></span>
+        </button>
+        <button class="bouton bouton-petit" id="btn-corrections">
+          <svg class="icone-s icone"><use href="#i-reglages"></use></svg>
+          <span data-i18n="ui.bouton.corrections"></span>
+        </button>
+      </div>
       <div class="voc-partages">
         <span class="titre-section" data-i18n="ui.voc2.partages.titre"></span>
         <p class="aide" data-i18n="ui.voc2.partages.aide"></p>
         <div id="voc-partages-liste"></div>
-        <button class="bouton bouton-discret" id="btn-voc-partage" style="margin-top:6px">
+        <button class="bouton bouton-discret bouton-petit" id="btn-voc-partage">
           <svg class="icone-s icone"><use href="#i-plus"></use></svg>
           <span data-i18n="ui.voc2.partages.ajouter"></span>
         </button>
-        <label class="bascule" style="margin-top:10px">
-          <input type="checkbox" id="opt-rapprochement" checked>
-          <span class="piste"></span>
-          <span>
-            <span class="libelle" data-i18n="ui.voc2.rapprochement"></span><br>
-            <span class="sous-libelle" data-i18n="ui.voc2.rapprochement_aide"></span>
-          </span>
-        </label>
       </div>
+    </aside>
+  </div>
+</main>
+
+<!-- ================================= Pied ============================== -->
+<footer class="pied" id="pied">
+  <div class="actions">
+    <div class="etat-global" id="etat-global" role="status" aria-live="polite">
+      <span class="point"></span>
+      <span class="texte" id="etat-texte" data-i18n="ui.pied.pret"></span>
+    </div>
+    <span class="pousse"></span>
+    <button class="bouton bouton-danger" id="btn-arreter" disabled>
+      <svg class="icone-s icone"><use href="#i-arret"></use></svg>
+      <span data-i18n="ui.bouton.arreter"></span>
+    </button>
+    <button class="bouton bouton-accent" id="btn-lancer" disabled>
+      <svg class="icone-s icone"><use href="#i-lecture"></use></svg>
+      <span data-i18n="ui.bouton.lancer"></span>
+    </button>
+  </div>
+</footer>
+
+<!-- ================================ Modales =========================== -->
+
+<!-- Premier lancement : ce que fait l'application, le reglage propose, lancer. -->
+<div class="voile" id="modale-accueil">
+  <div class="modale modale-accueil">
+    <div class="modale-entete">
+      <svg class="icone"><use href="#i-onde"></use></svg>
+      <h2 data-i18n="ui.accueil.titre"></h2>
+    </div>
+    <div class="modale-corps">
+      <p class="accueil-quoi" data-i18n="ui.accueil.quoi"></p>
+      <div class="accueil-reglage" id="accueil-reglage"></div>
     </div>
     <div class="modale-pied">
-      <button class="bouton" id="btn-voc-importer">
-        <svg class="icone-s icone"><use href="#i-import"></use></svg>
-        <span data-i18n="ui.voc2.importer"></span>
-      </button>
-      <button class="bouton" id="btn-voc-exporter">
-        <svg class="icone-s icone"><use href="#i-export"></use></svg>
-        <span data-i18n="ui.voc2.exporter"></span>
-      </button>
       <span class="pousse"></span>
-      <span class="lecture-retour" id="voc-retour"></span>
-      <button class="bouton bouton-accent" data-fermer data-i18n="ui.bouton.fermer"></button>
+      <button class="bouton" id="btn-accueil-garder" data-i18n="ui.accueil.garder"></button>
+      <button class="bouton bouton-accent" id="btn-accueil-appliquer" data-i18n="ui.accueil.appliquer"></button>
+    </div>
+  </div>
+</div>
+
+<div class="voile" id="modale-glossaire">
+  <div class="modale modale-large">
+    <div class="modale-entete">
+      <svg class="icone"><use href="#i-livre"></use></svg>
+      <h2 data-i18n="ui.modale.glossaire.titre"></h2>
+      <button class="bouton-icone" data-fermer><svg class="icone"><use href="#i-croix"></use></svg></button>
+    </div>
+    <div class="modale-corps">
+      <p data-i18n="ui.modale.glossaire.intro"></p>
+      <div class="encart encart-info">
+        <svg class="icone-s icone"><use href="#i-info"></use></svg>
+        <span data-i18n-html="ui.modale.glossaire.limite"></span>
+      </div>
+      <textarea id="zone-glossaire" spellcheck="false" data-i18n-aria="ui.modale.glossaire.titre"></textarea>
+      <div id="retour-glossaire"></div>
+    </div>
+    <div class="modale-pied">
+      <span class="pousse"></span>
+      <button class="bouton" data-fermer data-i18n="ui.bouton.annuler"></button>
+      <button class="bouton bouton-accent" id="btn-enregistrer-glossaire" data-i18n="ui.bouton.enregistrer"></button>
+    </div>
+  </div>
+</div>
+
+<div class="voile" id="modale-corrections">
+  <div class="modale modale-large">
+    <div class="modale-entete">
+      <svg class="icone"><use href="#i-reglages"></use></svg>
+      <h2 data-i18n="ui.modale.corrections.titre"></h2>
+      <button class="bouton-icone" data-fermer><svg class="icone"><use href="#i-croix"></use></svg></button>
+    </div>
+    <div class="modale-corps">
+      <p data-i18n-html="ui.modale.corrections.intro"></p>
+      <textarea id="zone-corrections" spellcheck="false" data-i18n-aria="ui.modale.corrections.titre"></textarea>
+      <div id="retour-corrections"></div>
+    </div>
+    <div class="modale-pied">
+      <span class="pousse"></span>
+      <button class="bouton" data-fermer data-i18n="ui.bouton.annuler"></button>
+      <button class="bouton bouton-accent" id="btn-enregistrer-corrections" data-i18n="ui.bouton.enregistrer"></button>
     </div>
   </div>
 </div>
@@ -885,11 +1132,10 @@
     </div>
     <div class="modale-corps">
       <div id="etat-diarisation-modale"></div>
-
       <div id="bloc-procedure-jeton">
         <p data-i18n="ui.modale.jeton.intro"></p>
         <ol id="etapes-jeton"></ol>
-        <div style="display:flex;gap:8px;margin-bottom:14px">
+        <div class="rangee-boutons">
           <button class="bouton" id="btn-lien-conditions">
             <svg class="icone-s icone"><use href="#i-externe"></use></svg>
             <span data-i18n="ui.modale.jeton.page_modele"></span>
@@ -905,7 +1151,7 @@
           <span class="aide" data-i18n-html="ui.modale.jeton.aide"></span>
         </div>
         <div id="retour-jeton"></div>
-        <div class="encart encart-info" style="margin-top:12px">
+        <div class="encart encart-info">
           <svg class="icone-s icone"><use href="#i-info"></use></svg>
           <span data-i18n="ui.modale.jeton.sans_jeton"></span>
         </div>
@@ -958,55 +1204,11 @@
   </div>
 </div>
 
-<!-- Vue de lecture : relire une transcription sans quitter l'application -->
-<div class="voile" id="modale-lecture">
-  <div class="modale modale-lecture">
-    <div class="modale-entete">
-      <svg class="icone"><use href="#i-loupe"></use></svg>
-      <h2 id="titre-lecture" data-i18n="ui.modale.lecture.titre"></h2>
-      <button class="bouton-icone" data-fermer><svg class="icone"><use href="#i-croix"></use></svg></button>
-    </div>
-    <div class="lecture-meta" id="lecture-meta"></div>
-    <div class="modale-corps">
-      <div id="lecture-avis"></div>
-      <div class="lecture-legende" id="lecture-legende">
-        <span class="exemple" data-i18n="ui.lecture.exemple"></span>
-        <span id="lecture-legende-texte" data-i18n="ui.lecture.legende"></span>
-      </div>
-      <div id="lecture-audio"></div>
-      <details class="lecture-remplacements" id="lecture-remplacements" hidden>
-        <summary id="lecture-remplacements-titre"></summary>
-        <div id="lecture-remplacements-liste"></div>
-      </details>
-      <div class="lecture-texte" id="lecture-texte"></div>
-    </div>
-    <div class="modale-pied">
-      <button class="bouton" id="btn-ouvrir-lecture">
-        <svg class="icone-s icone"><use href="#i-externe"></use></svg>
-        <span data-i18n="ui.lecture.ouvrir"></span>
-      </button>
-      <span class="pousse"></span>
-      <span class="lecture-retour" id="lecture-retour"></span>
-      <button class="bouton bouton-discret" id="btn-annuler-correction" hidden>
-        <svg class="icone-s icone"><use href="#i-reprise"></use></svg>
-        <span data-i18n="ui.lecture.annuler_correction"></span>
-      </button>
-      <button class="bouton" id="btn-copier-lecture">
-        <svg class="icone-s icone"><use href="#i-copie"></use></svg>
-        <span data-i18n="ui.lecture.copier"></span>
-      </button>
-      <button class="bouton bouton-accent" id="btn-copier-ia">
-        <svg class="icone-s icone"><use href="#i-etincelle"></use></svg>
-        <span data-i18n="ui.lecture.copier_ia"></span>
-      </button>
-    </div>
-  </div>
-</div>
-
-<!-- Bouton flottant propose sur une selection, dans la vue de lecture -->
+<!-- Bouton flottant propose sur une selection, dans la relecture -->
 <button class="bouton-flottant" id="btn-corriger-selection">
   <svg class="icone-s icone"><use href="#i-crayon"></use></svg>
   <span data-i18n="ui.lecture.corriger"></span>
+  <kbd data-i18n="ui.touche.entree"></kbd>
 </button>
 
 <div class="voile" id="modale-correction">
@@ -1017,26 +1219,50 @@
       <button class="bouton-icone" data-fermer><svg class="icone"><use href="#i-croix"></use></svg></button>
     </div>
     <div class="modale-corps">
-      <div class="champ">
-        <label for="correction-source" data-i18n="ui.correction.source"></label>
-        <input type="text" id="correction-source" readonly>
-      </div>
-      <div class="champ">
-        <label for="correction-cible" data-i18n="ui.correction.cible"></label>
-        <input type="text" id="correction-cible" spellcheck="false">
-        <span class="aide" data-i18n="ui.correction.aide"></span>
+      <div class="correction-champs">
+        <div class="champ">
+          <label for="correction-source" data-i18n="ui.correction.source"></label>
+          <input type="text" id="correction-source" readonly>
+        </div>
+        <div class="champ">
+          <label for="correction-cible" data-i18n="ui.correction.cible"></label>
+          <input type="text" id="correction-cible" spellcheck="false">
+        </div>
       </div>
       <div class="apercu-correction" id="apercu-correction" aria-live="polite"></div>
       <label class="case" id="case-regle">
         <input type="checkbox" id="correction-regle">
         <span id="correction-question" data-i18n="ui.correction.question"></span>
       </label>
-      <div id="retour-correction" style="margin-top:12px"></div>
+      <div id="retour-correction"></div>
     </div>
     <div class="modale-pied">
       <span class="pousse"></span>
       <button class="bouton" data-fermer data-i18n="ui.bouton.annuler"></button>
       <button class="bouton bouton-accent" id="btn-appliquer-correction" data-i18n="ui.correction.appliquer"></button>
+    </div>
+  </div>
+</div>
+
+<div class="voile" id="modale-locuteur">
+  <div class="modale">
+    <div class="modale-entete">
+      <svg class="icone"><use href="#i-personnes"></use></svg>
+      <h2 id="titre-locuteur" data-i18n="ui.loc.renommer"></h2>
+      <button class="bouton-icone" data-fermer><svg class="icone"><use href="#i-croix"></use></svg></button>
+    </div>
+    <div class="modale-corps">
+      <div class="champ">
+        <label for="locuteur-nom" id="locuteur-libelle" data-i18n="ui.loc.nouveau_nom"></label>
+        <input type="text" id="locuteur-nom" spellcheck="false" maxlength="29">
+        <span class="aide" id="locuteur-aide"></span>
+      </div>
+      <div id="retour-locuteur"></div>
+    </div>
+    <div class="modale-pied">
+      <span class="pousse"></span>
+      <button class="bouton" data-fermer data-i18n="ui.bouton.annuler"></button>
+      <button class="bouton bouton-accent" id="btn-renommer-locuteur" data-i18n="ui.loc.renommer_bouton"></button>
     </div>
   </div>
 </div>
@@ -1050,12 +1276,12 @@
     </div>
     <div class="modale-corps">
       <p data-i18n="ui.modale.gabarit.intro"></p>
-      <div class="encart encart-info" style="margin-bottom:12px">
+      <div class="encart encart-info">
         <svg class="icone-s icone"><use href="#i-info"></use></svg>
         <span data-i18n-html="ui.modale.gabarit.variables"></span>
       </div>
-      <textarea id="zone-gabarit" spellcheck="false"></textarea>
-      <div id="retour-gabarit" style="margin-top:10px"></div>
+      <textarea id="zone-gabarit" spellcheck="false" data-i18n-aria="ui.modale.gabarit.titre"></textarea>
+      <div id="retour-gabarit"></div>
     </div>
     <div class="modale-pied">
       <span class="pousse"></span>
@@ -1065,20 +1291,24 @@
   </div>
 </div>
 
-<div class="voile" id="modale-stockage">
-  <div class="modale">
+<!-- Effacement complet : apercu detaille, puis confirmation. -->
+<div class="voile" id="modale-effacement">
+  <div class="modale modale-large">
     <div class="modale-entete">
-      <svg class="icone"><use href="#i-loupe"></use></svg>
-      <h2 data-i18n="ui.modale.stockage.titre"></h2>
+      <svg class="icone"><use href="#i-corbeille"></use></svg>
+      <h2 data-i18n="ui.eff.titre"></h2>
       <button class="bouton-icone" data-fermer><svg class="icone"><use href="#i-croix"></use></svg></button>
     </div>
     <div class="modale-corps">
-      <p data-i18n="ui.modale.stockage.intro"></p>
-      <div id="contenu-stockage"></div>
+      <div id="eff-contenu"></div>
+      <label class="case eff-confirmer"><input type="checkbox" id="eff-compris">
+        <span data-i18n="ui.eff.compris"></span></label>
+      <div id="eff-retour"></div>
     </div>
     <div class="modale-pied">
       <span class="pousse"></span>
-      <button class="bouton bouton-accent" data-fermer data-i18n="ui.bouton.fermer"></button>
+      <button class="bouton" data-fermer data-i18n="ui.bouton.annuler"></button>
+      <button class="bouton bouton-danger-plein" id="btn-eff-executer" disabled data-i18n="ui.eff.executer"></button>
     </div>
   </div>
 </div>
@@ -1094,52 +1324,39 @@
       <h3 data-i18n="ui.aide.h_outil"></h3>
       <p data-i18n="ui.aide.p_outil"></p>
 
-      <h3 data-i18n="ui.aide.h_presets"></h3>
-      <div class="defilable">
-        <table class="tableau">
-          <thead><tr>
-            <th data-i18n="ui.aide.th_preset"></th>
-            <th data-i18n="ui.aide.th_modele"></th>
-            <th data-i18n="ui.aide.th_usage"></th>
-          </tr></thead>
-          <tbody>
-            <tr>
-              <td><strong data-i18n="ui.aide.preset_qualite"></strong></td><td>large-v3</td>
-              <td data-i18n="ui.aide.preset_qualite_usage"></td>
-            </tr>
-            <tr>
-              <td><strong data-i18n="ui.aide.preset_rapide"></strong></td><td>large-v3-turbo</td>
-              <td data-i18n="ui.aide.preset_rapide_usage"></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <h3 data-i18n="ui.aide.h_vocabulaire"></h3>
-      <p data-i18n-html="ui.aide.p_vocabulaire"></p>
+      <h3 data-i18n="ui.aide.h_parcours"></h3>
+      <p data-i18n-html="ui.aide.p_parcours"></p>
 
       <h3 data-i18n="ui.aide.h_relire"></h3>
       <p data-i18n-html="ui.aide.p_relire1"></p>
       <p data-i18n-html="ui.aide.p_relire2"></p>
 
-      <h3 data-i18n="ui.aide.h_deposer"></h3>
-      <p data-i18n-html="ui.aide.p_deposer1"></p>
-      <p data-i18n="ui.aide.p_deposer2"></p>
-
       <h3 data-i18n="ui.aide.h_raccourcis"></h3>
-      <ul>
-        <li data-i18n-html="ui.aide.raccourci_ouvrir"></li>
-        <li data-i18n-html="ui.aide.raccourci_lancer"></li>
-        <li data-i18n-html="ui.aide.raccourci_fermer"></li>
-        <li data-i18n-html="ui.aide.raccourci_zoom"></li>
-      </ul>
+      <div class="defilable">
+        <table class="tableau raccourcis">
+          <tbody>
+            <tr><td><kbd>Ctrl</kbd> + <kbd>O</kbd></td><td data-i18n="ui.aide.r.ouvrir"></td></tr>
+            <tr><td><kbd>Ctrl</kbd> + <kbd data-i18n="ui.touche.entree"></kbd></td><td data-i18n="ui.aide.r.lancer"></td></tr>
+            <tr><td><kbd data-i18n="ui.touche.echap"></kbd></td><td data-i18n="ui.aide.r.fermer"></td></tr>
+            <tr><td><kbd>Ctrl</kbd> + <kbd>+</kbd> / <kbd>-</kbd> / <kbd>0</kbd></td><td data-i18n="ui.aide.r.zoom"></td></tr>
+            <tr class="groupe"><td colspan="2" data-i18n="ui.aide.r.relecture"></td></tr>
+            <tr><td><kbd data-i18n="ui.touche.espace"></kbd></td><td data-i18n="ui.aide.r.lire"></td></tr>
+            <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td data-i18n="ui.aide.r.sauter"></td></tr>
+            <tr><td><kbd>[</kbd> <kbd>]</kbd></td><td data-i18n="ui.aide.r.vitesse"></td></tr>
+            <tr><td><kbd>Ctrl</kbd> + <kbd>F</kbd>, <kbd>F3</kbd></td><td data-i18n="ui.aide.r.chercher"></td></tr>
+            <tr><td><kbd>N</kbd>, <kbd data-i18n="ui.touche.maj"></kbd> + <kbd>N</kbd></td><td data-i18n="ui.aide.r.point"></td></tr>
+            <tr><td><kbd data-i18n="ui.touche.entree"></kbd></td><td data-i18n="ui.aide.r.corriger"></td></tr>
+            <tr><td><kbd>Ctrl</kbd> + <kbd>Z</kbd></td><td data-i18n="ui.aide.r.annuler"></td></tr>
+            <tr class="groupe"><td colspan="2" data-i18n="ui.aide.r.vocabulaire"></td></tr>
+            <tr><td><kbd>↑</kbd> <kbd>↓</kbd>, <kbd data-i18n="ui.touche.espace"></kbd></td><td data-i18n="ui.aide.r.voc_parcourir"></td></tr>
+            <tr><td><kbd>A</kbd>, <kbd>R</kbd>, <kbd>M</kbd></td><td data-i18n="ui.aide.r.voc_decider"></td></tr>
+          </tbody>
+        </table>
+      </div>
 
       <h3 data-i18n="ui.aide.h_probleme"></h3>
       <p data-i18n="ui.aide.p_probleme"></p>
 
-      <!-- Verification de mise a jour a la demande. Independante du reglage
-           d'opt-in, qui ne gouverne que la verification passive au demarrage :
-           ici c'est un clic volontaire, annonce comme tel juste en dessous. -->
       <h3 data-i18n="ui.aide.h_maj"></h3>
       <div class="aide-maj">
         <span class="aide-maj-version">
@@ -1156,7 +1373,6 @@
       <span class="aide" data-i18n="ui.aide.maj_confidentialite"></span>
     </div>
     <div class="modale-pied">
-      <button class="bouton bouton-discret" id="btn-ouvrir-app" data-i18n="ui.aide.ouvrir_donnees"></button>
       <span class="pousse"></span>
       <button class="bouton bouton-accent" data-fermer data-i18n="ui.bouton.fermer"></button>
     </div>
@@ -1164,6 +1380,11 @@
 </div>
 
 <script src="langues.js"></script>
+<!-- Doublure des fonctions de passerelle que la branche « moteur » apporte
+     (espace disque, effacement, etat du moteur). A retirer a la fusion. -->
+<script src="doublure-passerelle.js"></script>
 <script src="app.js"></script>
+<script src="relecture.js"></script>
+<script src="espace.js"></script>
 </body>
 </html>
