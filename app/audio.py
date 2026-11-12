@@ -109,16 +109,47 @@ def _duree_conteneur(conteneur, flux) -> float:
 
 
 def duree(chemin: str | Path) -> float:
-    """Durée du fichier en secondes, 0 si elle n'a pas pu être lue. Lit l'en-tête seulement."""
+    """
+    Durée du fichier en secondes, 0 si elle n'a pas pu être lue. Lit l'en-tête
+    seulement. Pour un WAV, la durée que son en-tête annonce compte aussi :
+    FFmpeg mesure un WAV tronqué à ce qui reste, et la troncature passerait
+    inaperçue.
+    """
+    mesuree = 0.0
     try:
         import av  # type: ignore
 
         with av.open(str(chemin)) as conteneur:
             flux = next((s for s in conteneur.streams if s.type == "audio"), None)
-            return _duree_conteneur(conteneur, flux)
+            mesuree = _duree_conteneur(conteneur, flux)
     except Exception as exc:
         journal.debug("Mesure de durée impossible pour %s : %s", chemin, exc)
-    return 0.0
+    return max(mesuree, _duree_entete_wav(chemin)) if mesuree else mesuree
+
+
+def _duree_entete_wav(chemin: str | Path) -> float:
+    """Durée annoncée par l'en-tête RIFF d'un WAV (taille des données / débit), 0 sinon."""
+    import struct
+
+    try:
+        with open(chemin, "rb") as flux:
+            tete = flux.read(4096)
+    except OSError:
+        return 0.0
+    if tete[:4] != b"RIFF" or tete[8:12] != b"WAVE":
+        return 0.0
+    position, debit, taille = 12, 0, 0
+    while position + 8 <= len(tete):
+        nom, longueur = tete[position:position + 4], struct.unpack("<I", tete[position + 4:position + 8])[0]
+        if nom == b"fmt " and position + 16 <= len(tete):
+            debit = struct.unpack("<I", tete[position + 16:position + 20])[0]
+        elif nom == b"data":
+            taille = longueur
+            break
+        position += 8 + longueur + (longueur & 1)
+    if not debit or not taille or taille == 0xFFFFFFFF:
+        return 0.0
+    return taille / debit
 
 
 def _graphe(av, flux, filtres_salle: bool, debut: float, duree_extrait: float, origine: float):

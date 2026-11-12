@@ -57,6 +57,20 @@ def essai_decodage(base: Path) -> None:
     import numpy as np
 
     from app import audio
+
+    # WAV tronqué : l'en-tête annonce 78 s, 26 s restent. La durée annoncée
+    # est celle de l'en-tête : la troncature est vue (« audio lu en partie »).
+    import struct
+
+    tronque = base / "tronque.wav"
+    donnees_pcm = (np.sin(np.arange(16000 * 26) / 10.0) * 8000).astype("<i2").tobytes()
+    annonce = 16000 * 2 * 78
+    entete = (b"RIFF" + struct.pack("<I", 36 + annonce) + b"WAVEfmt " + struct.pack("<IHHIIHH", 16, 1, 1, 16000, 32000, 2, 16)
+              + b"data" + struct.pack("<I", annonce))
+    tronque.write_bytes(entete + donnees_pcm)
+    annoncee, lue = audio.duree(tronque), audio.decoder(tronque).size / audio.FREQUENCE
+    verifier(abs(annoncee - 78) < 0.5 and abs(lue - 26) < 0.5 and lue < 0.9 * annoncee and annoncee > 60,
+             "WAV tronqué : 78 s annoncées par l'en-tête, 26 s lues, l'écart sera dit", f"{annoncee:.1f} / {lue:.1f}")
     from app.journal import ErreurLisible
 
     extrait = RACINE / "banc" / "extrait_fr.ogg"
