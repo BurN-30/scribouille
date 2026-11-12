@@ -45,6 +45,8 @@ Ligne de commande :
     scribouille-verifier.exe --campagne [--appliquer] [--recommencer]
         [--reglages CLE,CLE] [--limite-extraits N] [--corpus PAQUET.zip]
         [--peripherique GPU|CPU] [--telecharger]
+        [--peripherique HETERO:GPU,CPU] [--proprietes-ov CLE=VALEUR,...]   (essais du faisceau
+        sur la puce graphique : dossier à part, jamais le verdict public du poste)
     scribouille-verifier.exe --campagne --reunion FICHIER [--debut 00:05:00]
         [--duree 600] [--reglages CLE,CLE]
 """
@@ -202,6 +204,8 @@ def executer_reglage(parametres: dict) -> dict:
             return resultat
         peripherique = str(parametres.get("peripherique") or "CPU").upper()
         instance = moteur_openvino.MoteurOpenVINO(mat, peripherique)
+        # Voie d'essai (`--proprietes-ov`), jamais posée par l'application.
+        instance.proprietes = dict(parametres.get("proprietes_ov") or {})
         reglages["faisceau_openvino"] = reglage.faisceau
         resultat["peripherique"] = peripherique
     else:
@@ -784,20 +788,56 @@ def dossier_publique() -> Path:
     return DOSSIER_CAMPAGNES / f"publique-v{VERSION_CORPUS}"
 
 
+def lire_proprietes(texte: str) -> dict:
+    """
+    « CLE=VALEUR,CLE=VALEUR » en propriétés d'OpenVINO : YES/NO et TRUE/FALSE
+    en booléens, entiers en entiers, le reste tel quel (« LOW », « f32 »).
+    """
+    proprietes: dict = {}
+    for morceau in (texte or "").split(","):
+        cle, _, valeur = morceau.partition("=")
+        cle, valeur = cle.strip(), valeur.strip()
+        if not cle or not valeur:
+            continue
+        if valeur.upper() in ("YES", "TRUE", "NO", "FALSE"):
+            proprietes[cle] = valeur.upper() in ("YES", "TRUE")
+        elif valeur.lstrip("-").isdigit():
+            proprietes[cle] = int(valeur)
+        else:
+            proprietes[cle] = valeur
+    return proprietes
+
+
+def suffixe_essai(limite: int, peripherique: str, proprietes: dict) -> str:
+    """
+    Dossier d'une campagne réduite : le nombre d'extraits, plus le périphérique
+    forcé et les propriétés d'essai, pour que deux variantes ne se mêlent pas
+    (chaque réglage déjà fait est repris tel quel d'un passage à l'autre).
+    """
+    import re as _re
+
+    morceaux = [f"-essai{limite}"]
+    if peripherique:
+        morceaux.append("-" + _re.sub(r"[^a-z0-9]+", "-", peripherique.lower()).strip("-"))
+    for cle, valeur in sorted(proprietes.items()):
+        morceaux.append("-" + _re.sub(r"[^a-z0-9]+", "-", f"{cle}-{valeur}".lower()).strip("-"))
+    return "".join(morceaux)
+
+
 def executer(reglages: str = "", limite: int = 0, paquet: str = "", peripherique: str = "",
              recommencer: bool = False, telecharger: bool = False, temoin: bool = True,
              rappel: Callable[[str], None] | None = None,
-             interrompu: Callable[[], bool] | None = None) -> dict:
+             interrompu: Callable[[], bool] | None = None, proprietes_ov: dict | None = None) -> dict:
     from . import energie
 
     with energie.sans_veille():
         return _executer(reglages, limite, paquet, peripherique, recommencer, telecharger,
-                         temoin, rappel, interrompu)
+                         temoin, rappel, interrompu, proprietes_ov or {})
 
 
 def _executer(reglages: str, limite: int, paquet: str, peripherique: str, recommencer: bool,
               telecharger: bool, temoin: bool, rappel: Callable[[str], None] | None,
-              interrompu: Callable[[], bool] | None) -> dict:
+              interrompu: Callable[[], bool] | None, proprietes_ov: dict | None = None) -> dict:
     from . import config as config_module, corpus
     from .comparaison import nombre_mots_anglais
 
@@ -810,8 +850,12 @@ def _executer(reglages: str, limite: int, paquet: str, peripherique: str, recomm
             rappel(message)
 
     choisis = _choisir(reglages)
+    proprietes_ov = dict(proprietes_ov or {})
+    if (proprietes_ov or ":" in (peripherique or "")) and not limite:
+        # Une variante d'essai ne doit jamais écrire le verdict public du poste.
+        limite = 20
     dossier = dossier_publique() if not limite else dossier_publique().with_name(
-        dossier_publique().name + f"-essai{limite}")
+        dossier_publique().name + suffixe_essai(limite, peripherique, proprietes_ov))
     if recommencer and dossier.exists():
         shutil.rmtree(dossier, ignore_errors=True)
     dossier.mkdir(parents=True, exist_ok=True)
@@ -845,6 +889,8 @@ def _executer(reglages: str, limite: int, paquet: str, peripherique: str, recomm
         liste.append({"id": temoin_entree["id"], "wav": temoin_entree["wav"], "duree_s": 44.0})
 
     communs = {"langue": "fr", "glossaire": False, "corrections": False}
+    if proprietes_ov:
+        communs["proprietes_ov"] = proprietes_ov
     resultats = _jouer(choisis, liste, dossier, peripherique, communs, dire, interrompu)
 
     # Mesures : partie publique (sans le témoin), témoin à part.
@@ -1167,7 +1213,8 @@ def principal_cli(arguments: list[str]) -> int:
             limite=int(_valeur(arguments, "--limite-extraits", "0") or 0),
             paquet=_valeur(arguments, "--corpus"), peripherique=_valeur(arguments, "--peripherique"),
             recommencer="--recommencer" in arguments, telecharger="--telecharger" in arguments,
-            temoin="--sans-temoin" not in arguments, rappel=afficher)
+            temoin="--sans-temoin" not in arguments, rappel=afficher,
+            proprietes_ov=lire_proprietes(_valeur(arguments, "--proprietes-ov")))
     except journal.ErreurLisible as exc:
         print(f"{exc.titre}\n{exc.message}")
         return 1
