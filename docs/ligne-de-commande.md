@@ -64,7 +64,7 @@ Un fichier est « déjà transcrit » quand le dossier de sortie contient un com
 scribouille reprendre [CLE|FICHIER] [--sortie D] [--rythme R] [--telecharger]
 ```
 
-Sans argument, la plus récente. La reprise garde son modèle (le texte ne mêle jamais deux modèles). Sorties à côté de la source par défaut.
+Sans argument, la plus récente. La reprise garde son modèle (le texte ne mêle jamais deux modèles). Sorties dans le dossier que la transcription interrompue visait (`--sortie` de départ), sinon à côté de la source.
 
 ### etat
 
