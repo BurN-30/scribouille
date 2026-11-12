@@ -328,6 +328,10 @@ def principal() -> int:
                 break
         verifier(bool(mot_cible), "un mot à corriger a été trouvé", mot_cible)
         remplacement = "MotCorrigéDeTest"
+        # Un format 1 qui a du contenu : la règle mémorisée va dans corrections.txt,
+        # comme avant (sans lui, elle irait au vocabulaire du format 2, vérifié
+        # par outils/verifier_vocabulaire.py).
+        chemins.FICHIER_CORRECTIONS.write_text("exemple ancien => Exemple\n", encoding="utf-8")
         retour = lecture.appliquer_correction(txt, mot_cible, remplacement, ajouter_regle=True)
         verifier(retour.get("ok") is True, "correction appliquée", retour.get("message", ""))
         verifier(retour.get("regle_ajoutee") is True, "règle mémorisée")
