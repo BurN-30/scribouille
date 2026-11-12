@@ -10,6 +10,40 @@ version : la chaîne de publication en extrait la section correspondant au tag.
 
 *Non publiée.*
 
+S'adapter au poste, et travailler pendant que la transcription tourne.
+
+- **Réglage proposé pour ce poste**, au premier lancement et sur le bouton
+  **Reconnaître ce poste** (ou `scribouille-verifier.exe --reconnaitre`) : une
+  table de décision lisible (`app/adaptation.py`) regarde la carte NVIDIA, la
+  puce graphique Intel vue par OpenVINO, la mémoire, le processeur et
+  l'alimentation, et propose moteur, preset et rythme en une phrase, avec la
+  durée pour une heure. Le verdict d'une campagne ou le conseil d'un banc mené
+  sur le poste passent devant la table, tant qu'ils tiennent sur le matériel
+  du moment ; sinon la proposition le dit. Rien n'est appliqué, téléchargé ni
+  installé sans un clic.
+- **Pendant la transcription** : vitesse maximale (le défaut, comportement
+  inchangé), équilibré ou discret. Fils de calcul, lots, priorité Windows,
+  « mode efficacité » (EcoQoS), priorité des entrées-sorties, cœurs efficaces
+  des processeurs hybrides, priorité et cadence de la file de la puce
+  graphique (propriétés documentées du greffon GPU d'OpenVINO), pauses entre
+  fenêtres. Mémoire libre basse : lots, puis modèle plus léger, et c'est dit.
+- **S'adapter tout seul** : rythme choisi quand le poste sert (clavier et
+  souris, charge des autres programmes, plein écran, micro ouvert, batterie),
+  pleine vitesse au repos. Le temps restant suit la cadence observée.
+- **Banc des rythmes** (`--banc --modes`) : vitesse, mémoire, processeur
+  laissé libre et gêne d'une tâche témoin, pour chaque rythme ; ses rapports
+  de durée remplacent les coefficients de départ des estimations.
+- **Fiabilité** : le poste ne se met plus en veille faute d'activité pendant
+  une file ; fermer la fenêtre en pleine transcription demande confirmation ;
+  un fichier audio abîmé lu en partie est signalé ; l'état de reprise est
+  écrit d'un bloc ; une sauvegarde au fil de l'eau qui ne peut plus écrire
+  (disque plein) est signalée ; le repli sur le processeur quand la puce
+  graphique manque est dit au lancement de la file.
+- **Faisceau sur la puce graphique, voie d'essai** : la campagne accepte
+  `--peripherique HETERO:GPU,CPU` et `--proprietes-ov CLE=VALEUR`, dans un
+  dossier à part, pour mesurer sur un portable Intel si le faisceau y devient
+  possible et juste. L'application ne s'en sert pas.
+
 Choisir le réglage sur des réunions transcrites à la main : la campagne.
 
 La comparaison dit où deux moteurs divergent, pas lequel a raison. La campagne

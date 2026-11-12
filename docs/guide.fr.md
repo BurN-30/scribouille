@@ -108,6 +108,31 @@ Sept réglages passent l'un après l'autre (CTranslate2 et OpenVINO, large-v3 et
 
 Sur la puce graphique Intel, OpenVINO ne décode qu'en glouton (faisceau 1) : c'est une limite d'OpenVINO GenAI 2026.4, et l'application n'applique jamais de faisceau plus large sur ce circuit. Si OpenVINO rate une fenêtre, l'application rouvre le modèle et reprend sur la puce graphique ; si cela se répète, elle termine la transcription avec le moteur habituel, sans rien perdre de ce qui était déjà transcrit.
 
+### Réglage proposé pour ce poste
+
+Au premier lancement, et à chaque clic sur **Reconnaître ce poste** (section **Vitesse de cette machine**), l'application regarde le poste (processeur et familles de cœurs, mémoire, puce graphique Intel vue ou non par OpenVINO, carte NVIDIA, NPU, batterie ou secteur, mode d'alimentation de Windows) et propose un réglage, expliqué en une phrase, avec la durée attendue pour une heure de réunion. Si une campagne ou un banc d'essai a été mené sur le poste, son résultat passe devant la table ; s'il ne tient plus (puce graphique absente, pilote en panne, OpenVINO retiré), la proposition le dit et repart du matériel. Rien ne change sans **Appliquer**, rien n'est téléchargé ni installé d'office : un modèle manquant est annoncé avec sa taille et ne descend qu'au lancement d'une transcription ; le moteur Intel reste à installer par son propre bouton. En ligne de commande : `scribouille-verifier.exe --reconnaitre`, puis `--reconnaitre --appliquer`.
+
+La table, lue de haut en bas : carte NVIDIA, Qualité maximale sur la carte ; puce graphique Intel vue par OpenVINO, Rapide sur la puce (une heure en 7 minutes environ, aussi juste que Qualité maximale sur le processeur d'après la campagne du PC de test) ; puce Intel présente mais inutilisable, Rapide avec OpenVINO sur le processeur ; moins de 10 Go de mémoire, Rapide ; processeur seul, OpenVINO s'il est installé, sinon Rapide sur un processeur modeste (moins de 12 fils ou série U) et Qualité maximale sur un processeur de bureau. Le rythme proposé est **Équilibré, qui s'adapte tout seul**.
+
+### Travailler pendant une transcription
+
+La section **Pendant la transcription** des réglages borne ce que la transcription prend au poste :
+
+| | Vitesse maximale (défaut) | Équilibré | Discret |
+|---|---|---|---|
+| Fils de calcul | tous ceux du réglage du poste | environ les trois quarts, deux fils logiques laissés libres | la moitié, rangés sur les cœurs efficaces d'un processeur hybride |
+| Lots de passages | ceux du preset | 4 au plus | un passage à la fois (moins de mémoire) |
+| Priorité Windows | normale | inférieure à la normale | basse, et entrées-sorties en priorité basse |
+| Fréquence (qualité de service) | bridage levé (comme avant) | décidée par Windows | « mode efficacité » de Windows (EcoQoS) |
+| Puce graphique (OpenVINO) | inchangée | file en priorité basse | file en priorité et cadence basses, une pause égale au calcul après chaque fenêtre |
+| Mémoire libre basse | rien ne change | lots, puis modèle plus léger, et c'est dit | idem |
+
+**S'adapter tout seul** : la transcription prend le rythme choisi pendant que vous vous servez du poste (clavier ou souris touchés depuis moins de deux minutes, autres programmes qui occupent plus de 30 % du processeur, plein écran ou présentation, micro ouvert pour un appel, portable sur batterie) et la vitesse maximale quand il est au repos. Les fils et les lots se fixent au chargement du modèle : ce sont alors ceux de la vitesse maximale, et la bascule se fait par la priorité, la qualité de service et les pauses. Sur batterie, le rythme choisi est gardé jusqu'à ce que le portable soit branché. Le temps restant affiché suit la cadence réellement observée, bascules comprises. Le choix vaut pour la prochaine transcription.
+
+Mesurer chaque rythme sur le poste : `scribouille-verifier.exe --banc --modes` (ajouter `--peripherique GPU` pour la puce graphique). Pour chaque rythme : vitesse, mémoire, processeur laissé libre, et gêne mesurée sur une petite tâche témoin qui joue le rôle de vos applications. Les rapports de durée mesurés remplacent ensuite les coefficients de départ des estimations.
+
+Pendant une transcription, le poste ne se met plus en veille faute d'activité (fermer le capot garde son effet), et fermer la fenêtre demande confirmation : ce qui est déjà transcrit est gardé et proposé à la reprise.
+
 **Réseau d'entreprise filtré.** Si PyPI ou Hugging Face sont bloqués, les messages d'erreur donnent la voie hors ligne : pour un modèle, recopier son dossier `models--...` depuis un poste qui l'a déjà téléchargé dans le dossier des modèles ; pour OpenVINO, déposer les trois fichiers `.whl` (obtenus ailleurs par `pip download`) dans `paquets-hors-ligne\` du dossier de données, puis relancer l'installation. Aucun droit d'administrateur n'est demandé : tout s'installe dans le dossier de l'utilisateur.
 
 <details>

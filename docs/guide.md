@@ -108,6 +108,31 @@ Seven settings run one after the other (CTranslate2 and OpenVINO, large-v3 and t
 
 On Intel integrated graphics, OpenVINO only decodes greedily (beam 1): this is a limit of OpenVINO GenAI 2026.4, and the app never applies a wider beam on that chip. If OpenVINO fails on a window, the app reopens the model and carries on on the graphics chip; if it happens again, it finishes the transcription with the usual engine, losing nothing already transcribed.
 
+### Setting proposed for this computer
+
+On first start, and each time you click **Recognise this computer** (section **Speed of this computer**), the application looks at the computer (processor and core families, memory, Intel graphics chip seen or not by OpenVINO, NVIDIA card, NPU, battery or mains, Windows power mode) and proposes a setting, explained in one sentence, with the expected duration for an hour of meeting. If a campaign or a benchmark was run on the computer, its result comes before the table; if it no longer fits (graphics chip missing, broken driver, OpenVINO removed), the proposal says so and starts again from the hardware. Nothing changes without **Apply**, nothing is downloaded or installed on its own: a missing model is announced with its size and only downloaded when a transcription starts; the Intel engine keeps its own install button. From the command line: `scribouille-verifier.exe --reconnaitre`, then `--reconnaitre --appliquer`.
+
+The table, read from top to bottom: NVIDIA card, Maximum quality on the card; Intel graphics chip seen by OpenVINO, Fast on the chip (an hour in about 7 minutes, as accurate as Maximum quality on the processor according to the campaign on the test laptop); Intel chip present but unusable, Fast with OpenVINO on the processor; under 10 GB of memory, Fast; processor only, OpenVINO if installed, otherwise Fast on a modest processor (under 12 threads or U series) and Maximum quality on a desktop processor. The proposed pace is **Balanced, adapting automatically**.
+
+### Working during a transcription
+
+The **While transcribing** section of the settings bounds what the transcription takes from the computer:
+
+| | Maximum speed (default) | Balanced | Low impact |
+|---|---|---|---|
+| Compute threads | all those of the computer's setting | about three quarters, two logical threads left free | half, placed on the efficient cores of a hybrid processor |
+| Passage batches | those of the preset | 4 at most | one passage at a time (less memory) |
+| Windows priority | normal | below normal | low, and input-output at low priority |
+| Frequency (quality of service) | throttling lifted (as before) | decided by Windows | Windows "efficiency mode" (EcoQoS) |
+| Graphics chip (OpenVINO) | unchanged | low-priority queue | low-priority, low-throttle queue, a pause equal to the computation after each window |
+| Low free memory | nothing changes | batches, then a lighter model, and it is said | same |
+
+**Adapt automatically**: the transcription takes the chosen pace while you use the computer (keyboard or mouse touched less than two minutes ago, other programs using more than 30 % of the processor, full screen or presentation, microphone open for a call, laptop on battery) and maximum speed when it is idle. Threads and batches are fixed when the model loads: they are then those of maximum speed, and switching goes through priority, quality of service and pauses. On battery, the chosen pace is kept until the laptop is plugged in. The remaining time shown follows the pace actually observed, switches included. The choice applies from the next transcription.
+
+Measuring each pace on the computer: `scribouille-verifier.exe --banc --modes` (add `--peripherique GPU` for the graphics chip). For each pace: speed, memory, processor left free, and impact measured on a small probe task standing in for your applications. The measured duration ratios then replace the starting coefficients of the estimates.
+
+During a transcription, the computer no longer goes to sleep for lack of activity (closing the lid keeps its effect), and closing the window asks for confirmation: what is already transcribed is kept and offered for resuming.
+
 **Filtered company network.** If PyPI or Hugging Face are blocked, the error messages give the offline route: for a model, copy its `models--...` folder from a computer that already downloaded it into the models folder; for OpenVINO, drop the three `.whl` files (obtained elsewhere with `pip download`) into `paquets-hors-ligne\` in the data folder, then start the installation again. No administrator rights are needed: everything installs in the user's folder.
 
 <details>
