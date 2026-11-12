@@ -903,8 +903,13 @@ def _executer_file(sortie: Sortie, elements: list, config: dict, telecharger: bo
             r.update({"ok": True, "sorties": produits + compagnons, "json": compagnons[0] if compagnons else "",
                       "duree": donnees.get("duree"), "facteur": donnees.get("facteur"),
                       "locuteurs": donnees.get("locuteurs"), "corrections": donnees.get("corrections")})
-            if noms and donnees.get("locuteurs"):
-                r["renommes"] = _renommer(produits, noms)
+            if noms:
+                r["renommes"] = _renommer(produits, noms) if donnees.get("locuteurs") else []
+                faits = {x.split(" -> ")[0] for x in r["renommes"]}
+                oublies = [f"{a} ({b})" for a, b in noms.items() if a not in faits]
+                if oublies:
+                    journal_ui("attention", f"{noms_fichiers[identifiant]} : noms non appliqués, voix absentes : "
+                                            + ", ".join(oublies))
             sortie.fin_progression()
             sortie.evenement("fichier_fini", id=identifiant, **r)
             sortie.dire(f"[{rang[identifiant]}/{len(elements)}] {noms_fichiers[identifiant]} : fait en {r['duree']}"
@@ -965,6 +970,73 @@ def _code_de_fin(execution: dict, ignores: int) -> int:
     return SORTIE_EXISTANTE if ignores else OK
 
 
+def _avertir(sortie: Sortie, texte: str) -> None:
+    """Une demande des réglages qui ne sera pas suivie : dite, en JSON et sur la sortie d'erreur."""
+    sortie.evenement("journal", niveau="attention", texte=texte)
+    sortie.dire(f"  {texte}", erreur=True)
+
+
+def _raison_openvino(effet: dict, peripherique: str) -> str:
+    from . import moteur_openvino
+
+    if effet.get("plantage"):
+        return (f"OpenVINO suspendu sur {peripherique} : la dernière ouverture n'a pas abouti "
+                f"({effet['plantage']})")
+    if not moteur_openvino.installe():
+        return "moteur OpenVINO non installé"
+    vus = moteur_openvino.peripheriques_disponibles()
+    return f"périphérique {peripherique} non vu par OpenVINO (vus : {', '.join(vus) or 'aucun'})"
+
+
+def _options_satisfaites(options, config: dict, mat, sortie: Sortie) -> None:
+    """
+    Une option demandée qu'on ne peut pas honorer est dite et rend son code,
+    jamais ignorée en silence : voix séparées sans l'extension (code 3), noms
+    sans voix séparées (code 2), moteur ou périphérique absents (code 3). Les
+    mêmes demandes venues des réglages, elles, sont dites et contournées.
+    """
+    from . import diarisation, reglage_machine, vocabulaire_v2
+
+    locuteurs = str(options.locuteurs or "").strip().lower()
+    voix_demandees = locuteurs == "auto" or (locuteurs.isdigit() and int(locuteurs) > 0)
+    if config.get("diarisation") and not diarisation.disponible():
+        if voix_demandees or options.noms:
+            raise Echec("locuteurs_absents", "séparation des voix demandée ("
+                        + ("--locuteurs" if voix_demandees else "--noms") + ") mais non installée : "
+                        + diarisation.indisponibilite(), PAS_PRET,
+                        "l'installer (fenêtre, écran Réglages, ou installer.bat --locuteurs), ou --locuteurs non")
+        _avertir(sortie, "Séparation des voix cochée dans les réglages mais non installée : texte sans voix "
+                         "(--locuteurs non pour ne plus le voir).")
+    if options.noms and not config.get("diarisation"):
+        raise Echec("arguments", "--noms demande des voix séparées : ajouter --locuteurs auto (ou leur nombre)",
+                    ARGUMENTS)
+    import copy as copie
+
+    from . import materiel as materiel_module, moteur_openvino
+
+    explicite = options.moteur == "openvino" or bool(options.peripherique)
+    if explicite and moteur_openvino.installe() and not moteur_openvino.peripheriques_confirmes():
+        # Rien de gardé du lancement précédent : périphériques seulement
+        # supposés. Une demande explicite se vérifie (détection lente, dans
+        # un processus à part, comme `diagnostic --materiel`).
+        materiel_module.rafraichir()
+        mat = materiel_module.detecter_au_demarrage()[0]
+    essai_config, essai_mat = copie.deepcopy(config), copie.deepcopy(mat)
+    effet = reglage_machine.appliquer_au_materiel(essai_config, essai_mat)
+    if effet.get("indisponible"):
+        peripherique = str(effet.get("peripherique") or "CPU").upper()
+        raison = _raison_openvino(effet, peripherique)
+        if options.moteur == "openvino" or options.peripherique:
+            raise Echec("moteur_absent", f"--moteur openvino ({peripherique}) : {raison}", PAS_PRET,
+                        "scribouille diagnostic --materiel ; ou --moteur ctranslate2")
+        _avertir(sortie, f"Réglage du poste : {raison} ; CTranslate2 prend la main.")
+    for fichier in options.vocabulaire or []:
+        try:
+            vocabulaire_v2.lire(fichier)
+        except (OSError, ValueError, vocabulaire_v2.ErreurFormat) as exc:
+            raise Echec("arguments", f"--vocabulaire {fichier} : illisible ({exc})", ARGUMENTS) from None
+
+
 def cmd_transcrire(options, sortie: Sortie) -> int:
     from . import moteur, traitement
     from .materiel import detecter_au_demarrage
@@ -975,6 +1047,7 @@ def cmd_transcrire(options, sortie: Sortie) -> int:
                     + (f" ({', '.join(refuses[:5])})" if refuses else ""), ARGUMENTS)
     mat, _ = detecter_au_demarrage()
     config = _config_de_commande(options, mat)
+    _options_satisfaites(options, config, mat, sortie)
     modele = _modele_attendu(config, mat)
     if moteur.etat_modele(modele)["etat"] != "complet" and not options.telecharger:
         raise Echec("modele_absent", langues.t("moteur.telechargement_refuse", modele=moteur.nom_court(modele),

@@ -46,16 +46,18 @@ scribouille transcrire FICHIER|DOSSIER... [options]
 | `--formats LISTE` | `txt,json` | `txt`, `json` (compagnon structuré), `srt`, `vtt`, `horodatage` (heure de chaque paragraphe dans le `.txt`). `json` implique `txt`. |
 | `--langue CODE` | réglage `langue` | `fr`, `en`, ..., `auto`. |
 | `--preset qualite\|rapide` | réglage `preset` | large-v3, ou turbo. |
-| `--moteur auto\|openvino\|ctranslate2` | `auto` (réglage du poste) | Moteur imposé pour cette commande. |
+| `--moteur auto\|openvino\|ctranslate2` | `auto` (réglage du poste) | Moteur imposé pour cette commande ; OpenVINO absent ou périphérique non vu : code 3, rien n'est fait. |
 | `--peripherique CPU\|GPU\|NPU` | `CPU` | Périphérique d'OpenVINO (implique `--moteur openvino`). |
 | `--rythme vitesse\|equilibre\|discret\|auto` | réglage `rythme` | Part du poste laissée à l'utilisateur ; `auto` : rythme choisi quand le poste est occupé, vitesse maximale sinon. |
-| `--locuteurs auto\|non\|N` | réglage `diarisation` | Séparation des locuteurs (extension installée). |
-| `--noms Alice,Bob` | | Noms des voix séparées, dans l'ordre (`Locuteur 1`, `Locuteur 2`...), ou `"Locuteur 2=Bob"`. Annulable en relecture. |
+| `--locuteurs auto\|non\|N` | réglage `diarisation` | Séparation des locuteurs ; extension absente : code 3, rien n'est fait. |
+| `--noms Alice,Bob` | | Noms des voix séparées, dans l'ordre (`Locuteur 1`, `Locuteur 2`...), ou `"Locuteur 2=Bob"` ; demande des voix séparées (`--locuteurs`, sinon code 2). Un nom sans voix détectée est dit (`journal`, `attention`). Annulable en relecture. |
 | `--vocabulaire F.toml` | | Vocabulaire d'équipe en plus du personnel ; répétable. |
 | `--sans-vocabulaire` | | Ni amorce ni corrections. |
 | `--recursif` | | Sous-dossiers compris. |
 | `--telecharger` | | Permet de télécharger un modèle absent. |
 | `--ecraser` | | Refait un fichier déjà transcrit (ses anciennes sorties sont remplacées). |
+
+Une option demandée qu'on ne peut pas honorer n'est jamais ignorée : elle rend son code (2 ou 3) avant tout calcul. La même demande venue des réglages (voix cochées, réglage OpenVINO du poste) est dite (`journal`, niveau `attention`, et sur la sortie d'erreur), puis contournée.
 
 Un fichier est « déjà transcrit » quand le dossier de sortie contient un compagnon `.json` qui le nomme : il est sauté (`fichier_ignore`), code 4 si rien d'autre n'a échoué.
 

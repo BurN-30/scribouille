@@ -289,6 +289,110 @@ def essai_sans_bureau() -> None:
                  f"code {code}, vivant {vivant}, {texte[:120]!r}")
 
 
+# ---------------------------------------------------------------------------
+# 5. Chaque option agit, ou échoue en le disant
+# ---------------------------------------------------------------------------
+
+def _json(sortie: str) -> list[dict]:
+    lignes = []
+    for x in sortie.splitlines():
+        try:
+            lignes.append(json.loads(x))
+        except ValueError:
+            pass
+    return lignes
+
+
+def essai_options_honorees() -> None:
+    titre("5. Une option demandée et impossible : dite, avec son code, jamais ignorée")
+    from app import diarisation, moteur_openvino
+
+    source = TEMPORAIRE / "point.ogg"
+    source.write_bytes((RACINE / "banc" / "extrait_fr.ogg").read_bytes())
+    if not diarisation.disponible():
+        code, sortie, erreur, _, _ = lancer("transcrire", str(source), "--locuteurs", "2", "--json")
+        fin = (_json(sortie) or [{}])[-1].get("erreur", {})
+        verifier(code == 3 and fin.get("code") == "locuteurs_absents" and "non installée" in erreur,
+                 "--locuteurs 2 sans l'extension : code 3, dit", f"{code} {fin} {erreur[:160]}")
+        code, sortie, erreur, _, _ = lancer("transcrire", str(source), "--locuteurs", "auto", "--noms", "Alice,Bob")
+        verifier(code == 3 and "non installée" in erreur, "--locuteurs auto --noms sans l'extension : code 3",
+                 f"{code} {erreur[:160]}")
+    code, sortie, erreur, _, _ = lancer("transcrire", str(source), "--noms", "Alice,Bob", "--json")
+    fin = (_json(sortie) or [{}])[-1].get("erreur", {})
+    verifier(code == 2 and "--noms" in fin.get("message", "") and "--locuteurs" in fin.get("message", ""),
+             "--noms sans voix séparées : code 2, dit comment faire", f"{code} {fin}")
+    absent = "NPU" if "NPU" not in (moteur_openvino.peripheriques_disponibles() if moteur_openvino.installe() else []) \
+        else "GPU"
+    code, sortie, erreur, _, _ = lancer("transcrire", str(source), "--peripherique", absent, "--json")
+    fin = (_json(sortie) or [{}])[-1].get("erreur", {})
+    verifier(code == 3 and fin.get("code") == "moteur_absent" and absent in fin.get("message", ""),
+             f"--peripherique {absent} absent : code 3, la raison dite", f"{code} {fin}")
+    if not moteur_openvino.installe():
+        code, sortie, erreur, _, _ = lancer("transcrire", str(source), "--moteur", "openvino", "--json")
+        fin = (_json(sortie) or [{}])[-1].get("erreur", {})
+        verifier(code == 3 and "non installé" in fin.get("message", ""), "--moteur openvino non installé : code 3",
+                 f"{code} {fin}")
+    abime = TEMPORAIRE / "abime.toml"
+    abime.write_text("format = [[[ oups\n", encoding="utf-8")
+    code, sortie, erreur, _, _ = lancer("transcrire", str(source), "--vocabulaire", str(abime))
+    verifier(code == 2 and "illisible" in erreur, "--vocabulaire illisible : code 2", f"{code} {erreur[:160]}")
+
+    # La même demande venue des réglages : dite, puis contournée.
+    if not diarisation.disponible():
+        lancer("reglages", "definir", "diarisation=oui")
+        code, sortie, erreur, _, _ = lancer("transcrire", str(source), "--json")
+        avis = [x for x in _json(sortie) if x.get("evenement") == "journal" and x.get("niveau") == "attention"]
+        verifier(any("non installée" in x.get("texte", "") for x in avis) and "non installée" in erreur,
+                 "voix cochées dans les réglages, extension absente : dit en JSON et sur la sortie d'erreur",
+                 f"{code} {avis} {erreur[:120]}")
+        lancer("reglages", "defaut", "diarisation")
+
+    # --noms appliqués au fichier produit (file simulée, voix séparées).
+    from app import cli as module_cli, sorties, superviseur, traitement
+    from app.moteur import Mot, Segment
+
+    dossier = TEMPORAIRE / "noms"
+    dossier.mkdir()
+    segments = [Segment(0.0, 2.0, "Bonjour à tous.", "Locuteur 1", [Mot("Bonjour", 0.0, 0.5, 0.9)]),
+                Segment(2.5, 4.0, "On commence.", "Locuteur 2", [Mot("On", 2.5, 3.0, 0.9)])]
+    produits = sorties.ecrire_tout(dossier, source, segments, {"duree": 4.0, "modele": "tiny", "langue": "fr",
+                                                                "nb_locuteurs": 2}, {"txt": True}, avec_compagnon=True)
+    chemins_produits = [p["chemin"] for p in produits]
+
+    class FauxSuperviseur:
+        def __init__(self, *a, **k):
+            pass
+
+    class FausseFile:
+        def __init__(self, mat, distant=None):
+            self.elements = []
+
+        def demarrer(self, config, rappels):
+            for e in self.elements:
+                rappels.termine(e.identifiant, {"ok": True, "sorties": [{"chemin": c} for c in chemins_produits],
+                                                "locuteurs": 2, "duree": "4 s"})
+            rappels.file_terminee({"reussis": len(self.elements), "echecs": 0, "annules": 0})
+            return True
+
+        def arreter(self):
+            pass
+
+    anciens = superviseur.Superviseur, traitement.FileTraitement
+    superviseur.Superviseur, traitement.FileTraitement = FauxSuperviseur, FausseFile
+    try:
+        element = traitement.Element(identifiant="c1", chemin=str(source), nom=source.name, taille=1,
+                                     sortie=str(dossier))
+        execution = module_cli._executer_file(module_cli.Sortie("transcrire", True), [element], {}, False,
+                                              module_cli._noms("Alice,Bob,Chloé"))
+    finally:
+        superviseur.Superviseur, traitement.FileTraitement = anciens
+    texte = Path(chemins_produits[0]).read_text(encoding="utf-8")
+    resultat = execution["resultats"][0]
+    verifier("Alice : Bonjour" in texte and "Bob : On commence" in texte
+             and sorted(resultat.get("renommes") or []) == ["Locuteur 1 -> Alice", "Locuteur 2 -> Bob"],
+             "--noms Alice,Bob : les voix sont renommées dans le fichier", f"{resultat} {texte[-80:]!r}")
+
+
 def principal() -> int:
     print(f"Vérification de la ligne de commande\n{'=' * 40}\n(dossier temporaire : {TEMPORAIRE})")
     try:
@@ -296,6 +400,7 @@ def principal() -> int:
         essai_erreurs()
         essai_aide()
         essai_sans_bureau()
+        essai_options_honorees()
     finally:
         import shutil
 
