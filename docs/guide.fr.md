@@ -62,7 +62,7 @@ Ce que l'application en fait, en trois étages :
 
 **Mesurer.** `scribouille.com --mesurer-vocabulaire --vocabulaire V.toml --reunion AUDIO --reference RELUE` transcrit chaque réunion sans puis avec amorce, applique la correction, et donne le taux d'erreur, le rappel et la précision des termes par catégorie, et le nombre de fausses corrections. Mesurez sur des réunions qui n'ont pas servi à apprendre le vocabulaire.
 
-Les deux fichiers du format 1 sont du texte brut. Ils s'éditent à la main ou depuis les panneaux de l'application. **Réglages, Application, Mes données** les exporte, avec vos réglages et votre gabarit pour l'IA s'il existe, dans une archive `scribouille-donnees-AAAA-MM-JJ.zip` que vous rangez où vous voulez, clé USB ou sauvegarde d'entreprise. Un import affiche un aperçu de ce qui va changer et n'écrit rien avant votre confirmation, l'état précédent étant sauvegardé à côté au préalable.
+Les deux fichiers du format 1 sont du texte brut. Ils s'éditent à la main ou depuis l'écran Vocabulaire (Glossaire, Corrections). **Réglages, Application, Mes données** les exporte, avec vos réglages et votre gabarit pour l'IA s'il existe, dans une archive `scribouille-donnees-AAAA-MM-JJ.zip` que vous rangez où vous voulez, clé USB ou sauvegarde d'entreprise. Un import affiche un aperçu de ce qui va changer et n'écrit rien avant votre confirmation, l'état précédent étant sauvegardé à côté au préalable.
 
 ---
 

@@ -62,7 +62,7 @@ What the app does with it, in three stages:
 
 **Measuring.** `scribouille.com --mesurer-vocabulaire --vocabulaire V.toml --reunion AUDIO --reference REVIEWED` transcribes each meeting without, then with the prompt, applies the correction, and reports the word error rate, recall and precision of the terms by category, and the number of wrong corrections. Measure on meetings that were not used to learn the vocabulary.
 
-The two format 1 files are plain text. Edit them by hand or from the panels in the app. **Settings, Application, My data** exports them, with your settings and your AI template if you have one, as a single `scribouille-donnees-YYYY-MM-DD.zip` you can put on a USB stick or in a company backup. An import shows a preview of what would change and writes nothing before you confirm, and the previous state is saved next to it first.
+The two format 1 files are plain text. Edit them by hand or from the Vocabulary screen (Glossary, Corrections). **Settings, Application, My data** exports them, with your settings and your AI template if you have one, as a single `scribouille-donnees-YYYY-MM-DD.zip` you can put on a USB stick or in a company backup. An import shows a preview of what would change and writes nothing before you confirm, and the previous state is saved next to it first.
 
 ---
 
