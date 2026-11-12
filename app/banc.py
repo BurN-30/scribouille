@@ -106,14 +106,23 @@ class Essai:
     lot: int = 8
     faisceau: int = 5
     affinite: bool = False
+    #: Banc des rythmes (`--modes`) : rythme appliqué dans le processus, nombre
+    #: de passages de l'extrait mis bout à bout, propriétés d'OpenVINO en plus.
+    rythme: str = ""
+    repetitions: int = 1
+    proprietes: dict = field(default_factory=dict)
     resultat: dict = field(default_factory=dict)
 
     def parametres(self) -> dict:
-        return {
+        donnees = {
             "etiquette": self.etiquette, "moteur": self.moteur, "modele": self.modele,
             "peripherique": self.peripherique, "fils": self.fils, "lot": self.lot,
             "faisceau": self.faisceau, "affinite": self.affinite,
         }
+        if self.rythme:
+            donnees.update(rythme=self.rythme, repetitions=self.repetitions,
+                           proprietes=self.proprietes)
+        return donnees
 
     @property
     def reussi(self) -> bool:
@@ -150,10 +159,22 @@ def executer_essai(parametres: dict) -> dict:
                 processus.cpu_affinity(logiques)
             except Exception as exc:
                 resultat["note"] = f"affinité refusée : {type(exc).__name__}"
-    energie.desactiver_bridage()
+
+    # Banc des rythmes : les bornes du rythme sont posées dans ce processus,
+    # comme la file de l'application les pose dans le sien.
+    from . import rythme as rythme_module
+
+    nom_rythme = str(parametres.get("rythme") or "")
+    bornes = rythme_module.bornes(nom_rythme, mat) if nom_rythme else None
+    if bornes is None or bornes.rythme == "vitesse":
+        energie.desactiver_bridage()
+    if bornes is not None:
+        rythme_module.Leviers().appliquer(_plafonner(bornes), avec_affinite=True)
+        resultat["priorite"] = _plafonner(bornes).priorite
 
     modele = parametres.get("modele") or presets.MODELE_TURBO
     moteur_voulu = parametres.get("moteur") or "ctranslate2"
+    sur_puce = False
     if moteur_voulu == "openvino":
         from . import moteur_openvino
 
@@ -161,16 +182,29 @@ def executer_essai(parametres: dict) -> dict:
         if moteur.etat_modele(depot)["etat"] != "complet":
             resultat["etat"] = "modele_absent"
             return resultat
-        instance = moteur_openvino.MoteurOpenVINO(mat, str(parametres.get("peripherique") or "CPU"))
+        peripherique_ov = str(parametres.get("peripherique") or "CPU")
+        instance = moteur_openvino.MoteurOpenVINO(mat, peripherique_ov)
+        sur_puce = peripherique_ov.upper() != "CPU"
+        proprietes = dict(parametres.get("proprietes") or {})
+        if bornes is not None:
+            proprietes = {**(bornes.ov_puce if sur_puce else bornes.ov_processeur), **proprietes}
+        instance.proprietes = proprietes
     else:
         if moteur.etat_modele(modele)["etat"] != "complet":
             resultat["etat"] = "modele_absent"
             return resultat
         mat.fils_imposes = int(parametres.get("fils") or 0)
-        moteur.limiter_parallelisme(mat.fils_calcul)
         instance = moteur.MoteurTranscription(mat)
+        if bornes is not None:
+            instance.fils = bornes.fils
+        moteur.limiter_parallelisme(instance.fils_effectifs)
 
     signal = audio.decoder(EXTRAIT)
+    repetitions = max(1, int(parametres.get("repetitions") or 1))
+    if repetitions > 1:
+        import numpy as np
+
+        signal = np.concatenate([signal] * repetitions)
     duree = signal.size / audio.FREQUENCE
 
     debut = time.perf_counter()
@@ -184,6 +218,13 @@ def executer_essai(parametres: dict) -> dict:
         "lot": int(parametres.get("lot") or 0),
         "faisceau_openvino": int(parametres.get("faisceau") or 1),
     }
+    if bornes is not None:
+        if bornes.lot_max is not None and reglages["lot"]:
+            reglages["lot"] = min(reglages["lot"], bornes.lot_max)
+        regulateur = rythme_module.Regulateur(mat, bornes.rythme, False)
+        regulateur.sur_puce = sur_puce
+        reglages["frein"] = rythme_module.Frein(regulateur)
+        resultat.update({"lot": reglages["lot"], "fils_rythme": getattr(instance, "fils_effectifs", 0)})
     temps_cpu = sum(processus.cpu_times()[:2]) if processus is not None else 0.0
     debut = time.perf_counter()
     segments, _ = instance.transcrire(signal, duree, "fr", reglages)
@@ -194,6 +235,8 @@ def executer_essai(parametres: dict) -> dict:
 
     texte = " ".join(s.texte for s in segments)
     reference = REFERENCE.read_text(encoding="utf-8")
+    if repetitions > 1:
+        reference = " ".join([reference] * repetitions)
     pic = 0.0
     if processus is not None:
         pic = getattr(processus.memory_info(), "peak_wset", 0) / 1024 ** 3
@@ -210,6 +253,20 @@ def executer_essai(parametres: dict) -> dict:
         "texte": texte,
     })
     return resultat
+
+
+def _plafonner(bornes):
+    """
+    Plafond de priorité du banc (`SCRIBOUILLE_BANC_PRIORITE_BASSE`) : quand
+    d'autres calculs tournent sur le poste, aucun essai ne passe au-dessus de
+    « inférieure à la normale ». Le rapport le dit : la gêne de la vitesse
+    maximale y est alors sous-estimée.
+    """
+    import dataclasses
+
+    if os.environ.get("SCRIBOUILLE_BANC_PRIORITE_BASSE") and bornes.priorite == "normale":
+        return dataclasses.replace(bornes, priorite="inferieure")
+    return bornes
 
 
 def principal_essai(argument: str) -> int:
@@ -244,14 +301,15 @@ def commande_essai(parametres: dict) -> tuple[list[str], str]:
 
 
 def lancer_essai(essai: Essai, interrompu: Callable[[], bool] | None = None,
-                 delai: float = DELAI_ESSAI_S) -> dict:
+                 delai: float = DELAI_ESSAI_S, env_ajout: dict | None = None) -> dict:
     """Lance un essai dans un processus séparé et attend sa ligne de résultat."""
     commande, dossier = commande_essai(essai.parametres())
     debut = time.time()
+    env = {**os.environ, **env_ajout} if env_ajout else None
     try:
         processus = subprocess.Popen(
             commande, cwd=dossier, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, encoding="utf-8", errors="replace",
+            text=True, encoding="utf-8", errors="replace", env=env,
             creationflags=(subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0),
         )
     except OSError as exc:
@@ -753,6 +811,10 @@ def principal_cli(arguments: list[str]) -> int:
     if "--banc-essai" in arguments:
         rang = arguments.index("--banc-essai")
         return principal_essai(arguments[rang + 1] if rang + 1 < len(arguments) else "")
+    if "--modes" in arguments:
+        from . import banc_rythmes
+
+        return banc_rythmes.principal_cli(arguments)
     from . import config as config_module, reglage_machine
 
     config = config_module.charger()
