@@ -6,8 +6,9 @@ modification sous la règle d'or (texte affiché, `.txt`, compagnon et
 sous-titres égaux, contrôlés après chaque écriture). Ce module ajoute ce que la
 relecture plein cadre demande en plus :
 
-  - corriger seulement les endroits choisis (celui que l'on vient de
-    sélectionner, ou plusieurs cochés dans l'aperçu) ;
+  - corriger seulement les endroits choisis : celui que l'on vient de
+    sélectionner, situé par sa position exacte à l'écran (même au milieu d'un
+    mot, même à partir d'une apostrophe), ou plusieurs cochés dans l'aperçu ;
   - renommer un locuteur (« Locuteur 1 » devient un prénom) dans toute la
     transcription ;
   - enregistrer un export (Markdown) à côté du fichier.
@@ -35,6 +36,11 @@ CONTEXTE = 48
 #: forme que celle que `app/lecture.py` reconnaît en tête de paragraphe.
 _MOTIF_NOM = re.compile(r"[A-ZÉÈÀÂÎÔÛÇ][\w'’\- ]{0,28}")
 
+#: Contexte qui doit concorder, de chaque côté, pour qu'un endroit soit tenu
+#: pour celui de la sélection quand la vue n'a pas donné sa position.
+_CONCORDANCE = 20
+
+
 def _normaliser(texte: str) -> str:
     return " ".join((texte or "").split())
 
@@ -53,33 +59,70 @@ def _prefixe_commun(a: str, b: str) -> int:
     return n
 
 
-def _endroits(chemin, source: str, cible: str, avant: str, apres: str):
-    """Endroits qu'une correction peut toucher, et celui de la sélection (texte qui l'entoure)."""
+def _position(etat: dict, position, source: str) -> tuple[int, int, int] | None:
+    """
+    Endroit exact de la sélection, d'après sa position à l'écran : rang du
+    paragraphe, début et fin dans son texte. Rien si la position ne désigne
+    plus ce texte (fichier changé depuis).
+    """
+    if not isinstance(position, dict):
+        return None
+    try:
+        k, debut, fin = int(position.get("k", -1)), int(position.get("debut", -1)), int(position.get("fin", -1))
+    except (TypeError, ValueError):
+        return None
+    plan = etat["plan"]
+    if not (0 <= k < len(plan)):
+        return None
+    a, b = plan[k]["debut"] + debut, plan[k]["debut"] + fin
+    if not (plan[k]["debut"] <= a < b <= plan[k]["fin"]):
+        return None
+    if _normaliser(etat["corps"][a:b]) != _normaliser(source):
+        return None
+    return a, b, k
+
+
+def _endroits(chemin, source: str, cible: str, avant: str, apres: str, position):
+    """
+    Endroits qu'une correction peut toucher, et celui de la sélection.
+
+    Les endroits sont les occurrences de la forme (mot entier) ; la sélection,
+    quand la vue donne sa position, est située exactement : si elle ne
+    coïncide avec aucune occurrence (un morceau de mot, une sélection qui part
+    d'une apostrophe), elle devient un endroit de plus, le seul coché. Sans
+    position, un endroit n'est « ici » que si le texte qui l'entoure concorde.
+    """
     prepa = lecture._preparer_correction(chemin, source, cible)
     if not prepa["ok"]:
         return prepa, None, [], -1
     etat = lecture._etat(prepa["fichier"], prepa["contenu"])
     trouves = lecture.trouver(etat, prepa["regles"][0])
-    choisie, meilleur = -1, 0
-    if avant or apres:
+    exact = _position(etat, position, prepa["source"])
+    choisie = -1
+    if exact:
+        choisie = next((r for r, t in enumerate(trouves) if t[:2] == exact[:2]), -1)
+        if choisie < 0:
+            trouves = trouves + [exact]
+            choisie = len(trouves) - 1
+    elif avant or apres:
         avant_n, apres_n = _normaliser(avant)[-CONTEXTE:].rstrip(), _normaliser(apres)[:CONTEXTE].lstrip()
         corps = etat["corps"]
         for rang, (debut, fin, _) in enumerate(trouves):
-            score = _suffixe_commun(_normaliser(corps[max(0, debut - 200):debut]), avant_n)                 + _prefixe_commun(_normaliser(corps[fin:fin + 200]), apres_n)
-            if score > meilleur:
-                choisie, meilleur = rang, score
-    # Une sélection d'un seul endroit possible n'a pas besoin de contexte.
-    if choisie < 0 and len(trouves) == 1:
-        choisie = 0
+            accord_avant = _suffixe_commun(_normaliser(corps[max(0, debut - 200):debut]), avant_n)
+            accord_apres = _prefixe_commun(_normaliser(corps[fin:fin + 200]), apres_n)
+            if accord_avant >= min(len(avant_n), _CONCORDANCE) and accord_apres >= min(len(apres_n), _CONCORDANCE):
+                choisie = rang
+                break
     return prepa, etat, trouves, choisie
 
 
-def occurrences(chemin: str | Path, source: str, cible: str, avant: str = "", apres: str = "") -> dict:
+def occurrences(chemin: str | Path, source: str, cible: str, avant: str = "", apres: str = "",
+                position=None) -> dict:
     """
     Tous les endroits qu'une correction toucherait, avec leur contexte, et
     celui de la sélection dans « choisie » (-1 s'il n'est pas retrouvé).
     """
-    prepa, etat, trouves, choisie = _endroits(chemin, source, cible, avant, apres)
+    prepa, etat, trouves, choisie = _endroits(chemin, source, cible, avant, apres, position)
     if not prepa["ok"]:
         return prepa
     if not trouves:
@@ -96,13 +139,13 @@ def occurrences(chemin: str | Path, source: str, cible: str, avant: str = "", ap
 
 
 def corriger(chemin: str | Path, source: str, cible: str, rangs, ajouter_regle: bool = False,
-             empreinte: str = "") -> dict:
+             position=None, empreinte: str = "") -> dict:
     """
     Corrige les endroits choisis (rangs de `occurrences`), ou tous avec
     `rangs == "tous"`. Le fichier, le compagnon et les sous-titres changent
     ensemble, contrôlés après écriture ; un écart fait tout remettre.
     """
-    prepa, etat, trouves, _ = _endroits(chemin, source, cible, "", "")
+    prepa, etat, trouves, _ = _endroits(chemin, source, cible, "", "", position)
     if not prepa["ok"]:
         return prepa
     if not trouves:

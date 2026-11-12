@@ -966,6 +966,51 @@ def essai_reunion_longue(base: Path) -> None:
                  "une écriture qui romprait l'égalité est refusée, les fichiers restent intacts", str(retour))
 
 
+def essai_selection_exacte(base: Path) -> None:
+    """La correction « ici » vise l'endroit sélectionné à l'écran, jamais un autre."""
+    from app import relecture
+
+    titre("Sélection : un morceau de mot ou une apostrophe ne corrige jamais ailleurs")
+    dossier = base / "exacte"
+    dossier.mkdir()
+    txt = ecrire(dossier, [
+        segment(0.0, 4.0, jetons("On garde l'ordinateur pour les astreintes.")),
+        segment(4.5, 9.0, jetons("Mon ordi est en panne, tu t'appelles pas Paul ?")),
+    ])
+    vue = lecture.charger(txt)
+    texte = vue["paragraphes"][0]["texte"]
+    debut = texte.index("ordinateur")
+    position = {"k": 0, "debut": debut, "fin": debut + 4}
+    apercu = relecture.occurrences(txt, "ordi", "PC", texte[:debut], texte[debut + 4:], position)
+    ici = next((x for x in apercu.get("extraits", []) if x["rang"] == apercu.get("choisie")), {})
+    verifier(apercu.get("ok") and apercu["nombre"] == 2 and ici.get("apres", "").startswith("nateur"),
+             "« ordi » pris dans « ordinateur » : l'endroit « ici » est celui de la sélection", str(apercu)[:220])
+    retour = relecture.corriger(txt, "ordi", "PC", [apercu["choisie"]], position=position)
+    corps = lecture.separer_entete(txt.read_text(encoding="utf-8"))[1]
+    verifier(retour.get("ok") and "l'PCnateur" in corps and "Mon ordi est" in corps
+             and egalite_ecran_fichier(txt) == "",
+             "seul le mot sélectionné change, l'autre « ordi » reste tel quel", corps[:120])
+    lecture.annuler_correction(txt)
+
+    sans_position = relecture.occurrences(txt, "ordi", "PC", texte[:debut], texte[debut + 4:])
+    verifier(sans_position.get("ok") and sans_position.get("choisie") == -1,
+             "sans position, un endroit dont le contexte ne concorde pas n'est jamais « ici »",
+             str(sans_position)[:200])
+
+    second = lecture.charger(txt)["paragraphes"][0]["texte"]
+    debut = second.index("'appelles")
+    position = {"k": 0, "debut": debut, "fin": debut + len("'appelles pas")}
+    apercu = relecture.occurrences(txt, "'appelles pas", "'appelais pas", position=position)
+    retour = relecture.corriger(txt, "'appelles pas", "'appelais pas", [apercu.get("choisie", -1)],
+                                position=position)
+    verifier(retour.get("ok") and "tu t'appelais pas Paul" in txt.read_text(encoding="utf-8")
+             and egalite_ecran_fichier(txt) == "",
+             "une sélection qui commence à l'apostrophe se corrige à sa place", str(retour)[:200])
+    perimee = relecture.occurrences(txt, "Mon", "Ton", position={"k": 0, "debut": 0, "fin": 9})
+    verifier(perimee.get("ok") is True and perimee.get("choisie") == -1,
+             "une position qui ne désigne plus la sélection est ignorée")
+
+
 def principal() -> int:
     print(f"Vérification du parcours de l'utilisateur\n{'=' * 42}")
     with tempfile.TemporaryDirectory(prefix="scribouille-parcours-") as brut:
@@ -989,6 +1034,7 @@ def principal() -> int:
         essai_file_apres_arret(base)
         essai_relecture_ciblee(base)
         essai_reunion_longue(base)
+        essai_selection_exacte(base)
         essai_accessibilite()
         essai_ecrans()
 

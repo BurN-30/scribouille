@@ -2003,18 +2003,20 @@ class Passerelle:
         return {"ok": bool(url), "url": url, "code": "" if url else "audio_illisible"}
 
     def occurrences_correction(self, chemin: str, source: str, cible: str,
-                               avant: str = "", apres: str = "") -> dict:
+                               avant: str = "", apres: str = "", position=None) -> dict:
+        """Endroits d'une correction ; `position` situe la sélection à l'écran (paragraphe, début, fin)."""
         from app import relecture
 
-        return relecture.occurrences(chemin, source, cible, avant, apres)
+        return relecture.occurrences(chemin, source, cible, avant, apres, position)
 
     def corriger_occurrences(self, chemin: str, source: str, cible: str, rangs,
-                             ajouter_regle: bool = False) -> dict:
+                             ajouter_regle: bool = False, position=None, empreinte: str = "") -> dict:
         from app import relecture
 
         if not self.config.get("corrections_apprises", True):
             ajouter_regle = False
-        retour = relecture.corriger(chemin, source, cible, rangs, bool(ajouter_regle))
+        retour = relecture.corriger(chemin, source, cible, rangs, bool(ajouter_regle), position,
+                                    str(empreinte or ""))
         if retour.get("regle_ajoutee"):
             regles, _ = vocabulaire.analyser_corrections()
             retour["nb_corrections"] = len(regles)

@@ -578,10 +578,16 @@ function lireSelection() {
   apres.setEnd(debutCorps, debutCorps.childNodes.length);
   const tete = brut.length - brut.trimStart().length;
   const queue = brut.length - brut.trimEnd().length;
+  // Position exacte dans le texte du paragraphe : la correction « ici » vise
+  // cet endroit et lui seul, meme au milieu d'un mot ou a partir d'une
+  // apostrophe.
+  const debut = avant.toString().length + tete;
+  const para = debutCorps.closest('.rl-para');
   return {
     source: source,
     avant: avant.toString() + brut.slice(0, tete),
     apres: brut.slice(brut.length - queue) + apres.toString(),
+    position: para ? { k: Number(para.dataset.p), debut: debut, fin: debut + brut.trim().length } : null,
     rect: plage.getBoundingClientRect(),
   };
 }
@@ -642,7 +648,8 @@ async function majApercuCorrection() {
   let r;
   try {
     r = await appelPasserelle('occurrences_correction', lect.chemin, source, cible,
-      lect.selection ? lect.selection.avant : '', lect.selection ? lect.selection.apres : '');
+      lect.selection ? lect.selection.avant : '', lect.selection ? lect.selection.apres : '',
+      lect.selection ? lect.selection.position : null);
   } catch (e) { console.error(e); zone.innerHTML = ''; return; }
   if ($('#correction-cible').value.trim() !== cible) return;   // saisie depassee
   if (!r.ok) {
@@ -696,7 +703,8 @@ async function appliquerCorrection() {
   bouton.disabled = true;
   try {
     const r = await appelPasserelle('corriger_occurrences', lect.chemin, source, cible,
-      tous ? 'tous' : coches, $('#correction-regle').checked);
+      tous ? 'tous' : coches, $('#correction-regle').checked,
+      lect.selection ? lect.selection.position : null, lect.d.empreinte || '');
     if (!r.ok) {
       $('#retour-correction').innerHTML = encartAttention(r.message || t('ui.rl.code.' + (r.code || 'echec')));
       return;
