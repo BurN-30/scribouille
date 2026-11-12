@@ -912,7 +912,9 @@ class MoteurTranscription:
         details = {
             "langue": getattr(info, "language", langue),
             "probabilite_langue": round(float(getattr(info, "language_probability", 0) or 0), 3),
-            "duree": float(getattr(info, "duration", duree_totale) or duree_totale),
+            # Durée de tout l'enregistrement : après une reprise, faster-whisper
+            # ne voit que la fin du signal (l'en-tête annonçait 6 min 49 pour 8 min 03).
+            "duree": float(duree_totale or getattr(info, "duration", 0) or 0),
             "modele": self._nom_modele,
             "peripherique": self.peripherique,
             "type_calcul": self.type_calcul,

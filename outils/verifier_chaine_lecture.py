@@ -214,6 +214,9 @@ def _controler_reprise(audio: Path, bac: Path, modele: str) -> None:
     verifier(bool(deja) and debut == attendu, "le début de l'enregistrement est conservé",
              f"{len(deja)} segments sauvegardés, premier repris {debut[:1]} pour {attendu[:1]}")
     verifier(brut["segments"][-1]["f"] > trouvee["position"], "la fin a bien été transcrite")
+    verifier(abs(float(brut["source"]["duree"]) - float(trouvee["duree_audio"])) < 1.0,
+             "la durée notée est celle de tout l'enregistrement, pas de la partie reprise",
+             f"{brut['source']['duree']} pour {trouvee['duree_audio']}")
     temps = brut["transcription"]["temps_calcul"]
     verifier(temps > duree_reprise, "le temps déjà écoulé est conservé dans le compteur",
              f"{temps:.1f} s au total pour {duree_reprise:.1f} s de reprise seule")
