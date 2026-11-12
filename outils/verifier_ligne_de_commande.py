@@ -437,6 +437,10 @@ def essai_json_partout() -> None:
     fin = (_json(sortie) or [{}])[-1].get("donnees", {})
     verifier(code == 2 and fin.get("code_retour") == 2 and erreur.strip(),
              "mesurer --json : le texte de l'outil sur la sortie d'erreur, son code dans l'enveloppe", str(fin))
+    code, sortie, _, _, _ = lancer("verifier", "--json", delai=120)
+    bilan = "\n".join((_json(sortie) or [{}])[-1].get("donnees", {}).get("bilan", []))
+    verifier("Données" in bilan and "�" not in bilan and "Mode          : sources" in bilan,
+             "verifier : accents intacts à travers le tube, mode juste", bilan[:200])
     code, sortie, _, _, _ = lancer("vocabulaire", "etat")
     verifier(code == 0 and "{" not in sortie and "actifs" in sortie, "vocabulaire etat : un texte lisible, pas un "
              "dictionnaire brut", sortie[:160])

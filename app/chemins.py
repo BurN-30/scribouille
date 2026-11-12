@@ -116,6 +116,13 @@ DOSSIER_RESSOURCES = _dossier_ressources()
 DOSSIER_PROGRAMME = _dossier_programme()
 
 
+def mode_programme() -> str:
+    """« installee » (désinstalleur présent), « portable » (dossier décompressé) ou « sources »."""
+    if not EST_GELE:
+        return "sources"
+    return "installee" if any(DOSSIER_PROGRAMME.glob("unins*.exe")) else "portable"
+
+
 def executable_console() -> Path | None:
     """L'exécutable console à côté du programme gelé, ou None (sources, ou absent)."""
     if not EST_GELE:

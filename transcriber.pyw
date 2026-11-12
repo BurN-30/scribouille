@@ -226,7 +226,8 @@ def verification() -> int:
         lignes.append(f"  {marque}  {etiquette}" + (f" : {detail}" if detail else ""))
 
     lignes.append(f"{NOM_APPLICATION} v{VERSION}")
-    lignes.append(f"  Mode          : {'version installée' if chemins.EST_GELE else 'sources'}")
+    lignes.append("  Mode          : " + {"installee": "version installée", "portable": "version portable",
+                                             "sources": "sources"}[chemins.mode_programme()])
     lignes.append(f"  Ressources    : {chemins.DOSSIER_RESSOURCES}")
     lignes.append(f"  Données       : {chemins.RACINE}")
     lignes.append(f"  Modèles       : {chemins.DOSSIER_MODELES}")

@@ -1456,8 +1456,7 @@ def cmd_diagnostic(options, sortie: Sortie) -> int:
         verdict = None
     resultat = {
         "version": VERSION,
-        "mode": "installee" if chemins.EST_GELE and any(chemins.DOSSIER_PROGRAMME.glob("unins*.exe"))
-        else ("portable" if chemins.EST_GELE else "sources"),
+        "mode": chemins.mode_programme(),
         "programme": str(chemins.DOSSIER_PROGRAMME),
         "commande": str(chemins.executable_console() or ""),
         "donnees": str(chemins.RACINE),
@@ -1504,8 +1503,11 @@ def cmd_verifier(options, sortie: Sortie) -> int:
 
     commande, dossier = superviseur.commande_moteur([])
     commande = [c for c in commande if c != "--moteur"] + ["--verifier"]
+    # Le bilan arrive par un tube : sans cela, le processus fils l'écrirait
+    # dans la page de code du poste, et les accents arriveraient abîmés.
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     resultat = subprocess.run(commande, cwd=dossier, capture_output=True, text=True, encoding="utf-8",
-                              errors="replace", timeout=600)
+                              errors="replace", timeout=600, env=env)
     texte = (resultat.stdout or "").strip()
     sortie.donnees({"ok": resultat.returncode == 0, "bilan": texte.splitlines()}, texte)
     return OK if resultat.returncode == 0 else PAS_PRET
