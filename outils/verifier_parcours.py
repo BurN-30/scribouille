@@ -748,7 +748,8 @@ def essai_ecrans() -> None:
                           ("Entrée valide depuis toute la fenêtre de correction",
                            "$('#modale-correction').addEventListener('keydown'"),
                           ("après une correction, N repart du mot atteint", "retablirVise(repere)"),
-                          ("clic sur un mot : l'écoute s'y place", "placerA(Math.max(0, lect.mots[i].d")):
+                          ("clic sur un mot : l'écoute s'y place, sur ce mot", "placerA(lect.mots[i].d)"),
+                          ("un double-clic qui sélectionne ne déplace pas l'écoute", "e.detail > 1")):
         verifier(preuve in js, f"relecture : {geste}")
     piege = re.search(r"function pieger.*?querySelectorAll\(\s*'([^']*)'", js, re.S)
     verifier(piege and "a[href]" in piege.group(1) and ", [href]" not in piege.group(1),

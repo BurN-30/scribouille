@@ -316,7 +316,7 @@ function motA(secondes) {
   let trouve = -1;
   while (bas <= haut) {
     const milieu = (bas + haut) >> 1;
-    if (mots[milieu].d <= secondes + 0.05) { trouve = milieu; bas = milieu + 1; } else { haut = milieu - 1; }
+    if (mots[milieu].d <= secondes + 0.1) { trouve = milieu; bas = milieu + 1; } else { haut = milieu - 1; }
   }
   return trouve;
 }
@@ -1148,11 +1148,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const loc = e.target.closest('.rl-locuteur');
     if (loc) { ouvrirRenommage(loc.dataset.loc); return; }
     const selection = window.getSelection();
-    if (selection && !selection.isCollapsed) return;   // l'utilisateur selectionne
+    if (e.detail > 1 || (selection && !selection.isCollapsed)) return;   // l'utilisateur selectionne
     const mot = e.target.closest('.m');
     if (mot && lect.audio) {
       const i = Number(mot.dataset.i);
-      placerA(Math.max(0, lect.mots[i].d - 0.05));
+      placerA(lect.mots[i].d);
       marquerLu(i, false);
     }
   });
