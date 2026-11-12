@@ -1,0 +1,75 @@
+# Vérifications rapides à chaque envoi : les vérificateurs qui tournent sans
+# modèle, sans réseau (hors installation des dépendances) et sans fenêtre.
+# Rien n'est construit ni publié ici : la publication reste dans release.yml,
+# sur un tag.
+name: Vérifications
+
+on:
+  push:
+    branches: ["**"]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verifications-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verifier:
+    name: Vérificateurs rapides
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      # Les vérificateurs écrivent en français, accents compris.
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
+
+    steps:
+      - name: Récupérer les sources
+        uses: actions/checkout@v4
+
+      - name: Installer Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installer les dépendances
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Bilan de l'installation (--verifier)
+        shell: pwsh
+        run: python transcriber.pyw --verifier
+
+      - name: Libellés français et anglais
+        shell: pwsh
+        run: python outils/verifier_traductions.py
+
+      - name: Données de l'utilisateur
+        shell: pwsh
+        run: python outils/verifier_donnees.py
+
+      - name: Fonctions périphériques
+        shell: pwsh
+        run: python outils/verifier_fonctions_peripheriques.py
+
+      - name: Parcours de l'utilisateur
+        shell: pwsh
+        run: python outils/verifier_parcours.py
+
+      - name: Vocabulaire
+        shell: pwsh
+        run: python outils/verifier_vocabulaire.py
+
+      - name: Socle (décodage, démarrage, file, garde-fous, données)
+        shell: pwsh
+        run: python outils/verifier_socle.py
