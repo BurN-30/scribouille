@@ -366,9 +366,12 @@ function majLancement() {
     b.setAttribute('aria-checked', actif ? 'true' : 'false');
     b.tabIndex = actif ? 0 : -1;
   });
-  const duree = (r.pour_une_heure || {})[choisi] || '--';
-  $('#lancement-duree').innerHTML = t('ui.lance.duree', { duree: `<strong>${ech(duree)}</strong>` })
-    + (r.auto && choisi !== 'vitesse' ? ech(t('ui.lance.auto')) : '');
+  const duree = (r.pour_une_heure || {})[choisi] || '';
+  // Sans duree connue, rien plutot qu'un « -- ». Le moteur OpenVINO ne donne
+  // pas la confiance des mots : c'est dit ici, pour les deux qualites.
+  $('#lancement-duree').innerHTML = (duree ? t('ui.lance.duree', { duree: `<strong>${ech(duree)}</strong>` })
+    + (r.auto && choisi !== 'vitesse' ? ech(t('ui.lance.auto')) : '') : '')
+    + (moteurSansConfiance() ? ` <span class="lancement-moteur">${ech(t('ui.lance.sans_confiance'))}</span>` : '');
 
   // Voix : seulement si la separation est installee et repond.
   const ext = (etat.diarisation || {}).extension || {};
@@ -379,6 +382,13 @@ function majLancement() {
     $('#opt-voix-lancement').checked = actif;
     $('#voix-lancement-etat').textContent = actif ? t('ui.lance.voix_oui') : t('ui.lance.voix_non');
   }
+}
+
+/* Le reglage du poste fait tourner les deux qualites sur OpenVINO : aucun mot
+   douteux ne sera signale en relecture. */
+function moteurSansConfiance() {
+  const r = (etat.config || {}).reglage_machine || {};
+  return r.moteur === 'openvino';
 }
 
 /* Avertissements : sur l'ecran des reunions, seulement ce qui change le
@@ -985,11 +995,16 @@ function dessinerAccueil(p, definitif) {
     // ce que l'on y perd, s'il y a lieu, est dit ici.
     const phrase = String(p.phrase || '').split(' : ')[0].replace(/[.\s]+$/, '') + '.';
     const perte = (p.notes || []).find((n) => /confiance|confidence/i.test(n));
+    const rythme = p.rythme ? t('ui.proposition.rythme', { rythme: t('ui.rythme.' + p.rythme) }) : '';
     zone.innerHTML = `<span class="titre-section">${ech(t('ui.proposition.titre'))}</span>
-      <div>${ech(phrase)}</div>${perte ? `<div class="perte">${ech(perte)}</div>` : ''}`;
+      <div>${ech(phrase)}</div>${rythme ? `<div>${ech(rythme)}</div>` : ''}${perte ? `<div class="perte">${ech(perte)}</div>` : ''}`;
     appliquer.hidden = false;
     appliquer.textContent = t('ui.accueil.appliquer');
-    garder.textContent = t('ui.accueil.garder');
+    // « Garder » dit ce qui est garde, avec sa duree.
+    const actuel = (etat.presets.find((x) => x.cle === etat.config.preset) || {}).nom || '';
+    const dureeActuelle = ((etat.rythme || {}).pour_une_heure || {})[(etat.rythme || {}).choisi || 'vitesse'] || '';
+    garder.textContent = actuel && dureeActuelle
+      ? t('ui.accueil.garder_nomme', { preset: actuel, duree: dureeActuelle }) : t('ui.accueil.garder');
     if (document.activeElement && document.activeElement.classList.contains('modale')) appliquer.focus();
     return;
   }
@@ -1001,9 +1016,9 @@ function dessinerAccueil(p, definitif) {
     return;
   }
   const preset = (etat.presets.find((x) => x.cle === etat.config.preset) || {}).nom || '';
-  const duree = ((etat.rythme || {}).pour_une_heure || {})[(etat.rythme || {}).choisi || 'vitesse'] || '--';
+  const duree = ((etat.rythme || {}).pour_une_heure || {})[(etat.rythme || {}).choisi || 'vitesse'] || '';
   zone.innerHTML = `<span class="titre-section">${ech(t('ui.accueil.reglage_actuel'))}</span>
-    <div>${ech(t('ui.accueil.convient', { preset: preset, duree: duree }))}</div>`;
+    <div>${ech(duree ? t('ui.accueil.convient', { preset: preset, duree: duree }) : preset)}</div>`;
   appliquer.hidden = true;
   garder.textContent = t('ui.accueil.commencer');
 }
@@ -1362,6 +1377,19 @@ async function rechargerApresImport() {
   }
 }
 
+/* Apres chaque fichier, la mesure du poste change : bandeau, cartes et lignes
+   en attente sont recalcules d'un bloc, par Python, avec la meme fonction. */
+async function rafraichirDurees() {
+  try {
+    const d = await appelPasserelle('durees_affichees');
+    if (d && d.rythme) etat.rythme = d.rythme;
+    if (d && d.presets) etat.presets = d.presets;
+    dessinerPresets();
+    majRythme();
+  } catch (e) { /* sans consequence */ }
+  rafraichirEstimations();
+}
+
 async function rafraichirEstimations() {
   for (const [id, item] of etat.fichiers) {
     if (item.etat !== 'attente' || !item.duree_secs) continue;
@@ -1418,16 +1446,17 @@ function ligneHTML(id) {
   const actif = ETATS_ACTIFS.includes(it.etat);
 
   if (actif) {
-    const pct = it.indetermine ? '' : `${it.pct || 0} %`;
+    const prog = progressionAffichee(it);
+    const pct = prog.indetermine ? '' : (prog.estimee ? t('ui.ligne.pct_environ', { pct: prog.pct }) : `${prog.pct} %`);
     return `<div class="ligne active" data-id="${ech(id)}">
       <span class="pastille ${classe}">${icone(ic, 'icone-s')}</span>
       <div class="infos">
         <div class="nom" title="${ech(it.chemin)}">${ech(it.nom)}</div>
         <div class="progression-tete"><span class="phase">${ech(it.phase || it.message || '')}</span>
           <span class="pourcentage">${ech(pct)}</span></div>
-        <div class="barre ${it.indetermine ? 'indeterminee' : ''}" role="progressbar"
+        <div class="barre ${prog.indetermine ? 'indeterminee' : ''}" role="progressbar"
           aria-valuemin="0" aria-valuemax="100" aria-label="${ech(it.nom)}"
-          ${it.indetermine ? '' : `aria-valuenow="${it.pct || 0}"`}><span style="width:${it.pct || 0}%"></span></div>
+          ${prog.indetermine ? '' : `aria-valuenow="${prog.pct}"`}><span style="width:${prog.pct}%"></span></div>
         <div class="temps">${tempsActif(it)}</div>
       </div>
     </div>`;
@@ -1439,10 +1468,13 @@ function ligneHTML(id) {
       it.estimation ? t('ui.ligne.calcul', { duree: it.estimation }) : '']
       .filter(Boolean).join(' · ');
   } else if (it.etat === 'termine') {
-    // Voix demandees mais non separees : la ligne passe a l'ambre et le dit.
-    classeMeta = it.voix_non_separees ? 'attention' : 'succes';
+    // Voix non separees alors que la separation est installee : la ligne passe
+    // a l'ambre et le dit. Non installee, ce n'est pas un echec du calcul : le
+    // succes reste un succes, Reglages le dit une fois.
+    const voixEchouees = voixEchouees_(it);
+    classeMeta = voixEchouees ? 'attention' : 'succes';
     meta = [t('ui.ligne.termine', { duree: it.duree_calcul || '?' }),
-      it.voix_non_separees ? t('ui.ligne.voix_non_separees') : '',
+      voixEchouees ? t('ui.ligne.voix_non_separees') : '',
       it.locuteurs ? tn('ui.ligne.locuteurs', it.locuteurs) : '',
       it.corrections ? tn('ui.ligne.corrections', it.corrections) : '']
       .filter(Boolean).join(' · ');
@@ -1472,6 +1504,27 @@ function ligneHTML(id) {
     </div>
     <div class="actions-ligne">${actions.join('')}</div>
   </div>`;
+}
+
+function voixEchouees_(it) {
+  const ext = ((etat.diarisation || {}).extension) || {};
+  return !!it.voix_non_separees && !!ext.installee;
+}
+
+/* Progression : celle du moteur quand elle arrive ; sinon, quand elle reste
+   figee (le moteur habituel decode par lots et ne rend rien avant la fin d'un
+   lot), une estimation tiree du temps ecoule et du reste annonce, dite
+   « environ » et jamais au-dela de 95 %. */
+function progressionAffichee(it) {
+  const brute = { pct: it.pct || 0, estimee: false, indetermine: !!it.indetermine };
+  // Pas de reste annonce (chargement du modele) : la barre reste indeterminee.
+  if (typeof it.restant_s !== 'number' || !it.restant_recu || it.restant_s <= 0) return brute;
+  const depuis = (Date.now() - it.restant_recu) / 1000;
+  if (depuis < 8) return brute;
+  const base = it.indetermine ? 0 : (it.pct || 0);
+  const part = Math.min(0.95, depuis / Math.max(depuis + 1, it.restant_s));
+  const pct = Math.max(base, Math.min(95, Math.round(base + (100 - base) * part)));
+  return pct > base ? { pct: pct, estimee: true, indetermine: false } : brute;
 }
 
 /* Temps d'un fichier en cours : ecoule qui avance chaque seconde, reste a
@@ -2089,13 +2142,24 @@ function etatPassage(id) {
 /* Un fichier deja liste qui repasse en attente (relance, reprise, nouveau
    depot) repart d'une ligne propre : rien de son passage precedent ne reste. */
 function remettreEnAttente(item) {
-  etat.fichiers.set(item.id, Object.assign({ pct: 0 }, item));
+  const avant = etat.fichiers.get(item.id) || {};
+  etat.fichiers.set(item.id, Object.assign({ pct: 0 }, item,
+    { duree: avant.duree, duree_secs: avant.duree_secs, taille: item.taille || avant.taille }));
   majLigne(item.id);
   majBoutons();
+  rafraichirEstimations();
 }
 
 window.onFichiersAjoutes = function (items) {
-  items.forEach((it) => etat.fichiers.set(it.id, Object.assign({ pct: 0 }, it)));
+  if (!etat.enCours) setEtat('', '');
+  // Un fichier deja liste qui repasse en attente garde sa duree, et son
+  // estimation est recalculee : la ligne ne perd pas ce qu'elle disait.
+  items.forEach((it) => {
+    const avant = etat.fichiers.get(it.id) || {};
+    etat.fichiers.set(it.id, Object.assign({ pct: 0 }, it,
+      avant.duree_secs ? { duree: avant.duree, duree_secs: avant.duree_secs } : {}));
+  });
+  if (items.some((it) => (etat.fichiers.get(it.id) || {}).duree_secs)) rafraichirEstimations();
   dessinerFile();
   majBoutons();
   if (etat.enCours) items.forEach((it) => { if (!etat.passage.includes(it.id)) etat.passage.push(it.id); });
@@ -2105,7 +2169,8 @@ window.onDuree = async function (id, secondes, texte) {
   const it = etat.fichiers.get(id);
   if (!it) return;
   it.duree_secs = secondes;
-  it.duree = texte;
+  it.duree = secondes ? texte : t('ui.ligne.duree_illisible');
+  if (!secondes) { it.estimation = ''; majLigne(id); return; }
   try {
     it.estimation = await pywebview.api.estimation(
       secondes, etat.config.preset, !!etat.config.diarisation,
@@ -2142,8 +2207,17 @@ function formaterDuree(secondes) {
 setInterval(() => {
   for (const [id, it] of etat.fichiers) {
     if (!ETATS_ACTIFS.includes(it.etat)) continue;
-    const temps = document.querySelector(`#vue-file .ligne[data-id="${CSS.escape(id)}"] .temps`);
+    const ligne = document.querySelector(`#vue-file .ligne[data-id="${CSS.escape(id)}"]`);
+    const temps = ligne && ligne.querySelector('.temps');
     if (temps) temps.innerHTML = tempsActif(it);
+    const prog = progressionAffichee(it);
+    if (ligne && prog.estimee) {
+      const barre = ligne.querySelector('.barre');
+      if (barre.classList.contains('indeterminee')) { majLigne(id); continue; }
+      barre.querySelector('span').style.width = prog.pct + '%';
+      barre.setAttribute('aria-valuenow', String(prog.pct));
+      ligne.querySelector('.pourcentage').textContent = t('ui.ligne.pct_environ', { pct: prog.pct });
+    }
   }
   majActivite();
 }, 1000);
@@ -2202,6 +2276,7 @@ window.onFichierTermine = function (id, d) {
     it.locuteurs = d.locuteurs;
     it.corrections = d.corrections;
     it.voix_non_separees = !!d.voix_non_separees;
+    rafraichirDurees();
   } else if (d.annule) {
     it.etat = 'annule';
     it.message = t('ui.ligne.arrete');
@@ -2222,15 +2297,14 @@ window.onFileTerminee = function (d) {
     setEtat(t('ui.etat.bilan_echecs', { reussis: tn('ui.etat.reussies', d.reussis), echecs: tn('ui.etat.echecs', d.echecs) }), 'erreur');
   } else if (d.annules) {
     setEtat(tn('ui.etat.bilan_arrete', d.reussis), '');
-  } else if (d.voix_non_separees) {
+  } else if (d.voix_non_separees && (((etat.diarisation || {}).extension) || {}).installee) {
     setEtat(tn('ui.etat.bilan_ok_sans_voix', d.reussis), 'attention');
   } else {
     setEtat(tn('ui.etat.bilan_ok', d.reussis), 'succes');
   }
-  journaliser(d.echecs ? 'attention' : 'ok', t('ui.etat.file_terminee', {
-    reussis: tn('ui.etat.reussies', d.reussis), echecs: tn('ui.etat.echecs', d.echecs),
-    annules: tn('ui.etat.annulees', d.annules),
-  }));
+  const bilan = [d.reussis ? tn('ui.etat.reussies', d.reussis) : '', d.echecs ? tn('ui.etat.echecs', d.echecs) : '',
+    d.annules ? tn('ui.etat.annulees', d.annules) : ''].filter(Boolean).join(', ');
+  journaliser(d.echecs ? 'attention' : 'ok', t('ui.etat.file_terminee', { bilan: bilan }));
   pywebview.api.charger_historique();
   majRythme();
   // Un fichier arrete en route laisse une reprise : elle est proposee tout de

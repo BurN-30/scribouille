@@ -1659,9 +1659,17 @@ class Passerelle:
         # adaptation automatique, la durée du rythme choisi, la plus longue).
         # La séparation des locuteurs ne compte que si elle tournera vraiment :
         # cochée par défaut, elle ajoutait son coût sans être installée.
+        # Même calcul que le décompte de départ de la file (`app/traitement.py`),
+        # taille des lots comprise : la ligne et le décompte disent la même durée.
         return presets.formater_duree(presets.estimer_annonce(
             duree_secs, cle_preset, self.materiel, self.config.get("rythme"),
-            diarisation.effective(diarisation_active), modele_avance or "", beam=beam))
+            diarisation.effective(diarisation_active), modele_avance or "", beam=beam,
+            lot=presets.taille_lot(cle_preset, self.materiel)))
+
+    def durees_affichees(self) -> dict:
+        """Durées du bandeau et des cartes, recalculées après chaque mesure du poste."""
+        rythme_etat = self.etat_rythme()
+        return {"rythme": rythme_etat, "presets": self._presets_affiches(rythme_etat["choisi"])}
 
     # -- fichiers ----------------------------------------------------------
 

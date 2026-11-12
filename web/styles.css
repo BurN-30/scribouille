@@ -300,6 +300,7 @@ kbd {
   margin-top: 9px; font-size: 13px; color: var(--texte-doux); font-variant-numeric: tabular-nums;
 }
 #lancement-duree strong { color: var(--texte); font-weight: 650; }
+#lancement-duree .lancement-moteur { display: block; margin-top: 2px; color: var(--ambre); }
 #lancement-avis:not(:empty) { margin-top: 10px; }
 
 .bascule-compacte { margin: 0; padding: 2px 6px 2px 2px; gap: 8px; font-size: 13px; color: var(--texte-doux); }

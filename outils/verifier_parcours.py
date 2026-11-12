@@ -1181,6 +1181,25 @@ def essai_depot_mele() -> None:
              "le message nomme le fichier ignoré")
 
 
+def essai_ce_que_l_ecran_affirme(base: Path) -> None:
+    """Ce que l'écran dit doit être vrai : heures, avis, moteur, durées, dépôt."""
+    titre("Ce que l'écran affirme : heures, avis d'écoute, moteur, durées, dépôt")
+
+    js = "\n".join((RACINE / "web" / nom).read_text(encoding="utf-8") for nom in ("app.js", "relecture.js"))
+    passerelle = (RACINE / "transcriber.pyw").read_text(encoding="utf-8")
+    for constat, preuve in (
+            ("le bandeau dit qu'OpenVINO ne signale aucun mot douteux", "moteurSansConfiance()"),
+            ("l'accueil nomme le réglage gardé", "ui.accueil.garder_nomme"),
+            ("les durées sont recalculées après chaque fichier", "rafraichirDurees();"),
+            ("une progression figée est complétée par une estimation dite « environ »", "progressionAffichee(it)"),
+            ("« voix non séparées » seulement si la séparation est installée", "voixEchouees_(it)"),
+            ("le bilan de la file ne compte pas les zéros", "d.annules ? tn('ui.etat.annulees', d.annules) : ''"),
+            ("une durée illisible est dite, pas « -- »", "ui.ligne.duree_illisible")):
+        verifier(preuve.replace("\r\n", "\n") in js.replace("\r\n", "\n"), f"écran : {constat}")
+    verifier("lot=presets.taille_lot(cle_preset, self.materiel)" in passerelle,
+             "la ligne en attente et le décompte de départ partent du même calcul (lots compris)")
+
+
 def essai_passage_libre(base: Path) -> None:
     """Réécrire ou supprimer un passage : même règle d'égalité, même annulation."""
     titre("Passage réécrit ou supprimé : l'écran reste le fichier")
@@ -1256,6 +1275,7 @@ def principal() -> int:
         essai_position_relecture(base)
         essai_heures_et_avis(base)
         essai_depot_mele()
+        essai_ce_que_l_ecran_affirme(base)
         essai_accessibilite()
         essai_ecrans()
 
