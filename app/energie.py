@@ -63,6 +63,119 @@ def desactiver_bridage() -> bool:
     return _poser(_VITESSE_EXECUTION, 0)
 
 
+def activer_bridage() -> bool:
+    """
+    EcoQoS : le « mode efficacité » de Windows, voulu pour le mode discret.
+
+    Microsoft Learn (SetProcessInformation, ProcessPowerThrottling) : le
+    système baisse la fréquence ou range le travail sur les cœurs efficaces,
+    « when the work is not contributing to the foreground user experience ».
+    Le gestionnaire des tâches pose la même chose, plus la priorité basse,
+    quand on clique sur « Mode efficacité ».
+    """
+    return _poser(_VITESSE_EXECUTION, _VITESSE_EXECUTION)
+
+
+# ---------------------------------------------------------------------------
+# Priorité, entrées-sorties et affinité du processus (mode « je travaille en
+# même temps », voir `app/rythme.py`). Par psutil, déjà requis : sans lui, ou
+# hors de Windows, chaque appel renvoie faux et rien ne change.
+# ---------------------------------------------------------------------------
+
+#: Classes de priorité Windows (SetPriorityClass), par nom de l'application.
+PRIORITES = {"normale": 0x20, "inferieure": 0x4000, "basse": 0x40}
+
+
+def poser_priorite(nom: str) -> bool:
+    try:
+        import psutil  # type: ignore
+
+        psutil.Process().nice(PRIORITES.get(nom, PRIORITES["normale"]))
+        return True
+    except Exception as exc:  # pragma: no cover - dépend du système
+        journal.debug("Priorité non modifiée : %s", exc)
+        return False
+
+
+def poser_priorite_es(nom: str) -> bool:
+    """Priorité des lectures et écritures : « normale » ou « basse »."""
+    try:
+        import psutil  # type: ignore
+
+        valeur = psutil.IOPRIO_LOW if nom == "basse" else psutil.IOPRIO_NORMAL
+        psutil.Process().ionice(valeur)
+        return True
+    except Exception as exc:  # pragma: no cover - dépend du système
+        journal.debug("Priorité des entrées-sorties non modifiée : %s", exc)
+        return False
+
+
+def poser_affinite(logiques: list[int] | None) -> bool:
+    """Processeurs logiques permis ; liste vide ou None : tous."""
+    try:
+        import psutil  # type: ignore
+
+        processus = psutil.Process()
+        tous = list(range(psutil.cpu_count(logical=True) or 1))
+        voulus = [n for n in (logiques or []) if n in tous] or tous
+        processus.cpu_affinity(voulus)
+        return True
+    except Exception as exc:  # pragma: no cover - dépend du système
+        journal.debug("Affinité non modifiée : %s", exc)
+        return False
+
+
+def poser_qos(nom: str) -> bool:
+    """« haute » (HighQoS), « eco » (EcoQoS) ou « systeme » (heuristiques de Windows)."""
+    if nom == "haute":
+        return desactiver_bridage()
+    if nom == "eco":
+        return activer_bridage()
+    return rendre_au_systeme()
+
+
+def alimentation() -> dict:
+    """{"batterie": présente, "secteur": branché, "pct": charge} ; secteur vrai sans batterie."""
+    try:
+        import psutil  # type: ignore
+
+        batterie = psutil.sensors_battery()
+    except Exception:
+        batterie = None
+    if batterie is None:
+        return {"batterie": False, "secteur": True, "pct": 100}
+    return {"batterie": True, "secteur": bool(batterie.power_plugged),
+            "pct": int(batterie.percent or 0)}
+
+
+#: Mode d'alimentation de Windows 10 et 11 (curseur « Mode d'alimentation »),
+#: lu par PowerGetEffectiveOverlayScheme (powrprof.dll). Lecture seule :
+#: l'application ne change aucun réglage du système, elle peut le signaler.
+MODES_ALIMENTATION = {
+    "961cc777-2547-4f9d-8174-7d86181b8a7a": "efficacite",
+    "00000000-0000-0000-0000-000000000000": "equilibre",
+    "3af9b8d9-7c97-431d-ad78-34a8bfea439f": "performances",
+    "ded574b5-45a0-4f42-8737-46345c09c238": "performances_max",
+}
+
+
+def mode_alimentation() -> str:
+    """« efficacite », « equilibre », « performances », « performances_max », vide si illisible."""
+    if sys.platform != "win32":
+        return ""
+    try:
+        import ctypes
+        import uuid
+
+        tampon = (ctypes.c_ubyte * 16)()
+        fonction = ctypes.WinDLL("powrprof").PowerGetEffectiveOverlayScheme
+        if fonction(ctypes.byref(tampon)) != 0:
+            return ""
+        return MODES_ALIMENTATION.get(str(uuid.UUID(bytes_le=bytes(tampon))), "")
+    except Exception:
+        return ""
+
+
 def rendre_au_systeme() -> bool:
     """Le système reprend ses heuristiques habituelles."""
     return _poser(0, 0)

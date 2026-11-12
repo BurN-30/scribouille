@@ -86,6 +86,11 @@ class Topologie:
     #: Processeurs logiques des cœurs performants et efficaces : de quoi borner
     #: l'affinité du calcul pour écarter les cœurs basse consommation.
     logiques_principaux: list[int] = field(default_factory=list)
+    #: Processeurs logiques des seuls cœurs performants, puis des seuls cœurs
+    #: efficaces : le mode « discret » range le calcul sur les seconds et laisse
+    #: les premiers à l'utilisateur (voir `app/rythme.py`).
+    logiques_performants: list[int] = field(default_factory=list)
+    logiques_efficaces: list[int] = field(default_factory=list)
 
     @property
     def coeurs_principaux(self) -> int:
@@ -341,14 +346,18 @@ def analyser_topologie(tampon: bytes) -> Topologie:
     couverts = set().union(*caches_l3) if caches_l3 else set()
     hybride = len(classes) > 1
     principaux: list[int] = []
+    performants: list[int] = []
+    efficaces: list[int] = []
     for classe, logiques in coeurs:
         if hybride and classe != haute and couverts and not (logiques & couverts):
             topo.basse_consommation += 1
             continue
         if hybride and classe != haute:
             topo.efficaces += 1
+            efficaces += sorted(logiques)
         else:
             topo.performants += 1
+            performants += sorted(logiques)
         principaux += sorted(logiques)
     if hybride and topo.basse_consommation and not topo.efficaces:
         # Deux familles seulement, dont l'une hors du L3 (Lunar Lake : ses cœurs
@@ -356,8 +365,12 @@ def analyser_topologie(tampon: bytes) -> Topologie:
         # ils comptent comme efficaces.
         topo.efficaces, topo.basse_consommation = topo.basse_consommation, 0
         principaux = sorted(set().union(*(logiques for _, logiques in coeurs)))
+        efficaces = sorted(set(principaux) - set(performants))
     topo.hybride = hybride
     topo.logiques_principaux = sorted(principaux)
+    if hybride:
+        topo.logiques_performants = sorted(performants)
+        topo.logiques_efficaces = sorted(efficaces)
     return topo
 
 
