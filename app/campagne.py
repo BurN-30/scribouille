@@ -194,7 +194,12 @@ PAR_CLE = {r.cle: r for r in TOUS}
 #: openvino-tokenizers 2026.4.1, nncf), depuis les poids transformers du dépôt
 #: pris à la révision figée (fichiers *.json, merges.txt, vocab.json,
 #: model.safetensors), vers <dossier des modèles>/convertis/<nom>. Poids int8,
-#: comme les dépôts OpenVINO officiels.
+#: comme les dépôts OpenVINO officiels. La distillation dec16 n'a pas de
+#: `alignment_heads` dans son generation_config.json : OpenVINO GenAI refuse
+#: alors l'horodatage des mots au premier décodage (« 'word_timestamps' can be
+#: true only when 'alignment_heads' is set »). On y ajoute, après conversion,
+#: toutes les têtes de la seconde moitié du décodeur ([[l, h] for l in 8..15,
+#: h in 0..19]), le choix par défaut de CTranslate2.
 CONVERSIONS = {
     "whisper-large-v3-french-distil-dec16-int8-ov":
         "optimum-cli export openvino --model <instantané bofenghuang/whisper-large-v3-french-distil-dec16@16bd0218> "
