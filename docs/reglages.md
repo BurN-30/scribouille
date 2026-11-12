@@ -23,7 +23,7 @@ En ligne de commande : `scribouille reglages` (liste), `reglages lire CLE`, `reg
 | `peripherique` (pseudo-clé) | `CPU` | Périphérique d'OpenVINO : `CPU`, `GPU` (puce graphique Intel), `NPU`. Sur `GPU` et `NPU`, décodage glouton. Poser un périphérique pose aussi `moteur=openvino`. |
 | `rythme` | `vitesse` | Part du poste laissée à l'utilisateur. `vitesse` : tout le processeur. `equilibre` : environ trois quarts des fils, priorité inférieure, lots de 4 au plus. `discret` : moitié des fils (cœurs efficaces sur un processeur hybride), priorité basse, EcoQoS, pauses. Appliqué au processus moteur seul. |
 | `rythme_auto` | `false` | Passer seul en vitesse maximale quand le poste est inoccupé (2 min sans clavier ni souris, pas de plein écran ni de micro ouvert), revenir au rythme choisi sinon. |
-| `dossier_modeles` (pseudo-clé) | `modeles\` des données | Dossier des modèles, noté dans `dossier-modeles.txt`. Les modèles déjà là ne sont pas déplacés. |
+| `dossier_modeles` (pseudo-clé) | `modeles\` des données | Dossier des modèles, noté dans `dossier-modeles.txt`. Les modèles déjà là ne sont pas déplacés. Changé en ligne de commande pendant que la fenêtre est ouverte : pris en compte à son prochain démarrage. |
 
 ## Vocabulaire
 
