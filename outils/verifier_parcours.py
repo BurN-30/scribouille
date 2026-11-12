@@ -1150,6 +1150,28 @@ def essai_position_relecture(base: Path) -> None:
              "instant d'écoute et défilement gardés pour la prochaine ouverture")
 
 
+def essai_heures_et_avis(base: Path) -> None:
+    """Sans heure connue, aucune heure inventée ; l'avis d'écoute suit la transcription ouverte."""
+    titre("Relecture : aucune heure inventée, avis d'écoute à jour")
+    dossier = base / "heures"
+    dossier.mkdir()
+    sans = dossier / "ancienne.txt"
+    sans.write_text("Premier paragraphe sans heure.\n\nSecond paragraphe.\n", encoding="utf-8")
+    vue = lecture.charger(sans)
+    verifier(all(p["debut"] is None for p in vue["paragraphes"]) and vue["heures"] is False,
+             "sans compagnon ni horodatage : aucune heure inventée", str([p["debut"] for p in vue["paragraphes"]]))
+    horo = dossier / "horodatee.txt"
+    horo.write_text("[00:01:05] Un paragraphe daté.\n\n[00:02:10] Un autre.\n", encoding="utf-8")
+    vue = lecture.charger(horo)
+    verifier([p["debut"] for p in vue["paragraphes"]] == [65.0, 130.0] and vue["heures"] is True,
+             "sans compagnon, les heures du fichier sont reprises")
+    js = (RACINE / "web" / "relecture.js").read_text(encoding="utf-8").replace("\r\n", "\n")
+    verifier("lect.audioAvis = '';\n  if (lect.d) dessinerAvis();" in js,
+             "l'avis d'écoute est redessiné à chaque ouverture")
+    verifier("p.debut === null || p.debut === undefined ? '' : formaterSecondes(p.debut)" in js
+             and "ui.rl.sans_heures" in js, "sans heure : ni « 0:00 », ni « Copier avec les heures »")
+
+
 def essai_passage_libre(base: Path) -> None:
     """Réécrire ou supprimer un passage : même règle d'égalité, même annulation."""
     titre("Passage réécrit ou supprimé : l'écran reste le fichier")
@@ -1223,6 +1245,7 @@ def principal() -> int:
         essai_vocabulaire_sur_demande(base)
         essai_passage_libre(base)
         essai_position_relecture(base)
+        essai_heures_et_avis(base)
         essai_accessibilite()
         essai_ecrans()
 

@@ -187,9 +187,9 @@ function dessinerTexte() {
       mots.push({ d: Number(mot.d) || p.debut || 0, k: k, doute: doute, c: !!mot.c, p: mot.p });
     });
     textes.push(texte);
-    const heure = formaterSecondes(p.debut);
+    const heure = p.debut === null || p.debut === undefined ? '' : formaterSecondes(p.debut);
     morceaux.push(`<div class="rl-para" data-p="${k}"><div class="rl-marge">`
-      + `<button class="rl-heure" data-p="${k}" aria-label="${ech(t('ui.rl.ecouter_depuis', { heure: heure }))}">${heure}</button>`
+      + (heure ? `<button class="rl-heure" data-p="${k}" aria-label="${ech(t('ui.rl.ecouter_depuis', { heure: heure }))}">${heure}</button>` : '')
       + (p.locuteur ? `<button class="rl-locuteur" data-loc="${ech(p.locuteur)}" title="${ech(t('ui.loc.renommer'))}">${ech(p.locuteur)}</button>` : '')
       + `</div><p class="rl-corps">${corps}</p></div>`);
   });
@@ -262,6 +262,7 @@ const son = () => $('#rl-son');
 async function chargerAudio(chemin) {
   lect.audio = false;
   lect.audioAvis = '';
+  if (lect.d) dessinerAvis();
   activerLecteur(false);
   let r = null;
   try { r = await appelPasserelle('audio_relecture', chemin); } catch (e) { r = null; }
@@ -860,7 +861,17 @@ async function appliquerCorrection() {
   }
 }
 
+/* Sans heure connue, « Copier avec les heures » est grise et dit pourquoi. */
+function majExports() {
+  const item = document.querySelector('#rl-menu-export [data-export="heures"]');
+  if (!item) return;
+  const sans = !(lect.d && lect.d.heures);
+  item.disabled = sans;
+  item.title = sans ? t('ui.rl.sans_heures') : '';
+}
+
 function majAnnulation() {
+  majExports();
   const niveaux = (lect.d && lect.d.niveaux) || 0;
   const bouton = $('#rl-annuler');
   bouton.hidden = !(lect.d && lect.d.annulable);
@@ -904,7 +915,7 @@ async function renommerLocuteur() {
     return;
   }
   fermerModale($('#modale-locuteur'));
-  const message = tn('ui.loc.renomme', r.paragraphes || r.segments || 1, { ancien: lect.locuteur, nouveau: nouveau });
+  const message = tn('ui.loc.renomme', r.paragraphes || r.segments || 1, { ancien: lect.locuteur, nouveau: r.nom || nouveau });
   journaliser('ok', message);
   await chargerLecture(lect.chemin, true);
   statutRelecture(message, 'ok');
@@ -914,16 +925,23 @@ async function renommerLocuteur() {
 
 function paragraphesAvecHeures() {
   return (lect.d.paragraphes || []).map((p) =>
-    `[${horodatage(p.debut)}] ` + (p.locuteur ? p.locuteur + ' : ' : '') + p.texte).join('\n\n');
+    (p.debut === null || p.debut === undefined ? '' : `[${horodatage(p.debut)}] `)
+    + (p.locuteur ? p.locuteur + ' : ' : '') + p.texte).join('\n\n');
 }
 
+/* Markdown : titre, une ligne de reperes (duree, date, et les locuteurs
+   seulement s'il y en a), puis les paragraphes. */
 function markdown() {
   const d = lect.d;
   const m = d.meta || {};
-  const entete = [`# ${String(d.nom || m.fichier || '').replace(/\.txt$/i, '')}`, '',
-    `*${[m.duree, m.date, m.locuteurs_texte].filter(Boolean).join(' · ')}*`, ''];
-  const corps = (d.paragraphes || []).map((p) =>
-    `**[${horodatage(p.debut)}]${p.locuteur ? ' ' + p.locuteur : ''}** ${p.texte}`);
+  const reperes = [m.duree, m.date, m.locuteurs ? m.locuteurs_texte : ''].filter(Boolean).join(' · ');
+  const entete = [`# ${String(d.nom || m.fichier || '').replace(/\.txt$/i, '')}`, ''];
+  if (reperes) entete.push(`*${reperes}*`, '');
+  const corps = (d.paragraphes || []).map((p) => {
+    const tete = [p.debut === null || p.debut === undefined ? '' : `[${horodatage(p.debut)}]`, p.locuteur || '']
+      .filter(Boolean).join(' ');
+    return (tete ? `**${tete}** ` : '') + p.texte;
+  });
   return entete.concat(corps.join('\n\n')).join('\n') + '\n';
 }
 
@@ -935,6 +953,7 @@ async function exporter(nature) {
     await copier(typeof lect.d.corps === 'string' ? lect.d.corps : paragraphesAvecHeures());
     statutRelecture(t('ui.rl.copie.texte'), 'ok');
   } else if (nature === 'heures') {
+    if (!lect.d.heures) { statutRelecture(t('ui.rl.sans_heures')); return; }
     await copier(paragraphesAvecHeures());
     statutRelecture(t('ui.rl.copie.heures'), 'ok');
   } else if (nature === 'markdown') {
