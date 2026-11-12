@@ -88,7 +88,9 @@ if extensions.options_reconnues(sys.argv[1:]):
 
 # Processus moteur (voir app/moteur_processus.py), lancé par la fenêtre ou par
 # la ligne de commande, jamais à la main : il lit ses ordres sur l'entrée standard.
-if "--moteur" in sys.argv[1:]:
+# Premier argument seulement : « transcrire ... --moteur openvino » est une
+# option de la ligne de commande, pas ce processus.
+if sys.argv[1:2] == ["--moteur"]:
     from app import moteur_processus as _moteur_processus
 
     sys.exit(_moteur_processus.principal(sys.argv[1:]))

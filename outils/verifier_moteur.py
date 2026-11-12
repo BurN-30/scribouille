@@ -537,7 +537,8 @@ def essai_ligne_de_commande() -> None:
     verifier(code == 4 and any(x.get("evenement") == "fichier_ignore" for x in lignes),
              "déjà transcrit : code 4, rien d'écrasé")
     avant = sorted(p.name for p in dossier.iterdir())
-    code, lignes, _ = cli("transcrire", str(source), "--json", "--telecharger", "--ecraser", essai=essai)
+    code, lignes, _ = cli("transcrire", str(source), "--json", "--telecharger", "--ecraser", "--moteur", "ctranslate2",
+                          "--rythme", "equilibre", "--locuteurs", "non", "--formats", "txt,json", essai=essai)
     verifier(code == 0 and sorted(p.name for p in dossier.iterdir()) == avant,
              "--ecraser : refait, mêmes fichiers (les anciens remplacés, pas de « -2 »)")
 
