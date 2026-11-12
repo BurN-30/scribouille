@@ -387,6 +387,12 @@ def essai_apprentissage(base: Path) -> None:
     verifier("Monsieur Lebrun" not in formes, "la civilité n'entre pas dans le terme")
     # Faux ami : « brun » écrit juste ailleurs n'est pas une faute.
     verifier(not any(f.forme == "brun" for e in voc.entrees for f in e.fautes), "faux ami écarté")
+    phrase = ap.Reunion("r3", "Bonjour. la streinte du week-end commence. la streinte tourne. la streinte reprend.",
+                        "Bonjour. L'astreinte du week-end commence. L'astreinte tourne. L'astreinte reprend.")
+    appris = {e.forme for e in ap.apprendre([phrase])[0].entrees}
+    verifier("L'astreinte" not in appris and ("l'astreinte" in appris or not appris),
+             "majuscule de début de phrase sur une forme élidée : non apprise comme telle", str(appris))
+    verifier(ap._sans_majuscule_de_phrase("Sophie", "sofi") == "Sophie", "un nom propre garde sa majuscule")
     deja = v2.lire_texte('[[terme]]\nforme = "Kubernetes"\nfautes = ["cubernetes"]\n'
                          '[[terme]]\nforme = "Acmie"\netat = "refuse"')[0]
     voc2, bilan2 = ap.apprendre(reunions, deja)

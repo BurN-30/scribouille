@@ -272,7 +272,7 @@ def apprendre(reunions: list[Reunion], existant: Vocabulaire | None = None,
                 bilan["remplacements_sans_contexte"] += 1
                 continue
             faute.voisins = recurrents[:3]
-        entree = entree_pour(constat.juste)
+        entree = entree_pour(_sans_majuscule_de_phrase(constat.juste, constat.faute))
         entree.ajouter_faute(faute)
         entree.vu = max(entree.vu, constat.occurrences)
         entree.reunions = max(entree.reunions, len(constat.reunions))
@@ -327,6 +327,23 @@ def apprendre(reunions: list[Reunion], existant: Vocabulaire | None = None,
     bilan["fautes_en_contexte"] = sum(1 for e in filtre.entrees for f in e.fautes if f.voisins)
     par_categorie = Counter(e.categorie for e in filtre.entrees)
     return filtre, {**bilan, "categories": dict(par_categorie)}
+
+
+#: Élisions en tête d'une forme : sa majuscule vient du début de phrase.
+_ELISION = re.compile(r"^(?:[LDJMNSTC]|Qu|Jusqu|Lorsqu|Puisqu)['’]", re.IGNORECASE)
+
+
+def _sans_majuscule_de_phrase(juste: str, faute: str) -> str:
+    """
+    « la streinte » relu en « L'astreinte » en début de phrase : la majuscule
+    tient à la phrase, pas au terme. Accepté tel quel, il imposerait
+    « L'astreinte » au milieu des phrases suivantes. Une forme élidée dont la
+    faute s'écrit en minuscule reprend donc sa minuscule ; un nom propre
+    (« Sophie ») garde la sienne.
+    """
+    if juste[:1].isupper() and faute[:1].islower() and _ELISION.match(juste):
+        return juste[:1].lower() + juste[1:]
+    return juste
 
 
 def _categorie(forme: str, info: dict | None) -> str:
