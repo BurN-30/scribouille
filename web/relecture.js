@@ -152,9 +152,10 @@ function dessinerRelecture() {
   const m = d.meta || {};
   $('#rl-titre').textContent = d.nom;
   // « 3 locuteurs détectés » se suffit ; « non séparés » a besoin de son sujet.
-  $('#rl-meta').innerHTML = [m.duree, m.date, m.modele,
+  // Le modele en dernier : c'est lui qui se tronque quand la place manque.
+  $('#rl-meta').innerHTML = [m.duree, m.date,
     m.locuteurs ? m.locuteurs_texte
-      : (m.locuteurs_texte ? t('ui.rl.meta_locuteurs', { texte: m.locuteurs_texte }) : '')]
+      : (m.locuteurs_texte ? t('ui.rl.meta_locuteurs', { texte: m.locuteurs_texte }) : ''), m.modele]
     .filter(Boolean).map((x) => `<span>${ech(x)}</span>`).join('');
   dessinerTexte();
   calculerPoints();
