@@ -401,12 +401,16 @@ def appliquer_correction(chemin: str | Path, source: str, cible: str,
         return {"ok": False, "message": langues.t("lect.illisible")}
 
     entete, corps = separer_entete(contenu)
+    # `separer_entete` retire les sauts de ligne entre l'en-tête et le corps :
+    # ils sont remis tels quels, sans quoi la barre de fin d'en-tête et la
+    # première phrase se retrouvaient sur la même ligne.
+    separation = contenu[len(entete):len(contenu) - len(corps)]
     corps_corrige, remplacements = vocabulaire.appliquer(corps, regles)
     if not remplacements:
         return {"ok": False, "message": langues.t("lect.non_retrouve", source=source)}
 
     try:
-        fichier.write_text(entete + corps_corrige, encoding="utf-8")
+        fichier.write_text(entete + separation + corps_corrige, encoding="utf-8")
     except OSError as exc:
         journal.attention("Correction non écrite dans %s : %s", fichier, exc)
         return {"ok": False, "message": langues.t("lect.non_reecrit")}

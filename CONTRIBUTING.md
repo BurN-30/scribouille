@@ -32,6 +32,7 @@ run by hand, without the network and without a window:
 .venv\Scripts\python outils\verifier_chaine_lecture.py
 .venv\Scripts\python outils\verifier_fonctions_peripheriques.py
 .venv\Scripts\python outils\verifier_donnees.py
+.venv\Scripts\python outils\verifier_parcours.py
 ```
 
 All of them exit with code 0 when everything passes. Run at least `--verifier` and

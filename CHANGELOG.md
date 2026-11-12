@@ -44,6 +44,13 @@ S'adapter au poste, et travailler pendant que la transcription tourne.
   dossier à part, pour mesurer sur un portable Intel si le faisceau y devient
   possible et juste. L'application ne s'en sert pas.
 
+Corrections issues d'une revue d'usage de l'application réelle (vérifiées par
+`outils/verifier_parcours.py`) :
+
+- **Correction depuis la relecture** : l'en-tête du fichier texte reste séparé
+  du corps ; la barre de fin d'en-tête et la première phrase ne se retrouvent
+  plus sur la même ligne.
+
 Choisir le réglage sur des réunions transcrites à la main : la campagne.
 
 La comparaison dit où deux moteurs divergent, pas lequel a raison. La campagne
