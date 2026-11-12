@@ -688,6 +688,7 @@ def principal() -> int:
         essai_sortie_par_defaut()
         essai_json_partout()
         essai_documentation()
+        essai_aucune_console()
     finally:
         import shutil
 

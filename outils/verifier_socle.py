@@ -13,11 +13,14 @@ Sort avec le code 0 si tout passe, 1 sinon.
 
 from __future__ import annotations
 
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 RACINE = Path(__file__).resolve().parent.parent
+# Aucun processus lancé par les vérifications n'ouvre de console visible.
+SANS_FENETRE = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 if str(RACINE) not in sys.path:
     sys.path.insert(0, str(RACINE))
 
@@ -129,7 +132,7 @@ def essai_demarrage(base: Path) -> None:
     from app import chemins, materiel, moteur, moteur_openvino
 
     sortie = subprocess.run([sys.executable, "-c", _SONDE_IMPORTS.replace("{lourds}", repr(LOURDS)), str(RACINE)],
-                            capture_output=True, text=True, timeout=120)
+                            capture_output=True, text=True, timeout=120, creationflags=SANS_FENETRE)
     charges = json.loads((sortie.stdout or "[]").strip().splitlines()[-1] if sortie.stdout else "[]")
     verifier(sortie.returncode == 0 and charges == [],
              "modules de la fenêtre importés sans numpy, CTranslate2, PyAV ni OpenVINO",
@@ -530,7 +533,7 @@ def essai_instances(base: Path) -> None:
         verifier(instance.prendre_fichier(source) == 0, "le premier processus prend le fichier")
         verifier(instance.prendre_fichier(source) == 0, "le même processus peut le reprendre (reprise après plantage)")
         verrou = instance._fichier_verrou(source)
-        autre = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+        autre = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"], creationflags=SANS_FENETRE)
         try:
             verrou.write_text(str(autre.pid), encoding="ascii")
             verifier(instance.prendre_fichier(source) == autre.pid,

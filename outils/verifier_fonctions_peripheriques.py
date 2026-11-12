@@ -1075,6 +1075,7 @@ def essai_transfert_xet() -> None:
         [sys.executable, "-c",
          "import app, os; print(os.environ['HF_HUB_DISABLE_XET'])"],
         cwd=str(RACINE), env=environnement, capture_output=True, text=True,
+        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
     )
     verifier(sortie.stdout.strip() == "0",
              "un choix explicite de l'utilisateur n'est pas écrasé",

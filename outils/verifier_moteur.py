@@ -32,6 +32,34 @@ import time
 from pathlib import Path
 
 RACINE = Path(__file__).resolve().parent.parent
+# Aucun processus lancé par les vérifications n'ouvre de console visible.
+SANS_FENETRE = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+
+
+def interprete_sans_lanceur() -> tuple[str, dict]:
+    """
+    Le vrai python.exe, et les paquets de l'environnement virtuel en
+    PYTHONPATH. Le lanceur d'un venv (`.venv\\Scripts\\python.exe`) relance
+    l'interpréteur dans un processus fils : lancé sans console (tâche
+    planifiée simulée), ce fils en ouvrirait une, visible à l'écran.
+    """
+    base = getattr(sys, "_base_executable", sys.executable) or sys.executable
+    if os.path.normcase(os.path.abspath(base)) == os.path.normcase(os.path.abspath(sys.executable)):
+        return sys.executable, {}
+    paquets = os.pathsep.join(p for p in sys.path if p.lower().endswith("site-packages"))
+    return base, {"PYTHONPATH": paquets}
+
+
+def pause_dans_sa_console(pid: int) -> None:
+    """
+    Ctrl+Pause envoyé à un processus lancé sans fenêtre (il a sa propre
+    console, invisible) : un petit processus, sans fenêtre lui non plus,
+    s'attache à cette console et y envoie l'événement.
+    """
+    code = ("import ctypes, sys; k = ctypes.windll.kernel32; k.FreeConsole(); "
+            "ok = k.AttachConsole(int(sys.argv[1])); k.SetConsoleCtrlHandler(None, 1); "
+            "sys.exit(0 if ok and k.GenerateConsoleCtrlEvent(1, int(sys.argv[1])) else 1)")
+    subprocess.run([sys.executable, "-c", code, str(pid)], timeout=30, creationflags=SANS_FENETRE)
 TEMPORAIRE = Path(tempfile.mkdtemp(prefix="scribouille-moteur-"))
 os.environ["SCRIBOUILLE_DONNEES"] = str(TEMPORAIRE / "donnees")
 os.environ["LOCALAPPDATA"] = str(TEMPORAIRE / "localappdata")
@@ -167,7 +195,7 @@ def essai_protocole() -> None:
     # Le moteur lui-même : pret, ordre inconnu, ligne illisible, quitter.
     commande = [PYTHON, str(RACINE / "transcriber.pyw"), "--moteur"]
     p = subprocess.run(commande, input=b'pas du json\n{"type":"inconnu","n":7}\n{"type":"quitter","n":8}\n',
-                       capture_output=True, timeout=60, cwd=str(RACINE))
+                       capture_output=True, timeout=60, cwd=str(RACINE), creationflags=SANS_FENETRE)
     messages = [protocole.decoder(x) for x in p.stdout.splitlines()]
     verifier(messages and messages[0]["type"] == "pret" and messages[0]["protocole"] == 1
              and isinstance(messages[0]["pid"], int), "premier message : pret, version du protocole, PID", str(messages[:1]))
@@ -222,7 +250,8 @@ def essai_file_de_trois() -> None:
     verifier(f.sup.etat_public()["etat"] == "arrete", "moteur_etat : arrêté après la file")
 
     sortie = subprocess.run([PYTHON, "-c", _SONDE_PARENT, str(RACINE), str(EXTRAIT), str(TEMPORAIRE / "sonde")],
-                            capture_output=True, text=True, timeout=180, env=dict(os.environ))
+                            capture_output=True, text=True, timeout=180, env=dict(os.environ),
+                            creationflags=SANS_FENETRE)
     try:
         sonde = json.loads(sortie.stdout.strip().splitlines()[-1])
     except (ValueError, IndexError):
@@ -353,7 +382,8 @@ def essai_orphelins() -> None:
     os.environ["SCRIBOUILLE_MOTEUR_ESSAI"] = json.dumps({"chargement_s": 600})
     for mode, libelle in (("tuer", "parent tué (TerminateProcess)"), ("sortir", "parent sorti sans rien fermer")):
         parent = subprocess.Popen([PYTHON, "-c", _PARENT, str(RACINE), str(EXTRAIT), str(TEMPORAIRE / "orph"), mode],
-                                  stdout=subprocess.PIPE, text=True, env=dict(os.environ))
+                                  stdout=subprocess.PIPE, text=True, env=dict(os.environ),
+                                  creationflags=SANS_FENETRE)
         ligne = parent.stdout.readline().strip()
         pid = int(ligne) if ligne.isdigit() else 0
         verifier(vivant(pid), f"{libelle} : moteur en marche avant", ligne)
@@ -434,7 +464,7 @@ def cli(*arguments, essai: dict | None = None, env_en_plus: dict | None = None) 
     env["USERPROFILE"] = str(TEMPORAIRE / "maison")
     env.update(env_en_plus or {})
     p = subprocess.run([PYTHON, str(RACINE / "transcriber.pyw"), *arguments], capture_output=True, timeout=300,
-                       env=env, cwd=str(TEMPORAIRE))
+                       env=env, cwd=str(TEMPORAIRE), creationflags=SANS_FENETRE)
     lignes = []
     for x in p.stdout.decode("utf-8", "replace").splitlines():
         try:
@@ -608,7 +638,7 @@ def essai_ligne_de_commande() -> None:
                           "--formats", "txt,json,srt,horodatage", "--sortie", str(ailleurs), "--langue", "en",
                           "--rythme", "discret"],
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=str(TEMPORAIRE),
-                         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+                         creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | SANS_FENETRE)
     vus = 0
     for x in p.stdout:
         if b'"progres"' in x:
@@ -617,7 +647,7 @@ def essai_ligne_de_commande() -> None:
                 break
     import signal
 
-    p.send_signal(signal.CTRL_BREAK_EVENT)
+    pause_dans_sa_console(p.pid)
     try:
         code_interruption = p.wait(30)
     except subprocess.TimeoutExpired:
@@ -660,7 +690,9 @@ def essai_ligne_de_commande() -> None:
     seconde.write_bytes(EXTRAIT.read_bytes())
     env = {k: v for k, v in os.environ.items() if k.upper() not in ("SCRIBOUILLE_MOTEUR_ESSAI",)}
     env["SCRIBOUILLE_MOTEUR_ESSAI"] = json.dumps(essai)
-    code = _lancer_sans_bureau([PYTHON, "-c", _AUDIT, str(audit), str(RACINE / "transcriber.pyw"), "transcrire",
+    interprete, en_plus = interprete_sans_lanceur()
+    env.update(en_plus)
+    code = _lancer_sans_bureau([interprete, "-c", _AUDIT, str(audit), str(RACINE / "transcriber.pyw"), "transcrire",
                                 str(seconde), "--json", "--telecharger"], env, sortie)
     contenu = sortie.read_text(encoding="utf-8", errors="replace") if sortie.exists() else ""
     fin = [json.loads(x) for x in contenu.splitlines() if x.startswith("{") and '"fin"' in x]

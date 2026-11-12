@@ -1526,7 +1526,8 @@ def cmd_verifier(options, sortie: Sortie) -> int:
     # dans la page de code du poste, et les accents arriveraient abîmés.
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     resultat = subprocess.run(commande, cwd=dossier, capture_output=True, text=True, encoding="utf-8",
-                              errors="replace", timeout=600, env=env)
+                              errors="replace", timeout=600, env=env,
+                              creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
     texte = (resultat.stdout or "").strip()
     sortie.donnees({"ok": resultat.returncode == 0, "bilan": texte.splitlines()}, texte)
     return OK if resultat.returncode == 0 else PAS_PRET
