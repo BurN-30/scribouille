@@ -68,7 +68,15 @@ Les deux fichiers du format 1 sont du texte brut. Ils s'éditent à la main ou d
 
 ## Relire une transcription
 
-Une transcription s'ouvre **dans l'application**, sans passer par un éditeur : cliquez sur une ligne de l'onglet « Transcriptions », ou sur le bouton de relecture d'un fichier qui vient de se terminer.
+Une transcription s'ouvre **dans l'application**, sur un écran entier, sans passer par un éditeur : bouton **Relire** d'un fichier qui vient de se terminer, ou d'une ligne de la liste « Transcriptions ». Le texte affiché est celui du fichier, paragraphe par paragraphe, avec l'heure en marge (et la voix quand les locuteurs sont séparés).
+
+**Écouter.** Un clic sur un mot place l'écoute à ce mot, **Espace** lit ou met en pause, les flèches reculent ou avancent de 5 s, `[` et `]` changent la vitesse ; pendant la lecture, le mot entendu est marqué et le texte suit. Un clic sur l'heure d'un paragraphe le fait entendre depuis son début. L'enregistrement doit être resté à son emplacement.
+
+**Chercher et vérifier.** **Ctrl+F** cherche sans tenir compte de la casse ni des accents, tous les résultats surlignés, **Entrée** ou **F3** pour passer au suivant. La liste **Points à vérifier** parcourt, touche **N** (Maj+N pour revenir), les mots douteux, les remplacements faits par le vocabulaire (annulables un à un), les silences de plus de 5 s et les paragraphes de plus de 90 s ; avec le moteur Intel, qui ne donne pas la confiance des mots, ce sont ces trois dernières catégories qui restent.
+
+**Locuteurs.** Un clic sur « Locuteur 1 » le renomme dans tout le fichier et son compagnon ; un nom déjà porté réunit les deux voix.
+
+**Exporter.** Copier le texte (à la lettre du fichier), avec les heures, ou en Markdown ; enregistrer un `.md` à côté de la transcription.
 
 <!-- capture 2 : vue de lecture, un paragraphe avec deux ou trois mots surlignés en ambre, l'infobulle de confiance visible sur l'un d'eux -->
 
@@ -76,7 +84,7 @@ Whisper donne la probabilité de chaque mot qu'il écrit. La vue de lecture **su
 
 Ces valeurs vivent dans un **fichier compagnon `.json`** écrit à côté du texte, quelques dizaines de kilooctets par heure d'audio. Il est facultatif : une transcription plus ancienne, ou produite avec l'option coupée, s'ouvre normalement, simplement sans surlignage.
 
-Sélectionner un mot ou une courte expression propose de le **corriger**. Avant d'appliquer, la fenêtre montre combien d'endroits du fichier changeront, et lesquels, avec leur contexte. L'application applique alors le remplacement au texte affiché et au fichier enregistré, et met le compagnon à jour ; **Annuler la correction** (ou Ctrl+Z) remet le fichier dans son état d'avant. Une correction de casse (« gitlab » vers « GitLab ») est acceptée. Si vous cochez la case prévue, décochée par défaut, la règle rejoint aussi une section dédiée de `corrections.txt`, pour que la même erreur soit corrigée automatiquement dans les transcriptions suivantes.
+Sélectionner un mot ou une courte expression propose de le **corriger** (bouton ou **Entrée**). La fenêtre liste chaque endroit du fichier qui contient cette forme, avec son contexte : celui de la sélection est coché, les autres se cochent un par un ou tous à la fois. L'application change les endroits cochés dans le texte affiché, le fichier et le compagnon ; **Annuler la modification** (ou Ctrl+Z) remet le fichier dans son état d'avant, à l'octet près. Une correction de casse (« gitlab » vers « GitLab ») est acceptée. Si vous cochez la case prévue, décochée par défaut, la règle rejoint aussi une section dédiée de `corrections.txt`, pour que la même erreur soit corrigée automatiquement dans les transcriptions suivantes.
 
 **Copier pour l'IA** met dans le presse-papiers un texte d'instructions, les métadonnées de l'enregistrement et la transcription complète. Le gabarit est un fichier à vous, `gabarit-ia.txt`, créé au premier usage et modifiable depuis les réglages, où `{texte}`, `{fichier}`, `{date}`, `{duree}`, `{locuteurs}` et `{modele}` sont remplacés au moment de la copie.
 

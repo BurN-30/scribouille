@@ -68,7 +68,15 @@ The two format 1 files are plain text. Edit them by hand or from the panels in t
 
 ## Reading back a transcript
 
-A transcript opens **in the app**, no editor needed: click a line in the Transcripts tab, or the read button on a file that just finished.
+A transcript opens **in the app**, full screen, no editor needed: the **Review** button of a file that just finished, or of a row in the "Transcripts" list. The text shown is the file's text, paragraph by paragraph, with the time in the margin (and the voice when speakers are separated).
+
+**Listen.** Clicking a word places playback there, **Space** plays or pauses, the arrow keys go back or forward 5 s, `[` and `]` change the speed; while playing, the word being heard is marked and the text follows. Clicking a paragraph's time plays it from its start. The recording must still be where it was.
+
+**Search and check.** **Ctrl+F** searches regardless of case and accents, every result highlighted, **Enter** or **F3** for the next one. The **Points to check** list steps through, with **N** (Shift+N to go back), doubtful words, replacements made by the vocabulary (each one can be undone), silences over 5 s and paragraphs over 90 s; with the Intel engine, which gives no per-word confidence, the last three categories remain.
+
+**Speakers.** Clicking "Speaker 1" renames it throughout the file and its companion; a name already in use merges the two voices.
+
+**Export.** Copy the text (exactly as in the file), with timestamps, or as Markdown; save a `.md` next to the transcript.
 
 <!-- screenshot 2: reading view, a paragraph with two or three amber highlighted words, the confidence tooltip visible on one of them -->
 
@@ -76,7 +84,7 @@ Whisper gives a probability for every word it writes. The reading view **highlig
 
 These values live in a **companion `.json` file** written next to the text, a few tens of kilobytes per hour of audio. It is optional: an older transcript, or one produced with the option off, opens normally without highlighting.
 
-Selecting a word or a short phrase offers to **correct it**. Before applying, the window shows how many places in the file will change, and which ones, with their context. The app then applies the replacement to the text on screen and to the saved file, and updates the companion; **Undo the correction** (or Ctrl+Z) puts the file back as it was. A case correction ("gitlab" to "GitLab") is accepted. If you tick the box provided, unticked by default, the rule also goes into a dedicated section of `corrections.txt`, so the same mistake is fixed automatically in later transcripts.
+Selecting a word or a short phrase offers to **correct it** (button or **Enter**). The window lists every place in the file containing that form, with its context: the selected one is ticked, the others can be ticked one by one or all at once. The app changes the ticked places in the text on screen, the file and the companion; **Undo the change** (or Ctrl+Z) puts the file back exactly as it was. A case correction ("gitlab" to "GitLab") is accepted. If you tick the box provided, unticked by default, the rule also goes into a dedicated section of `corrections.txt`, so the same mistake is fixed automatically in later transcripts.
 
 **Copy for AI** puts an instruction template, the recording metadata and the full transcript on the clipboard. The template is your own file, `gabarit-ia.txt`, created on first use and editable from the settings, with `{texte}`, `{fichier}`, `{date}`, `{duree}`, `{locuteurs}` and `{modele}` replaced at copy time.
 

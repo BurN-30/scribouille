@@ -48,6 +48,38 @@ Plus léger, plus vite ouvert, sans rien changer à la justesse.
   l'annulation retire aussi la règle ou la proposition ajoutée ; le texte de
   la relecture reste celui du fichier, mots corrigés marqués ; plus de
   doublon « Réseaux sociaux sociaux » ni de casse oubliée (« pierre »).
+- **Écran des réunions** : le dépôt, la file et les transcriptions, rien
+  d'autre. Au-dessus, les seuls choix utiles à chaque lancement (qualité,
+  rythme, voix si la séparation est installée) et une seule durée, celle du
+  réglage en service. Le dépôt se réduit à une ligne dès qu'il y a des
+  fichiers ; la file reste visible sans défiler. En cours : phase nommée,
+  pourcentage, temps écoulé, reste et heure de fin, « fichier 2 sur 3 ».
+  Chaque transcription a son bouton **Relire** ; les lignes finies se
+  retirent d'un clic.
+- **Relecture plein cadre** : écoute synchronisée (clic sur un mot, lecture
+  qui suit le texte, vitesses, Espace et flèches), recherche Ctrl+F avec
+  tous les résultats surlignés, points à vérifier de l'un à l'autre (mots
+  douteux, remplacements du vocabulaire, silences, passages longs ; le moteur
+  Intel le dit quand il ne donne pas de mots douteux), correction d'un seul
+  endroit ou de plusieurs cochés dans l'aperçu, renommage des locuteurs,
+  exports (texte du fichier, avec les heures, Markdown). L'heure de chaque
+  paragraphe est affichée, locuteurs séparés ou non. Une réunion de 1 h 45
+  (19 000 mots) s'ouvre en 0,15 s.
+- **Réglages** : un écran rangé en trois familles, usage courant (transcription,
+  fichiers, relecture, application), avancé (moteur et modèles, espace disque),
+  mesures et diagnostic (poste, banc d'essai, comparaison, journal). Le
+  réglage proposé pour le poste n'est dit qu'une fois, dans « Poste ».
+- **Espace disque et effacement complet** : poids par poste, ce qui se libère
+  sans rien perdre, mémoire et processeur pendant l'usage, effacement précédé
+  de la liste exacte et des tailles, transcriptions gardées sauf demande.
+- **Premier lancement** : une fenêtre courte, ce que fait l'application et le
+  réglage proposé en une phrase, avec ce que l'on y perd.
+- **Vocabulaire** : un écran à part, revue par lots au clavier (flèches,
+  Espace, A, R, M).
+- **Accessibilité** : tout au clavier, focus gardé dans les fenêtres, contrastes
+  vérifiés (le vert des messages de succès passe à 4,8:1), cibles de 24 px au
+  moins, disposition étroite qui tient compte du grossissement ; plus aucun
+  accord en « (s) » dans l'interface.
 
 ## 2.4.1
 
