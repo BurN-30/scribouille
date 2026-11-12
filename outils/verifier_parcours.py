@@ -335,9 +335,12 @@ def essai_fichiers_produits(base: Path) -> None:
     verifier(all(p.startswith("[00:") for p in paragraphes)
              and paragraphes[1].startswith("[00:00:21]"),
              "l'horodatage, demandé, marque chaque paragraphe", repr(paragraphes[1][:20]))
-    ligne_source = next(ligne for ligne in entete.splitlines() if ligne.startswith("Source"))
-    verifier(ligne_source.endswith(": reunion equipe.m4a") and str(base) not in entete,
-             "l'en-tête donne le nom de l'enregistrement, pas son chemin", ligne_source)
+    lignes_entete = entete.splitlines()
+    verifier(lignes_entete[1].endswith(": reunion equipe.m4a") and str(base) not in entete,
+             "l'en-tête donne le nom de l'enregistrement, pas son chemin", lignes_entete[1])
+    verifier(len(lignes_entete) <= 7 and not any(m in entete for m in ("Calcul", "Temps de calcul", "int8")),
+             "l'en-tête est court : titre, durée, date (le détail technique est dans le compagnon)",
+             str(len(lignes_entete)))
 
     vue = lecture.charger(txt)
     verifier([p["texte"] for p in vue["paragraphes"]] == [p.split("] ", 1)[1] for p in paragraphes],

@@ -33,10 +33,6 @@ def _horodatage_vtt(secondes: float) -> str:
     return _horodatage_srt(secondes).replace(",", ".")
 
 
-def _nombre_fr(valeur: float, decimales: int = 2) -> str:
-    return langues.nombre(valeur, decimales)
-
-
 def _duree_lisible(secondes: float) -> str:
     secondes = int(secondes or 0)
     heures, reste = divmod(secondes, 3600)
@@ -93,7 +89,11 @@ def base_libre(dossier: Path, base: str, extensions: list[str]) -> str:
 
 def construire_entete(source: Path, details: dict) -> str:
     """
-    En-tête encadré du fichier texte, dans la langue de l'interface.
+    En-tête encadré du fichier texte, dans la langue de l'interface : le nom
+    de l'enregistrement, sa durée, la date, et les voix quand elles ont été
+    séparées. Ce texte part tel quel dans un compte rendu : le détail technique
+    (modèle, calcul, langue, corrections, glossaire, temps de calcul) reste
+    dans le compagnon `.json`.
 
     Les étiquettes sont alignées sur la plus longue de la langue courante, ce
     qui évite d'avoir à recompter les espaces à chaque traduction.
@@ -102,37 +102,12 @@ def construire_entete(source: Path, details: dict) -> str:
     # poste à quiconque recevait la transcription. Le compagnon le garde, pour
     # retrouver l'audio pendant la relecture.
     entrees: list[tuple[str, str]] = [
-        (langues.t("ent.source"), source.name),
         (langues.t("ent.duree"), _duree_lisible(details.get("duree", 0))),
-        (langues.t("ent.modele"), langues.t(
-            "ent.valeur.modele",
-            modele=details.get("modele_lisible", details.get("modele", "?")),
-            preset=details.get("preset_nom") or langues.t("ent.reglages_personnalises"),
-        )),
-        (langues.t("ent.calcul"),
-         f"{details.get('peripherique', 'cpu')} / {details.get('type_calcul', 'int8')}"),
-        (langues.t("ent.langue"), str(details.get("langue", "?"))),
+        (langues.t("ent.transcrit_le"), datetime.now().strftime(langues.t("format.date_heure"))),
     ]
     if details.get("nb_locuteurs"):
         entrees.append((langues.t("ent.locuteurs"),
                         langues.t("ent.valeur.locuteurs", n=details["nb_locuteurs"])))
-    elif details.get("diarisation_demandee"):
-        entrees.append((langues.t("ent.locuteurs"), langues.t(
-            "ent.valeur.non_installee" if details.get("diarisation_absente")
-            else "ent.valeur.non_separes")))
-    if details.get("corrections_appliquees"):
-        entrees.append((langues.t("ent.corrections"), langues.t(
-            "ent.valeur.corrections", n=details["corrections_appliquees"])))
-    if details.get("termes_amorce"):
-        entrees.append((langues.t("ent.glossaire"), langues.t(
-            "ent.valeur.glossaire", n=details["termes_amorce"])))
-    entrees.append((langues.t("ent.transcrit_le"),
-                    datetime.now().strftime(langues.t("format.date_heure"))))
-    entrees.append((langues.t("ent.temps_calcul"), langues.t(
-        "ent.valeur.temps_calcul",
-        duree=_duree_lisible(details.get("temps_calcul", 0)),
-        facteur=_nombre_fr(details.get("facteur_reel", 0)),
-    )))
 
     largeur = max(len(etiquette) for etiquette, _ in entrees)
     lignes = [
@@ -141,11 +116,7 @@ def construire_entete(source: Path, details: dict) -> str:
         "=" * 68,
     ]
     lignes += [f"{etiquette:<{largeur}} : {valeur}" for etiquette, valeur in entrees]
-    lignes += [
-        langues.t("ent.mention_locale"),
-        "=" * 68,
-        "",
-    ]
+    lignes += ["=" * 68, ""]
     return "\n".join(lignes)
 
 

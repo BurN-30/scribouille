@@ -146,6 +146,10 @@ def construire(source: Path, segments, details: dict) -> dict:
         "transcription": {
             "date": datetime.now().isoformat(timespec="seconds"),
             "modele": details.get("modele_lisible", details.get("modele", "")),
+            # Détail technique que l'en-tête du .txt ne porte plus (2.5).
+            "preset": details.get("preset_nom") or "",
+            "calcul": f"{details.get('peripherique', 'cpu')} / {details.get('type_calcul', 'int8')}",
+            "termes_amorce": int(details.get("termes_amorce", 0) or 0),
             "langue": details.get("langue", ""),
             "temps_calcul": round(float(details.get("temps_calcul", 0) or 0), 1),
             "nb_locuteurs": int(details.get("nb_locuteurs", 0) or 0),
