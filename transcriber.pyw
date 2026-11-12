@@ -1711,8 +1711,8 @@ class Passerelle:
                 ignores += ecartes
                 self._sur_journal(
                     "info" if retenus else "attention",
-                    langues.t("app.depot.dossier", nom=cible.name, retenus=len(retenus))
-                    + (langues.t("app.depot.ignores", n=ecartes) if ecartes else "")
+                    langues.tn("app.depot.dossier", len(retenus), nom=cible.name)
+                    + (langues.tn("app.depot.ignores", ecartes) if ecartes else "")
                     + langues.t("app.depot.sous_dossiers"),
                 )
             else:
@@ -1721,14 +1721,26 @@ class Passerelle:
         self._enregistrer_fichiers(fichiers)
 
     def _enregistrer_fichiers(self, liste: list[str]) -> None:
+        # Fichiers qui ne sont pas des enregistrements (un .docx déposé avec des
+        # audios) : ils sont dits à l'écran, pas seulement dans le journal.
+        ignores = [Path(c).name for c in liste
+                   if c and Path(c).is_file() and not audio_module.est_audio(Path(c))]
         ajoutes = self.file.ajouter(liste)
         if not ajoutes:
             doublons = self.file.derniers_doublons
-            self._sur_journal("attention", langues.tn("app.depot.deja", doublons) if doublons
-                              else langues.t("app.depot.aucun"))
+            if ignores:
+                self._sur_journal("attention", langues.tn("app.depot.ignores_noms", len(ignores),
+                                                          noms=", ".join(ignores[:3])))
+            else:
+                self._sur_journal("attention", langues.tn("app.depot.deja", doublons) if doublons
+                                  else langues.t("app.depot.aucun"))
             return
         self._js(f"onFichiersAjoutes({_json(ajoutes)})")
-        self._sur_journal("info", langues.tn("app.ajoutes", len(ajoutes)))
+        if ignores:
+            self._sur_journal("attention", langues.tn("app.ajoutes", len(ajoutes)) + " "
+                              + langues.tn("app.depot.ignores_noms", len(ignores), noms=", ".join(ignores[:3])))
+        else:
+            self._sur_journal("info", langues.tn("app.ajoutes", len(ajoutes)))
         self.file.mesurer_durees(
             lambda identifiant, secondes, texte:
             self._js(f"onDuree({_json(identifiant)}, {secondes}, {_json(texte)})")

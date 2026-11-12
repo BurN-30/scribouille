@@ -1172,6 +1172,15 @@ def essai_heures_et_avis(base: Path) -> None:
              and "ui.rl.sans_heures" in js, "sans heure : ni « 0:00 », ni « Copier avec les heures »")
 
 
+def essai_depot_mele() -> None:
+    titre("Dépôt : un fichier non audio parmi d'autres est dit à l'écran")
+    passerelle = (RACINE / "transcriber.pyw").read_text(encoding="utf-8")
+    verifier("app.depot.ignores_noms" in passerelle and "audio_module.est_audio(Path(c))" in passerelle,
+             "un fichier non audio déposé avec d'autres est nommé à l'écran")
+    verifier(langues.tn("app.depot.ignores_noms", 1, noms="notes.docx").startswith("notes.docx ignoré"),
+             "le message nomme le fichier ignoré")
+
+
 def essai_passage_libre(base: Path) -> None:
     """Réécrire ou supprimer un passage : même règle d'égalité, même annulation."""
     titre("Passage réécrit ou supprimé : l'écran reste le fichier")
@@ -1246,6 +1255,7 @@ def principal() -> int:
         essai_passage_libre(base)
         essai_position_relecture(base)
         essai_heures_et_avis(base)
+        essai_depot_mele()
         essai_accessibilite()
         essai_ecrans()
 
