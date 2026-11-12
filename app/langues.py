@@ -260,6 +260,14 @@ _FR: dict[str, str] = {
     # -- moteur (app/moteur.py) --------------------------------------------
     "moteur.non_charge.titre": "Modèle non chargé",
     "moteur.non_charge.msg": "La transcription a été demandée avant le chargement du modèle.",
+    "moteur.telechargement_refuse": "Le modèle {modele} ({taille}) n'est pas sur ce poste, et le téléchargement n'est pas autorisé (option --telecharger).",
+    "superviseur.plantage": "Le moteur de calcul s'est arrêté brutalement ({cause}). La fenêtre n'est pas touchée.",
+    "superviseur.reprise_auto": "Reprise automatique de {nom} au segment près ({position}).",
+    "superviseur.repli_puce": "La puce graphique est écartée pour la suite : calcul sur le processeur.",
+    "superviseur.echec_definitif": "{nom} : le moteur s'est arrêté deux fois. La transcription reste reprenable.",
+    "superviseur.demarrage_impossible": "Le moteur de calcul n'a pas pu démarrer : {detail}",
+    "superviseur.veille": "Retour de veille : le moteur poursuit.",
+    "superviseur.bloque": "Le moteur ne répond plus depuis {minutes} min : il est arrêté, la transcription reste reprenable.",
     "moteur.premier_usage": (
         "Premier usage de ce modèle : téléchargement d'environ {taille}. Cela n'arrive "
         "qu'une fois, ensuite tout reste sur la machine."
@@ -1702,6 +1710,14 @@ _EN: dict[str, str] = {
 
     "moteur.non_charge.titre": "Model not loaded",
     "moteur.non_charge.msg": "Transcription was requested before the model was loaded.",
+    "moteur.telechargement_refuse": "The {modele} model ({taille}) is not on this computer, and downloading is not allowed (--telecharger option).",
+    "superviseur.plantage": "The computing engine stopped abruptly ({cause}). The window is not affected.",
+    "superviseur.reprise_auto": "Resuming {nom} automatically from the last segment ({position}).",
+    "superviseur.repli_puce": "The graphics chip is set aside from now on: computing on the processor.",
+    "superviseur.echec_definitif": "{nom}: the engine stopped twice. The transcription can still be resumed.",
+    "superviseur.demarrage_impossible": "The computing engine could not start: {detail}",
+    "superviseur.veille": "Back from sleep: the engine carries on.",
+    "superviseur.bloque": "The engine has not answered for {minutes} min: it is stopped, the transcription can be resumed.",
     "moteur.premier_usage": (
         "First use of this model: about {taille} will be downloaded. This happens only "
         "once, after that everything stays on the machine."

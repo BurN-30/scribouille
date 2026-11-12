@@ -966,17 +966,16 @@ def commande_travailleur(options: list[str]) -> tuple[list[str], str]:
     Commande à lancer pour faire le travail dans un processus séparé, et son
     dossier de travail.
 
-    Version installée : l'exécutable lui-même. On préfère « scribouille-verifier.exe »
-    quand il est là : construit avec une console, il a des flux standard francs,
-    là où un exécutable fenêtré n'en a que par la grâce de son parent. Il est
-    lancé sans fenêtre visible.
+    Version installée : l'exécutable lui-même. On préfère l'exécutable console
+    (« scribouille.com », « scribouille-verifier.exe » avant la 2.6) quand il
+    est là : il a des flux standard francs, là où un exécutable fenêtré n'en a
+    que par la grâce de son parent. Il est lancé sans fenêtre visible.
 
     Depuis les sources : l'interpréteur du « .venv », sur ce module.
     """
     if chemins.EST_GELE:
         dossier = Path(sys.executable).resolve().parent
-        console = dossier / "scribouille-verifier.exe"
-        exe = console if console.is_file() else Path(sys.executable)
+        exe = chemins.executable_console() or Path(sys.executable)
         return [str(exe), *options], str(dossier)
     racine = Path(__file__).resolve().parent.parent
     python = _python_du_venv()

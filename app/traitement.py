@@ -14,6 +14,7 @@ part dans le fichier de log.
 from __future__ import annotations
 
 import gc
+import os
 import threading
 import time
 from dataclasses import dataclass, field
@@ -43,6 +44,9 @@ class Element:
     reprise: str = ""
     #: Durée annoncée par l'en-tête du fichier, mesurée à l'ajout (0 : inconnue).
     duree_annoncee: float = 0.0
+    #: Dossier de sortie propre à ce fichier (ligne de commande : « à côté
+    #: de la source ») ; vide : celui des réglages.
+    sortie: str = ""
 
     def en_dict(self) -> dict:
         return {
@@ -66,6 +70,24 @@ class Rappels:
     termine: Callable[[str, dict], None] = lambda i, d: None
     journal_ui: Callable[[str, str], None] = lambda n, t: None
     file_terminee: Callable[[dict], None] = lambda d: None
+    #: Sauvegarde progressive ouverte pour ce fichier : sa clé de reprise. Le
+    #: superviseur du moteur s'en sert pour reprendre au segment près après un
+    #: plantage du processus moteur.
+    reprise: Callable[[str, str], None] = lambda i, c: None
+
+
+def bilan_de_file(compte: dict) -> dict:
+    """Bilan de fin de file, à partir du décompte des statuts de `traiter_element`."""
+    reussis = compte.get("reussi", 0) + compte.get("sans_voix", 0)
+    return {
+        "total": reussis + compte.get("erreur", 0) + compte.get("annule", 0),
+        "reussis": reussis,
+        "echecs": compte.get("erreur", 0),
+        "annules": compte.get("annule", 0),
+        # Transcriptions réussies dont les voix n'ont pas été séparées
+        # alors que c'était demandé.
+        "voix_non_separees": compte.get("sans_voix", 0),
+    }
 
 
 #: Mémoire libre sous laquelle le modèle est rendu entre deux fichiers, plutôt
@@ -109,6 +131,12 @@ def fabriquer_moteur(mat: Materiel, reglages: dict):
     CTranslate2. « Forcer le processeur » (mode avancé) ramène toujours au
     chemin historique, CTranslate2 sur processeur.
     """
+    essai = os.environ.get("SCRIBOUILLE_MOTEUR_ESSAI", "").strip()
+    if essai:
+        # Vérifications seulement : moteur factice, sans modèle (app/moteur_factice.py).
+        from . import moteur_factice
+
+        return moteur_factice.fabriquer(essai, mat)
     if mat.moteur == "openvino" and not reglages.get("forcer_processeur"):
         from . import moteur_openvino
 
@@ -117,8 +145,19 @@ def fabriquer_moteur(mat: Materiel, reglages: dict):
 
 
 class FileTraitement:
-    def __init__(self, mat: Materiel):
+    """
+    La file de la fenêtre et de la ligne de commande.
+
+    Sans `distant`, chaque fichier est calculé dans ce processus (vérifications,
+    et le processus moteur lui-même). Avec un superviseur (`app/superviseur.py`),
+    le calcul part dans le processus moteur : la fenêtre ne charge aucune
+    bibliothèque de calcul, et « Arrêter » arrête ce processus.
+    """
+
+    def __init__(self, mat: Materiel, distant=None):
         self.materiel = mat
+        #: Superviseur du processus moteur, ou None pour calculer ici.
+        self.distant = distant
         self.elements: list[Element] = []
         self._verrou = threading.Lock()
         self._arret = threading.Event()
@@ -235,7 +274,25 @@ class FileTraitement:
                              ("attente", "termine", "erreur", "annule")]
 
     def mesurer_durees(self, rappel: Callable[[str, float, str], None]) -> None:
-        """Mesure les durées en tâche de fond, sans bloquer l'interface."""
+        """
+        Mesure les durées en tâche de fond, sans bloquer l'interface. Avec le
+        processus moteur, c'est lui qui ouvre les fichiers : la fenêtre ne
+        charge pas le décodeur.
+        """
+        if self.distant is not None:
+            a_mesurer = [e for e in list(self.elements) if not e.duree]
+            if not a_mesurer:
+                return
+
+            def recu(identifiant: str, secondes: float, texte: str) -> None:
+                for element in a_mesurer:
+                    if element.identifiant == identifiant:
+                        element.duree = element.duree_annoncee = float(secondes or 0)
+                rappel(identifiant, secondes, texte)
+
+            self.distant.durees([{"id": e.identifiant, "chemin": e.chemin} for e in a_mesurer], recu)
+            return
+
         def travail():
             for element in list(self.elements):
                 if element.duree:
@@ -265,11 +322,73 @@ class FileTraitement:
 
     def arreter(self) -> None:
         self._arret.set()
+        if self.distant is not None:
+            # Arrêt du processus moteur : effectif en moins d'une seconde, même
+            # pendant un chargement ou une compilation pour la puce graphique.
+            self.distant.arreter()
 
     def _interrompu(self) -> bool:
         return self._arret.is_set()
 
     def _boucle(self, config: dict, rappels: Rappels) -> None:
+        if self.distant is not None:
+            self._boucle_distante(config, rappels)
+            return
+        contexte = self.ouvrir_file(config)
+        compte = {"reussi": 0, "erreur": 0, "annule": 0, "sans_voix": 0}
+        try:
+            for element in list(self.elements):
+                if element.etat != "attente":
+                    continue
+                if self._interrompu():
+                    # Arrêter interrompt le fichier en cours ; ceux qui n'ont
+                    # pas commencé restent en attente, prêts pour le prochain
+                    # lancement, au lieu de finir « annulés » sans issue.
+                    break
+                statut = self.traiter_element(element, config, contexte, rappels)
+                compte[statut] += 1
+        finally:
+            self.fermer_file(contexte, rappels)
+            self._en_cours = False
+            rappels.file_terminee(bilan_de_file(compte))
+
+    def _boucle_distante(self, config: dict, rappels: Rappels) -> None:
+        """
+        La même file, calculée dans le processus moteur (`app/superviseur.py`).
+
+        La fenêtre garde la liste et l'ordre ; le moteur reçoit un fichier à la
+        fois et renvoie ses rappels un par un. « Arrêter » arrête le processus :
+        le fichier en cours finit « arrêté », sa reprise intacte sur le disque.
+        """
+        compte = {"reussi": 0, "erreur": 0, "annule": 0, "sans_voix": 0}
+        try:
+            self.distant.ouvrir_file(config, rappels)
+            for element in list(self.elements):
+                if element.etat != "attente":
+                    continue
+                if self._interrompu():
+                    break
+                statut = self.distant.traiter(element, rappels, self._interrompu)
+                compte[statut] += 1
+        except Exception as exc:
+            incident = journal.formater_incident(exc, "moteur")
+            rappels.journal_ui("erreur", incident["titre"])
+        finally:
+            try:
+                self.distant.fermer_file(rappels)
+            except Exception as exc:  # pragma: no cover - le moteur est déjà parti
+                journal.debug("Fermeture de la file du moteur : %s", exc)
+            self._en_cours = False
+            rappels.file_terminee(bilan_de_file(compte))
+
+    # -- les trois temps d'une file, communs à la fenêtre et au moteur -------
+
+    def ouvrir_file(self, config: dict) -> dict:
+        """
+        Prépare une file : réglages effectifs, rythme, moteur de calcul, veille.
+        Le modèle, lui, se charge au premier fichier. Renvoie le contexte que
+        `traiter_element` et `fermer_file` reçoivent.
+        """
         reglages = config_module.reglages_effectifs(config)
         # Réglage mesuré sur ce poste par le banc d'essai, s'il a été accepté :
         # moteur, périphérique, fils. Relu à chaque file, il suit les boutons
@@ -293,6 +412,7 @@ class FileTraitement:
                 reglages["beam_size"] = reglages["best_of"] = faisceau
         # Rythme « je travaille en même temps » (voir app/rythme.py). En vitesse
         # maximale sans adaptation, la file se comporte exactement comme avant.
+        # Il s'applique au processus qui calcule : le moteur, jamais la fenêtre.
         choisi = rythme.normaliser(config.get("rythme"))
         regulateur = rythme.Regulateur(
             self.materiel, choisi, bool(config.get("rythme_auto")),
@@ -317,73 +437,70 @@ class FileTraitement:
                          choisi, " (adaptation automatique)" if regulateur.auto else "",
                          charge.fils, reglages["lot"], charge.priorite, charge.qos)
 
-        reussis, echoues, annules, sans_voix = 0, 0, 0, 0
         # Une transcription d'une heure et demie ne doit pas s'arrêter parce que
         # le portable se met en veille faute d'activité (le capot fermé, lui,
-        # garde son effet : c'est un geste explicite).
+        # garde son effet : c'est un geste explicite). Demande propre au fil qui
+        # calcule : `fermer_file` doit être appelée depuis le même fil.
         sans_veille = energie.sans_veille()
         sans_veille.__enter__()
         regulateur.demarrer(self._interrompu)
+        return {"reglages": reglages, "instance": instance, "regulateur": regulateur,
+                "choisi": choisi, "sans_veille": sans_veille}
+
+    def traiter_element(self, element: Element, config: dict, contexte: dict, rappels: Rappels) -> str:
+        """
+        Un fichier de la file, erreurs comprises. Renvoie « reussi »,
+        « sans_voix » (réussi, voix demandées mais non séparées), « annule »
+        ou « erreur ».
+        """
+        instance = contexte["instance"]
+        if element.sortie:
+            config = {**config, "dossier_sortie": element.sortie}
+        echec = True
+        statut = "erreur"
         try:
-            for element in list(self.elements):
-                if element.etat != "attente":
-                    continue
-                if self._interrompu():
-                    # Arrêter interrompt le fichier en cours ; ceux qui n'ont
-                    # pas commencé restent en attente, prêts pour le prochain
-                    # lancement, au lieu de finir « annulés » sans issue.
-                    break
-                echec = True
-                try:
-                    if self._traiter(element, config, reglages, instance, rappels):
-                        sans_voix += 1
-                    reussis += 1
-                    echec = False
-                except moteur.Interruption:
-                    element.etat = "annule"
-                    annules += 1
-                    rappels.etat(element.identifiant, "annule", langues.t("etat.arrete"))
-                    rappels.termine(element.identifiant, {"ok": False, "annule": True})
-                except Exception as exc:
-                    echoues += 1
-                    element.etat = "erreur"
-                    incident = journal.formater_incident(exc, element.nom)
-                    rappels.etat(element.identifiant, "erreur", incident["titre"])
-                    rappels.journal_ui("erreur", f"{element.nom} : {incident['titre']}")
-                    rappels.termine(element.identifiant, {"ok": False, **incident})
-                finally:
-                    # Un fichier interrompu garde sa reprise, seul un succès
-                    # l'efface : c'est tout l'intérêt de la sauvegarde.
-                    self._session.fermer()
-                    # Même réglage pour toute la file : le modèle est gardé pour
-                    # le fichier suivant (4 à 40 s de chargement épargnées),
-                    # sauf séparation des voix, échec ou mémoire basse.
-                    garder, raison = garder_le_modele(config, echec)
-                    if not garder:
-                        journal.info("Modèle rendu entre deux fichiers : %s", raison)
-                        instance.liberer()
-                    gc.collect()
+            sans_voix = self._traiter(element, config, contexte["reglages"], instance, rappels)
+            statut = "sans_voix" if sans_voix else "reussi"
+            echec = False
+        except moteur.Interruption:
+            element.etat = "annule"
+            statut = "annule"
+            rappels.etat(element.identifiant, "annule", langues.t("etat.arrete"))
+            rappels.termine(element.identifiant, {"ok": False, "annule": True})
+        except Exception as exc:
+            element.etat = "erreur"
+            incident = journal.formater_incident(exc, element.nom)
+            rappels.etat(element.identifiant, "erreur", incident["titre"])
+            rappels.journal_ui("erreur", f"{element.nom} : {incident['titre']}")
+            rappels.termine(element.identifiant, {"ok": False, **incident})
         finally:
-            instance.liberer()
+            # Un fichier interrompu garde sa reprise, seul un succès
+            # l'efface : c'est tout l'intérêt de la sauvegarde.
+            self._session.fermer()
+            # Même réglage pour toute la file : le modèle est gardé pour
+            # le fichier suivant (4 à 40 s de chargement épargnées),
+            # sauf séparation des voix, échec ou mémoire basse.
+            garder, raison = garder_le_modele(config, echec)
+            if not garder:
+                journal.info("Modèle rendu entre deux fichiers : %s", raison)
+                instance.liberer()
             gc.collect()
-            bilan_rythme = regulateur.arreter()
-            sans_veille.__exit__(None, None, None)
-            if regulateur.auto and bilan_rythme["bascules"]:
-                durees = bilan_rythme["durees"]
-                rappels.journal_ui("info", langues.t(
-                    "rythme.bilan", rapide=presets.formater_duree(durees.get("vitesse", 0)),
-                    discret=presets.formater_duree(sum(v for k, v in durees.items() if k != "vitesse")),
-                    rythme=langues.t(f"rythme.nom.{choisi}")))
-            self._en_cours = False
-            rappels.file_terminee({
-                "total": reussis + echoues + annules,
-                "reussis": reussis,
-                "echecs": echoues,
-                "annules": annules,
-                # Transcriptions réussies dont les voix n'ont pas été séparées
-                # alors que c'était demandé.
-                "voix_non_separees": sans_voix,
-            })
+        return statut
+
+    def fermer_file(self, contexte: dict, rappels: Rappels) -> dict:
+        """Fin de file : modèle rendu, rythme et veille rendus au système."""
+        contexte["instance"].liberer()
+        gc.collect()
+        regulateur = contexte["regulateur"]
+        bilan_rythme = regulateur.arreter()
+        contexte["sans_veille"].__exit__(None, None, None)
+        if regulateur.auto and bilan_rythme["bascules"]:
+            durees = bilan_rythme["durees"]
+            rappels.journal_ui("info", langues.t(
+                "rythme.bilan", rapide=presets.formater_duree(durees.get("vitesse", 0)),
+                discret=presets.formater_duree(sum(v for k, v in durees.items() if k != "vitesse")),
+                rythme=langues.t(f"rythme.nom.{contexte['choisi']}")))
+        return bilan_rythme
 
     # -- traitement d'un fichier -------------------------------------------
 
@@ -486,6 +603,8 @@ class FileTraitement:
                 position=decalage, nb_segments=len(deja_transcrits),
                 ecoule=ecoule_anterieur,
             )
+            if session.active:
+                getattr(rappels, "reprise", lambda i, c: None)(element.identifiant, identifiant)
         elif element.reprise:
             # Reprise demandée mais sauvegarde coupée depuis : le travail déjà
             # fait est réutilisé, simplement plus rien de nouveau n'est protégé.

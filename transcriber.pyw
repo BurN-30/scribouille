@@ -1,7 +1,10 @@
 """
 Scribouille : point d'entrée.
 
-Fenêtre pywebview, interface web dans `web/`, moteur faster-whisper.
+Fenêtre pywebview, interface web dans `web/`. Le calcul (décodage,
+faster-whisper, OpenVINO, séparation des locuteurs) tourne dans un processus
+moteur à part, supervisé (`app/superviseur.py`, `app/moteur_processus.py`) :
+la fenêtre ne charge aucune bibliothèque de calcul.
 Tout se passe sur la machine : aucun envoi vers un service en ligne.
 
 Lancement : double-clic sur ce fichier, ou « lancer.bat ».
@@ -75,6 +78,13 @@ extensions.activer()
 # dans le même fichier de journal que la fenêtre qui les a lancés.
 if extensions.options_reconnues(sys.argv[1:]):
     sys.exit(extensions.principal_cli(sys.argv[1:]))
+
+# Processus moteur (voir app/moteur_processus.py), lancé par la fenêtre ou par
+# la ligne de commande, jamais à la main : il lit ses ordres sur l'entrée standard.
+if "--moteur" in sys.argv[1:]:
+    from app import moteur_processus as _moteur_processus
+
+    sys.exit(_moteur_processus.principal(sys.argv[1:]))
 
 # Retour arrière du dossier de données vers « WhiScribe », pour une ancienne
 # version (voir app/migration.py) : « scribouille-verifier.exe --revenir-whiscribe ».
@@ -370,6 +380,7 @@ from app import config as config_module  # noqa: E402
 from app import barre_taches, diarisation, donnees, ecoute, gabarit, lecture, maj  # noqa: E402
 from app import banc, materiel, nommage, presets, reglage_machine, reprise, rythme, stockage  # noqa: E402
 from app import surveillance, traitement, vocabulaire, vocabulaire_interface  # noqa: E402
+from app import processus, superviseur  # noqa: E402
 
 _SANS_FENETRE = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
@@ -379,7 +390,25 @@ def _json(valeur) -> str:
 
 
 class Passerelle:
-    """Objet exposé à l'interface web sous le nom `pywebview.api`."""
+    """
+    Objet exposé à l'interface web sous le nom `pywebview.api`.
+
+    Fonctions du contrat de la version 2.6 (l'écran du moteur se construit
+    contre ces noms ; formes stables, clés ajoutées sans changer les anciennes) :
+
+    moteur_etat() -> {etat, pid, modele, peripherique, sur_puce,
+        memoire_octets, prive_octets, depuis, file_ouverte, protocole,
+        derniere_panne}
+        etat : repos | demarrage | chargement | transcription | arrete | panne.
+        derniere_panne : {code, date, etat, peripherique, sur_puce} ou null.
+
+    usage_instantane() -> {fenetre: {pid, memoire_octets, prive_octets,
+        processeur_pct, processeur_poste_pct}, moteur: même forme ou null,
+        affichage: {processus, memoire_octets}, total_memoire_octets}
+        processeur_pct : part d'un cœur depuis l'appel précédent (null au
+        premier appel) ; processeur_poste_pct : part du poste entier.
+        « affichage » : les processus WebView2 de la fenêtre.
+    """
 
     def __init__(self):
         self._fenetre = None
@@ -387,11 +416,6 @@ class Passerelle:
         #: alors un réglage pour ce poste (voir `app/adaptation.py`).
         self._premier_lancement = not chemins.FICHIER_CONFIG.exists()
         self.config = config_module.charger()
-        # Rythme équilibré ou discret : les fils de CTranslate2 attendent sans
-        # tourner à vide (OpenMP lit cette variable une fois, au premier calcul,
-        # d'où sa place ici, avant tout chargement ; voir app/rythme.py).
-        if rythme.normaliser(self.config.get("rythme")) != "vitesse":
-            os.environ.setdefault("OMP_WAIT_POLICY", "PASSIVE")
         self._proposition: dict = {}
         #: Serveur local de l'audio pour la relecture (voir app/ecoute.py) :
         #: un seul fichier servi à la fois, démarré au premier besoin.
@@ -407,7 +431,12 @@ class Passerelle:
         self.materiel, self._materiel_provisoire = materiel.detecter_au_demarrage()
         # Réglage de vitesse mesuré par le banc d'essai et accepté sur ce poste.
         self._effet_reglage = reglage_machine.appliquer_au_materiel(self.config, self.materiel)
-        self.file = traitement.FileTraitement(self.materiel)
+        #: Processus moteur : lancé à la première file (ou pour mesurer des
+        #: durées), arrêté à la fin de la file. La fenêtre ne calcule jamais.
+        self.moteur = superviseur.Superviseur()
+        self.file = traitement.FileTraitement(self.materiel, distant=self.moteur)
+        #: Mesure de la mémoire et du processeur de la fenêtre (`usage_instantane`).
+        self._sonde_fenetre = processus.Sonde()
         self._rappels = traitement.Rappels(
             etat=self._sur_etat,
             progression=self._sur_progression,
@@ -914,6 +943,32 @@ class Passerelle:
             self._js(f"onStockage({_json(mesure)})")
 
         self._fond(travail)
+
+    # -- moteur et usage (contrat 2.6) ------------------------------------
+
+    def moteur_etat(self) -> dict:
+        return self.moteur.etat_public()
+
+    def usage_instantane(self) -> dict:
+        fenetre = self._sonde_fenetre.releve()
+        moteur_releve = self.moteur.usage()
+        affichage = {"processus": 0, "memoire_octets": 0}
+        try:
+            import psutil  # type: ignore
+
+            pid_moteur = self.moteur.pid
+            for enfant in psutil.Process().children(recursive=True):
+                if pid_moteur and enfant.pid == pid_moteur:
+                    continue
+                if "webview" in (enfant.name() or "").lower():
+                    affichage["processus"] += 1
+                    affichage["memoire_octets"] += int(enfant.memory_info().rss)
+        except Exception:
+            pass
+        total = sum(int((r or {}).get("memoire_octets") or 0) for r in (fenetre, moteur_releve))
+        total += affichage["memoire_octets"]
+        return {"fenetre": fenetre, "moteur": moteur_releve, "affichage": affichage,
+                "total_memoire_octets": total}
 
     # -- nom des fichiers produits -----------------------------------------
 
@@ -2226,6 +2281,9 @@ def principal() -> None:
     fenetre.events.shown += passerelle.fenetre_affichee
     fenetre.events.loaded += lambda: _au_demarrage(passerelle, fenetre)
     fenetre.events.closing += lambda: _avant_fermeture(passerelle, fenetre)
+    # Le moteur s'arrête avec la fenêtre ; s'il restait quoi que ce soit,
+    # l'objet de travail Windows le tuerait à la fin de ce processus.
+    fenetre.events.closed += passerelle.moteur.arreter
 
     try:
         webview.start(debug=bool(os.environ.get("TRANSCRIPTEUR_DEBUG")))

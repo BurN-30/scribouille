@@ -293,8 +293,7 @@ def commande_essai(parametres: dict) -> tuple[list[str], str]:
     charge = json.dumps(parametres, ensure_ascii=False)
     if chemins.EST_GELE:
         dossier = Path(sys.executable).resolve().parent
-        console = dossier / "scribouille-verifier.exe"
-        exe = console if console.is_file() else Path(sys.executable)
+        exe = chemins.executable_console() or Path(sys.executable)
         return [str(exe), "--banc-essai", charge], str(dossier)
     racine = Path(__file__).resolve().parent.parent
     python = racine / ".venv" / "Scripts" / "python.exe"
