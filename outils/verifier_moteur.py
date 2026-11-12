@@ -668,7 +668,10 @@ def essai_inventaire() -> None:
     racine = base / "Scribouille"
     ancien = base / "WhiScribe"
     sortie = base / "Transcriptions"
-    anciens = (chemins.RACINE, chemins.DOSSIER_MODELES, os.environ.get("LOCALAPPDATA"))
+    anciens = (chemins.RACINE, chemins.DOSSIER_MODELES, os.environ.get("LOCALAPPDATA"), chemins.DONNEES_IMPOSEES)
+    # Comme une installation habituelle : dossier de données non imposé, donc
+    # l'ancien dossier WhiScribe est le sien.
+    chemins.DONNEES_IMPOSEES = False
     chemins.RACINE = racine
     chemins.DOSSIER_MODELES = racine / "modeles"
     os.environ["LOCALAPPDATA"] = str(base)
@@ -682,6 +685,8 @@ def essai_inventaire() -> None:
         _ecrire(racine / "reprises" / "k.jsonl", 400)
         _ecrire(racine / "campagnes" / "rapport.txt", 500)
         _ecrire(racine / "webview" / "EBWebView" / "x", 800)
+        _ecrire(racine / "historique-relecture" / "abc" / "0001.json.gz", 600)
+        _ecrire(racine / "relecture-positions.json", texte="{}")
         _ecrire(racine / "inconnu-d-un-autre.txt", 123)
         m = racine / "modeles"
         _ecrire(m / "models--Systran--faster-whisper-large-v3" / "blobs" / "poids", 300_000)
@@ -701,7 +706,7 @@ def essai_inventaire() -> None:
         inv = inventaire.inventaire(config)
         par_cle = {p["cle"]: p for p in inv["postes"]}
         verifier({"cache_openvino", "cache_pip", "openvino", "journaux", "reprises", "mesures", "vocabulaire",
-                  "reglages", "affichage", "ancien_dossier", "modele:Systran/faster-whisper-large-v3",
+                  "reglages", "affichage", "relecture", "ancien_dossier", "modele:Systran/faster-whisper-large-v3",
                   "modele:OpenVINO/whisper-large-v3-turbo-int8-ov", "modele:convertis/distil-fr-ov"} <= set(par_cle),
                  "inventaire : un poste par usage et par modèle", str(sorted(par_cle)))
         verifier(par_cle["cache_openvino"]["octets"] == 50_000 and par_cle["cache_openvino"]["liberable"],
@@ -711,6 +716,14 @@ def essai_inventaire() -> None:
                  "modèle du réglage en cours non libérable, modèle inutilisé libérable")
         verifier(par_cle["ancien_dossier"]["chemins"] == [str(ancien / "config.json")],
                  "ancien dossier : seulement ce qui est à nous")
+        verifier(sorted(par_cle["relecture"]["chemins"]) == sorted([str(racine / "historique-relecture"),
+                                                                     str(racine / "relecture-positions.json")])
+                 and not par_cle["relecture"]["liberable"],
+                 "historique et positions de relecture : un poste, non libérable", str(par_cle["relecture"]))
+        chemins.DONNEES_IMPOSEES = True
+        verifier("ancien_dossier" not in {p["cle"] for p in inventaire.inventaire(config)["postes"]},
+                 "dossier de données imposé : l'ancien dossier du poste n'est ni compté ni effaçable")
+        chemins.DONNEES_IMPOSEES = False
         verifier(inv["transcriptions_octets"] > 0 and inv["transcriptions"]["nombre"] == 2
                  and inv["total_octets"] == sum(p["octets"] for p in inv["postes"]),
                  "transcriptions comptées à part (2 fichiers), hors du total", str(inv["transcriptions"]))
@@ -768,6 +781,7 @@ def essai_inventaire() -> None:
     finally:
         chemins.RACINE, chemins.DOSSIER_MODELES = anciens[0], anciens[1]
         os.environ["LOCALAPPDATA"] = anciens[2] or ""
+        chemins.DONNEES_IMPOSEES = anciens[3]
 
     # Ligne de commande : jamais sans confirmation.
     code, lignes, _ = cli("effacer", "--complet", "--json")

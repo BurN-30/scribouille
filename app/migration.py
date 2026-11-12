@@ -47,6 +47,8 @@ FICHIERS = (
     "config.json", "vocabulaire.txt", "corrections.txt", "jeton_hf.txt", "gabarit-ia.txt",
     NOM_CHOIX_MODELES, "calibration.json", "maj-etat.json", "surveillance-vus.json",
     "vocabulaire.toml", "materiel.json", "openvino-chargement-en-cours.txt",
+    # Positions de lecture de la relecture, depuis la 2.5.
+    "relecture-positions.json",
 )
 #: Fichiers datés ou dérivés, reconnus à leur nom.
 MOTIFS = (
@@ -57,8 +59,9 @@ MOTIFS = (
 DOSSIERS = (
     "logs", "modeles", "reprises", "extensions", "cache-pip", "extensions-openvino", "cache-openvino",
     "paquets-hors-ligne", "rapports-banc", "comparaisons", "campagnes", "corpus-campagne",
-    # Profil du composant d'affichage (WebView2), depuis la 2.6.
-    "webview",
+    # Profil du composant d'affichage (WebView2) et pile d'annulation de la
+    # relecture, depuis la 2.5.
+    "webview", "historique-relecture",
 )
 
 

@@ -56,7 +56,7 @@ EST_GELE = bool(getattr(sys, "frozen", False))
 
 #: Exécutable console de la version gelée : la ligne de commande, le moteur et
 #: les travailleurs de fond. Windows le préfère à « Scribouille.exe » quand on
-#: tape « scribouille » (le .com passe avant le .exe). Avant la 2.6, il
+#: tape « scribouille » (le .com passe avant le .exe). Avant la 2.5, il
 #: s'appelait « scribouille-verifier.exe » : ce nom est encore cherché.
 NOM_EXE_CONSOLE = "scribouille.com"
 ANCIEN_EXE_CONSOLE = "scribouille-verifier.exe"
@@ -107,6 +107,10 @@ def _dossier_donnees() -> Path:
             MIGRATION.update({"etat": "erreur", "erreur": f"{type(exc).__name__}: {exc}"[:300]})
     return nouveau
 
+
+#: Dossier de données imposé par SCRIBOUILLE_DONNEES (mesures, essais d'une
+#: autre version) : ni reprise de l'ancien dossier, ni effacement de celui-ci.
+DONNEES_IMPOSEES = bool(os.environ.get("SCRIBOUILLE_DONNEES", "").strip())
 
 DOSSIER_RESSOURCES = _dossier_ressources()
 DOSSIER_PROGRAMME = _dossier_programme()

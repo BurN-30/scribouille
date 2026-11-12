@@ -509,6 +509,9 @@ def essai_migration(base: Path) -> None:
     verifier(migration.est_a_nous("vocabulaire-propositions-20261112-1000.toml", False)
              and not migration.est_a_nous("models", True) and not migration.est_a_nous("settings.json", False),
              "inventaire : seuls les noms de Scribouille sont reconnus")
+    verifier(migration.est_a_nous("historique-relecture", True) and migration.est_a_nous("relecture-positions.json", False)
+             and migration.est_a_nous("webview", True),
+             "relecture (historique, positions) et profil d'affichage reconnus et migrés")
 
 
 def principal() -> int:

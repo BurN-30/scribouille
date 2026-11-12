@@ -25,6 +25,7 @@ Postes (clé : contenu) :
     reprises             transcriptions interrompues, reprenables
     mesures              banc d'essai, comparaisons, campagnes, corpus, durées apprises
     vocabulaire          glossaire, corrections, vocabulaire personnel et propositions
+    relecture            historique des corrections (annulations, originaux) et positions de lecture
     reglages             réglages et petits fichiers d'état
     sauvegardes          sauvegardes avant import, doublons de l'ancien dossier
     ancien_dossier       ce qui reste de Scribouille dans %LOCALAPPDATA%\\WhiScribe
@@ -76,6 +77,9 @@ _GROUPES = {
     "cache_pip": ("cache-pip",),
     "paquets_hors_ligne": ("paquets-hors-ligne",),
     "affichage": ("webview",),
+    # Pile d'annulation de la relecture (avec l'original de chaque texte
+    # corrigé) et dernière position de lecture par transcription.
+    "relecture": ("historique-relecture", "relecture-positions.json", "relecture-positions.json.scribouille-tmp"),
 }
 
 #: Postes libérables sans rien perdre : refaits ou retéléchargés au besoin.
@@ -83,7 +87,7 @@ LIBERABLES = {"cache_openvino", "cache_pip", "affichage", "journaux"}
 
 #: Ordre d'affichage.
 ORDRE = ("programme", "modele", "openvino", "locuteurs", "cache_openvino", "cache_pip", "paquets_hors_ligne",
-         "affichage", "journaux", "reprises", "mesures", "vocabulaire", "reglages", "sauvegardes",
+         "affichage", "journaux", "reprises", "mesures", "vocabulaire", "relecture", "reglages", "sauvegardes",
          "ancien_dossier", "installation")
 
 
@@ -205,6 +209,10 @@ def _dans(chemin: Path, parent: Path) -> bool:
 
 
 def _ancien_dossier() -> Path | None:
+    # Dossier de données imposé (SCRIBOUILLE_DONNEES) : il n'a rien repris de
+    # l'ancien dossier, qui appartient à l'installation habituelle du poste.
+    if chemins.DONNEES_IMPOSEES:
+        return None
     base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
     if not base:
         return None
@@ -417,9 +425,14 @@ def _est_transcription(fichier: Path, compagnon) -> bool:
         if fichier.suffix.lower() == ".txt":
             with fichier.open(encoding="utf-8", errors="replace") as flux:
                 tete = "".join(flux.readline() for _ in range(25))
-            return tete.startswith("=" * 68) and any(
-                langues.t("ent.mention_locale") in tete or m in tete
-                for m in ("Produit localement", "Produced locally"))
+            if not tete.startswith("=" * 68):
+                return False
+            # En-tête court (2.5) : titre « Transcription : » ; avant, la
+            # mention « Produit localement » fermait un en-tête de dix lignes.
+            lignes = tete.splitlines()
+            titre = lignes[1] if len(lignes) > 1 else ""
+            return titre.startswith(("Transcription : ", "Transcript: ")) or any(
+                m in tete for m in ("Produit localement", "Produced locally"))
     except (OSError, ValueError):
         return False
     return False

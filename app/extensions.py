@@ -967,7 +967,7 @@ def commande_travailleur(options: list[str]) -> tuple[list[str], str]:
     dossier de travail.
 
     Version installée : l'exécutable lui-même. On préfère l'exécutable console
-    (« scribouille.com », « scribouille-verifier.exe » avant la 2.6) quand il
+    (« scribouille.com », « scribouille-verifier.exe » avant la 2.5) quand il
     est là : il a des flux standard francs, là où un exécutable fenêtré n'en a
     que par la grâce de son parent. Il est lancé sans fenêtre visible.
 

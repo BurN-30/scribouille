@@ -141,7 +141,7 @@ Les outils de mesure, sous un même toit ; leurs options sont celles d'origine (
 | `scribouille materiel [detecter]` | `--detecter-materiel` |
 | `scribouille materiel proposer [--appliquer]` | `--reconnaitre [--appliquer]` |
 | `scribouille donnees revenir-whiscribe` | `--revenir-whiscribe` |
-| `scribouille verifier` | `--verifier` (et `scribouille-verifier.exe` seul, avant la 2.6) |
+| `scribouille verifier` | `--verifier` (et `scribouille-verifier.exe` seul, avant la 2.5) |
 
 ## Sortie JSON
 

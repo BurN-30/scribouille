@@ -410,7 +410,7 @@ class Passerelle:
     """
     Objet exposé à l'interface web sous le nom `pywebview.api`.
 
-    Fonctions du contrat de la version 2.6 (l'écran de l'espace disque et celui
+    Fonctions du contrat de la version 2.5 (l'écran de l'espace disque et celui
     du moteur se construisent contre ces noms ; formes stables, clés ajoutées
     sans changer les anciennes) :
 
@@ -989,7 +989,7 @@ class Passerelle:
 
         self._fond(travail)
 
-    # -- espace disque, effacement, moteur, usage (contrat 2.6) -------------
+    # -- espace disque, effacement, moteur, usage (contrat 2.5) -------------
 
     def espace_inventaire(self) -> dict:
         try:
