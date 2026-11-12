@@ -76,6 +76,13 @@ extensions.activer()
 if extensions.options_reconnues(sys.argv[1:]):
     sys.exit(extensions.principal_cli(sys.argv[1:]))
 
+# Retour arrière du dossier de données vers « WhiScribe », pour une ancienne
+# version (voir app/migration.py) : « scribouille-verifier.exe --revenir-whiscribe ».
+if "--revenir-whiscribe" in sys.argv[1:]:
+    from app import migration as _migration
+
+    sys.exit(_migration.principal_cli())
+
 # Détection lente du matériel (cartes, NPU, CUDA, périphériques d'OpenVINO),
 # lancée par la fenêtre après son affichage : résultat dans « materiel.json ».
 if "--detecter-materiel" in sys.argv[1:]:
@@ -157,6 +164,13 @@ if "--mesurer-vocabulaire" in sys.argv[1:]:
 journal.demarrer()
 journal.purger()
 journal.silence_bibliotheques()
+if chemins.MIGRATION.get("etat") not in (None, "rien"):
+    _m = chemins.MIGRATION
+    journal.info("Données reprises de %s : %s entrée(s) déplacée(s), %s doublon(s) rangé(s) à part, état %s%s",
+                 chemins.NOM_DOSSIER_ANCIEN, len(_m.get("deplaces") or []), len(_m.get("conflits") or []),
+                 _m.get("etat"), (" : " + "; ".join(_m.get("restes") or [])) if _m.get("restes") else "")
+    if _m.get("erreur"):
+        journal.attention("Reprise des données de %s en échec : %s", chemins.NOM_DOSSIER_ANCIEN, _m["erreur"])
 
 
 # ---------------------------------------------------------------------------

@@ -432,6 +432,85 @@ def essai_repetitions() -> None:
         mo.decouper, moteur.etat_modele, moteur.MoteurTranscription = decouper, etat_modele, transcription
 
 
+# ---------------------------------------------------------------------------
+# 6. Dossier de données : de « WhiScribe » à « Scribouille »
+# ---------------------------------------------------------------------------
+
+def essai_migration(base: Path) -> None:
+    titre("6. Dossier de données : WhiScribe repris dans Scribouille, rien de perdu")
+    import json
+    import os
+
+    from app import migration
+
+    racine = base / "localappdata"
+    ancien, nouveau, programme = racine / "WhiScribe", racine / "Scribouille", base / "programme"
+    for dossier in (ancien / "modeles" / "models--Systran--faster-whisper-large-v3" / "blobs",
+                    ancien / "logs", ancien / "extensions-openvino" / "openvino", ancien / "models", programme):
+        dossier.mkdir(parents=True, exist_ok=True)
+    poids = ancien / "modeles" / "models--Systran--faster-whisper-large-v3" / "blobs" / "model.bin"
+    poids.write_bytes(b"\1" * 4096)
+    (ancien / "config.json").write_text('{"preset": "qualite"}', encoding="utf-8")
+    (ancien / "vocabulaire.toml").write_text('format = "scribouille-vocabulaire"\n', encoding="utf-8")
+    (ancien / "corrections-format1-sauvegarde.txt").write_text("a => b\n", encoding="utf-8")
+    (ancien / "logs" / "2026-11-01.log").write_text("journal", encoding="utf-8")
+    (ancien / "dossier-modeles.txt").write_text(str(ancien / "modeles") + "\n", encoding="utf-8")
+    (programme / "emplacement-modeles.txt").write_text(str(ancien / "modeles") + "\n", encoding="utf-8")
+    # Ce qui n'est pas à nous : le « models » du projet homonyme, un fichier inconnu.
+    (ancien / "models" / "ggml-large-v3-turbo.bin").write_bytes(b"\2" * 1024)
+    (ancien / "reglages-tiers.ini").write_text("x=1", encoding="utf-8")
+    inode = os.stat(poids).st_ino
+
+    # Une entrée verrouillée (fichier ouvert ailleurs) : la migration s'arrête
+    # là pour elle, et reprend au lancement suivant.
+    verrou = open(ancien / "logs" / "2026-11-01.log", "rb")  # noqa: SIM115
+    try:
+        premier = migration.migrer(ancien, nouveau, programme)
+    finally:
+        verrou.close()
+    reprise = migration.migrer(ancien, nouveau, programme)
+    verifier(sys.platform != "win32" or (premier["etat"] == "en_cours" and premier["restes"]),
+             "entrée verrouillée : migration laissée en cours, rien de perdu", str(premier.get("restes")))
+    verifier(reprise["etat"] == "terminee" and (nouveau / "logs" / "2026-11-01.log").is_file(),
+             "lancement suivant : la migration reprend et se termine", str(reprise.get("restes")))
+    deplace = nouveau / "modeles" / "models--Systran--faster-whisper-large-v3" / "blobs" / "model.bin"
+    verifier(deplace.is_file() and os.stat(deplace).st_ino == inode,
+             "modèles déplacés par renommage, sans copie (même fichier sur le disque) : rien à retélécharger")
+    verifier(all((nouveau / n).is_file() for n in ("config.json", "vocabulaire.toml",
+                                                    "corrections-format1-sauvegarde.txt"))
+             and (nouveau / "extensions-openvino" / "openvino").is_dir(),
+             "réglages, vocabulaire, sauvegardes et moteur Intel repris")
+    verifier((ancien / "models" / "ggml-large-v3-turbo.bin").is_file() and (ancien / "reglages-tiers.ini").is_file()
+             and not (nouveau / "models").exists() and sorted(os.listdir(ancien)) == ["models", "reglages-tiers.ini"],
+             "ce qui n'est pas à Scribouille reste dans l'ancien dossier, intact")
+    verifier((nouveau / "dossier-modeles.txt").read_text(encoding="utf-8").strip() == str(nouveau / "modeles")
+             and (programme / "emplacement-modeles.txt").read_text(encoding="utf-8").strip() == str(nouveau / "modeles"),
+             "emplacements des modèles notés dans l'ancien dossier : réécrits vers le nouveau")
+    journal = json.loads((nouveau / migration.NOM_JOURNAL).read_text(encoding="utf-8"))
+    verifier(journal["etat"] == "terminee" and "modeles" in journal["deplaces"] and len(journal["reecrits"]) == 2,
+             "journal de la migration tenu")
+    verifier(migration.migrer(ancien, nouveau, programme)["etat"] == "rien", "relancée : rien à refaire")
+
+    # Doublon : une entrée déjà présente des deux côtés n'écrase rien.
+    (ancien / "calibration.json").write_text("ancien", encoding="utf-8")
+    (nouveau / "calibration.json").write_text("nouveau", encoding="utf-8")
+    migration.migrer(ancien, nouveau, programme)
+    verifier((nouveau / "calibration.json").read_text(encoding="utf-8") == "nouveau"
+             and (nouveau / migration.NOM_CONFLITS / "calibration.json").read_text(encoding="utf-8") == "ancien",
+             "doublon : le nouveau gardé, l'ancien rangé à part, aucun des deux perdu")
+
+    # Retour arrière, pour une ancienne version.
+    bilan = migration.revenir(ancien, nouveau, programme)
+    verifier(not bilan["restes"] and (ancien / "config.json").is_file() and (ancien / "modeles").is_dir()
+             and (ancien / "dossier-modeles.txt").read_text(encoding="utf-8").strip() == str(ancien / "modeles")
+             and (programme / "emplacement-modeles.txt").read_text(encoding="utf-8").strip() == str(ancien / "modeles")
+             and (ancien / "models" / "ggml-large-v3-turbo.bin").is_file(),
+             "retour arrière : tout revient dans WhiScribe, emplacements des modèles d'origine", str(bilan))
+    verifier(migration.est_a_nous("vocabulaire-propositions-20261112-1000.toml", False)
+             and not migration.est_a_nous("models", True) and not migration.est_a_nous("settings.json", False),
+             "inventaire : seuls les noms de Scribouille sont reconnus")
+
+
 def principal() -> int:
     print(f"Vérification du socle de Scribouille\n{'=' * 40}")
     with tempfile.TemporaryDirectory(prefix="scribouille-socle-") as brut:
@@ -441,6 +520,7 @@ def principal() -> int:
         essai_modele_garde(base)
         essai_reglage_propose()
         essai_repetitions()
+        essai_migration(base)
     print(f"\n{'=' * 40}")
     if _echecs:
         print(f"{_reussites} vérifications passées, {len(_echecs)} en échec :")

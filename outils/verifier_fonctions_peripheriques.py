@@ -1029,10 +1029,12 @@ def essai_renommage(base: Path) -> None:
     poser("autre-chose")
     verifier(compagnon.lire(sortie) is None, "un marqueur inconnu reste refusé")
 
-    verifier(chemins.NOM_DOSSIER_UTILISATEUR == "WhiScribe",
-             "le dossier de données garde son nom d'origine",
+    # Depuis la 2.5, le dossier de données est à notre nom ; l'ancien est repris
+    # au premier lancement (vérifications dans outils/verifier_socle.py).
+    verifier(chemins.NOM_DOSSIER_UTILISATEUR == "Scribouille" and chemins.NOM_DOSSIER_ANCIEN == "WhiScribe",
+             "le dossier de données est à notre nom, l'ancien est connu pour être repris",
              chemins.NOM_DOSSIER_UTILISATEUR)
-    verifier(chemins.RACINE.name == "WhiScribe" or not chemins.EST_GELE,
+    verifier(chemins.RACINE.name == "Scribouille" or not chemins.EST_GELE,
              "la racine des données suit ce nom dans la version installée")
 
 

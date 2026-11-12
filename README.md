@@ -20,9 +20,9 @@ Scribouille is a desktop app for Windows built on [faster-whisper](https://githu
 2. Run it.
 3. Start **Scribouille** from the Start menu.
 
-Nothing else to install. The setup is per user, **no administrator rights**, and it installs into `%LOCALAPPDATA%\Programs\Scribouille`. Your settings, glossary and logs live in `%LOCALAPPDATA%\WhiScribe`, never inside the program folder, so reinstalling a newer version over the old one loses nothing.
+Nothing else to install. The setup is per user, **no administrator rights**, and it installs into `%LOCALAPPDATA%\Programs\Scribouille`. Your settings, glossary and logs live in `%LOCALAPPDATA%\Scribouille`, never inside the program folder, so reinstalling a newer version over the old one loses nothing.
 
-> **The application was called WhiScribe up to 2.3.3.** The repository name has changed, the old addresses redirect. On a machine that already has it, the update installs over the existing setup, in its original folder `%LOCALAPPDATA%\Programs\WhiScribe`, and the data folder keeps its name too: nothing to move, nothing lost.
+> **The application was called WhiScribe up to 2.3.3.** The repository name has changed, the old addresses redirect. On a machine that already has it, the update installs over the existing setup, in its original folder `%LOCALAPPDATA%\Programs\WhiScribe`. Since 2.5, the data moves on first launch from `%LOCALAPPDATA%\WhiScribe` to `%LOCALAPPDATA%\Scribouille`, by a plain rename: nothing is lost, the models are not downloaded again, and only Scribouille's own files are moved (another program called "Whiscribe" keeps its models in the same place). To go back to an earlier version: `scribouille-verifier.exe --revenir-whiscribe`.
 
 The setup asks **where to keep the transcription models**, 1.6 to 3.1 GB depending on the preset. The models are not bundled: they are downloaded once, on first use, and the app tells you the size before starting. After that it works offline.
 

@@ -21,7 +21,7 @@ Un bouton dans l'application, qui fait le travail dans les deux modes.
   - **Depuis la version installée**, il n'y a ni Python ni pip sur le poste.
     pip est donc embarqué dans le gel (voir `packaging/scribouille.spec`) et les
     paquets sont posés dans un **dossier d'extensions** propre à l'utilisateur,
-    `%LOCALAPPDATA%\\WhiScribe\\extensions`, par « pip install --target ». Ce
+    `%LOCALAPPDATA%\\Scribouille\\extensions`, par « pip install --target ». Ce
     dossier est ajouté à `sys.path` au démarrage, avant tout import de torch ou
     de pyannote : les paquets s'y trouvent alors comme s'ils avaient toujours
     été là.

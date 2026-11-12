@@ -20,9 +20,9 @@ Scribouille est une application de bureau Windows bâtie sur [faster-whisper](ht
 2. Lancez-le.
 3. Ouvrez **Scribouille** depuis le menu Démarrer.
 
-Rien d'autre à installer. L'installation se fait par utilisateur, **sans droits administrateur**, dans `%LOCALAPPDATA%\Programs\Scribouille`. Vos réglages, votre glossaire et vos journaux vivent dans `%LOCALAPPDATA%\WhiScribe`, jamais dans le dossier du programme : réinstaller une version plus récente par-dessus l'ancienne ne fait donc rien perdre.
+Rien d'autre à installer. L'installation se fait par utilisateur, **sans droits administrateur**, dans `%LOCALAPPDATA%\Programs\Scribouille`. Vos réglages, votre glossaire et vos journaux vivent dans `%LOCALAPPDATA%\Scribouille`, jamais dans le dossier du programme : réinstaller une version plus récente par-dessus l'ancienne ne fait donc rien perdre.
 
-> **L'application s'appelait WhiScribe jusqu'à la 2.3.3.** Le nom du dépôt a changé, les anciennes adresses redirigent. Sur un poste déjà équipé, la mise à jour se pose par-dessus l'installation existante, dans son dossier d'origine `%LOCALAPPDATA%\Programs\WhiScribe`, et le dossier de données garde lui aussi son nom : rien n'est à déplacer, rien n'est perdu.
+> **L'application s'appelait WhiScribe jusqu'à la 2.3.3.** Le nom du dépôt a changé, les anciennes adresses redirigent. Sur un poste déjà équipé, la mise à jour se pose par-dessus l'installation existante, dans son dossier d'origine `%LOCALAPPDATA%\Programs\WhiScribe`. Depuis la 2.5, les données passent au premier lancement de `%LOCALAPPDATA%\WhiScribe` à `%LOCALAPPDATA%\Scribouille`, par simple renommage : rien n'est perdu, les modèles ne sont pas retéléchargés, et seuls les fichiers de Scribouille sont déplacés (un autre logiciel nommé « Whiscribe » range ses modèles au même endroit). Pour revenir à une version antérieure : `scribouille-verifier.exe --revenir-whiscribe`.
 
 L'assistant demande **où ranger les modèles de transcription**, de 1,6 à 3,1 Go selon le preset. Les modèles ne sont pas embarqués : ils se téléchargent une seule fois, au premier usage, et l'application annonce la taille avant de commencer. Ensuite elle fonctionne hors connexion.
 

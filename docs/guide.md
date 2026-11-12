@@ -245,7 +245,7 @@ Check the state of the machine, the FFmpeg decoder, the work folders and hardwar
 
 **From the application, it is one button.** Open the "Speakers" panel and click "Install speaker separation". The app announces the download size, about 0.8 GB for the CPU build, the room needed on disk, 6 GB, and how much is free. Those figures are measured on a real install: 0.71 GB of wheels downloaded, 3.55 GB of files laid down. It asks for confirmation, then downloads in the background: progress is shown, cancelling is possible at any point, and transcription stays usable meanwhile. A network drop does not mean downloading everything again: what already arrived is kept, and a new run only asks the network for what is missing. It does lay the files down again, a few minutes of disk, the only safe way not to leave the leftovers of an interrupted attempt in place.
 
-The button picks the right build on its own: CPU by default, CUDA when an NVIDIA card answers. In the installed version the components land in `%LOCALAPPDATA%\WhiScribe\extensions`, and a second button removes them, with their size shown. From source they land in the project `.venv`, exactly like `installer.bat --locuteurs`.
+The button picks the right build on its own: CPU by default, CUDA when an NVIDIA card answers. In the installed version the components land in `%LOCALAPPDATA%\Scribouille\extensions`, and a second button removes them, with their size shown. From source they land in the project `.venv`, exactly like `installer.bat --locuteurs`.
 
 **Then the token.** That is a separate step, unrelated to the download.
 
@@ -312,7 +312,7 @@ Where files live, depending on how the app was started:
 | | Installed version | Source version |
 |---|---|---|
 | Program | `%LOCALAPPDATA%\Programs\Scribouille` | the cloned repository |
-| Settings, logs, glossary | `%LOCALAPPDATA%\WhiScribe` | next to the script |
+| Settings, logs, glossary | `%LOCALAPPDATA%\Scribouille` (`WhiScribe` up to 2.4, taken over on first launch) | next to the script |
 | Models | chosen at install time, changeable in the settings | `modeles/`, changeable in the settings |
 
 The data folder still carries the old application name, on purpose: renaming it in 2.4.0 would have left the settings, the glossary and the models of every existing installation behind.

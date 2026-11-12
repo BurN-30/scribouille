@@ -245,7 +245,7 @@ Contrôler l'état du poste, le décodeur FFmpeg, les dossiers de travail et la 
 
 **Depuis l'application, c'est un bouton.** Ouvrez le panneau « Locuteurs », cliquez sur « Installer la séparation des locuteurs ». L'application annonce la taille à télécharger, environ 0,8 Go en variante processeur, l'espace nécessaire sur le disque, 6 Go, et ce qu'il reste de libre. Ces chiffres sont mesurés sur une installation réelle : 0,71 Go de roues téléchargées, 3,55 Go de fichiers posés. Elle demande confirmation, puis télécharge en arrière-plan : la progression s'affiche, l'annulation est possible à tout moment, et la transcription reste utilisable pendant ce temps. Une coupure réseau n'oblige pas à tout retélécharger : ce qui est déjà arrivé est gardé, et une relance ne redemande au réseau que ce qui manque. Elle repose en revanche les fichiers sur le disque, quelques minutes, seule façon sûre de ne pas laisser en place les restes d'une tentative interrompue.
 
-Le bouton choisit tout seul la variante adaptée au poste : processeur par défaut, CUDA si une carte NVIDIA répond. Dans la version installée, les composants vont dans `%LOCALAPPDATA%\WhiScribe\extensions`, et un second bouton permet de les retirer, avec leur poids affiché. Depuis les sources, ils vont dans le `.venv` du projet, exactement comme le fait `installer.bat --locuteurs`.
+Le bouton choisit tout seul la variante adaptée au poste : processeur par défaut, CUDA si une carte NVIDIA répond. Dans la version installée, les composants vont dans `%LOCALAPPDATA%\Scribouille\extensions`, et un second bouton permet de les retirer, avec leur poids affiché. Depuis les sources, ils vont dans le `.venv` du projet, exactement comme le fait `installer.bat --locuteurs`.
 
 **Ensuite, le jeton.** C'est une étape distincte, et elle n'a rien à voir avec le téléchargement : le modèle qui reconnaît les voix, pyannote, est gratuit mais sous conditions, et son auteur demande de les accepter et de s'identifier.
 
@@ -310,7 +310,7 @@ Où vivent les fichiers, selon la manière dont l'application est lancée :
 | | Version installée | Version source |
 |---|---|---|
 | Programme | `%LOCALAPPDATA%\Programs\Scribouille` | le dépôt cloné |
-| Réglages, journaux, glossaire | `%LOCALAPPDATA%\WhiScribe` | à côté du script |
+| Réglages, journaux, glossaire | `%LOCALAPPDATA%\Scribouille` (`WhiScribe` jusqu'à la 2.4, repris au premier lancement) | à côté du script |
 | Modèles | choisi à l'installation, modifiable dans les réglages | `modeles/`, modifiable dans les réglages |
 
 Le dossier de données porte encore l'ancien nom de l'application, et c'est délibéré : le renommer à la 2.4.0 aurait laissé sur place les réglages, le glossaire et les modèles de toutes les installations existantes.

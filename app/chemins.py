@@ -7,10 +7,12 @@ Deux modes de fonctionnement, volontairement distincts :
     tout vit à côté du script, comme avant. Le dossier est celui de l'utilisateur
     qui a cloné le dépôt, il est donc accessible en écriture.
 
-  - exécution de la version installée (exe gelé par PyInstaller) : le programme
-    est posé dans un dossier qu'il ne faut pas polluer, et qui peut être en
-    lecture seule. La configuration, les journaux et les modèles vont alors dans
-    l'espace utilisateur, sous %LOCALAPPDATA%\\WhiScribe.
+  - exécution de la version installée ou portable (exe gelé par PyInstaller) :
+    le programme est posé dans un dossier qu'il ne faut pas polluer, et qui
+    peut être en lecture seule. La configuration, les journaux et les modèles
+    vont alors dans l'espace utilisateur, sous %LOCALAPPDATA%\\Scribouille
+    (%LOCALAPPDATA%\\WhiScribe jusqu'à la 2.4, repris au premier lancement,
+    voir `app/migration.py`).
 
 Le dossier des modèles se choisit à part : ils pèsent de 1,6 à 3,1 Go et l'on
 veut pouvoir les ranger sur un autre disque. Il est donc noté dans un fichier
@@ -29,13 +31,18 @@ import os
 import sys
 from pathlib import Path
 
-#: Nom du dossier de données, sous %LOCALAPPDATA%. Il porte encore l'ancien nom
-#: de l'application, et c'est VOULU : le renommer en 2.4.0 aurait abandonné sur
-#: place la configuration, le glossaire, les corrections et les modèles déjà
-#: téléchargés de toutes les installations existantes. Le programme
-#: d'installation lit le même chemin en dur (packaging/setup.iss), et son
-#: identifiant Inno ne bouge pas non plus.
-NOM_DOSSIER_UTILISATEUR = "WhiScribe"
+#: Nom du dossier de données, sous %LOCALAPPDATA%. Jusqu'à la 2.4, il portait
+#: l'ancien nom de l'application, « WhiScribe », que partage un projet tiers
+#: homonyme (ses modèles vont dans le même dossier sous Windows). Depuis la 2.5,
+#: le dossier est à notre nom ; ce que Scribouille reconnaît comme sien dans
+#: l'ancien y est déplacé au premier lancement, sans rien perdre ni
+#: retélécharger (`app/migration.py`). Le programme d'installation lit les
+#: mêmes chemins (packaging/setup.iss) ; son identifiant Inno ne bouge pas.
+NOM_DOSSIER_UTILISATEUR = "Scribouille"
+NOM_DOSSIER_ANCIEN = "WhiScribe"
+
+#: Bilan de la reprise de l'ancien dossier, au démarrage (journalisé ensuite).
+MIGRATION: dict = {}
 
 #: Écrit par le programme d'installation, à côté de l'exécutable.
 NOM_FICHIER_AMORCAGE = "emplacement-modeles.txt"
@@ -68,13 +75,25 @@ def _dossier_programme() -> Path:
 
 
 def _dossier_donnees() -> Path:
-    """Racine où l'application écrit : à côté des sources, ou dans l'espace utilisateur."""
+    """
+    Racine où l'application écrit : à côté des sources, ou dans l'espace
+    utilisateur. Dans la version gelée, l'ancien dossier « WhiScribe » est
+    repris ici, avant que quoi que ce soit ne lise ses fichiers.
+    """
     if not EST_GELE:
         return Path(__file__).resolve().parent.parent
     base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
-    if base:
-        return Path(base) / NOM_DOSSIER_UTILISATEUR
-    return Path.home() / f".{NOM_DOSSIER_UTILISATEUR.lower()}"
+    if not base:
+        return Path.home() / f".{NOM_DOSSIER_UTILISATEUR.lower()}"
+    nouveau = Path(base) / NOM_DOSSIER_UTILISATEUR
+    if "--revenir-whiscribe" not in sys.argv:
+        try:
+            from . import migration
+
+            MIGRATION.update(migration.migrer(Path(base) / NOM_DOSSIER_ANCIEN, nouveau, _dossier_programme()))
+        except Exception as exc:  # jamais bloquant : on retentera au lancement suivant
+            MIGRATION.update({"etat": "erreur", "erreur": f"{type(exc).__name__}: {exc}"[:300]})
+    return nouveau
 
 
 DOSSIER_RESSOURCES = _dossier_ressources()

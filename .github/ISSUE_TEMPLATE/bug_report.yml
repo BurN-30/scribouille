@@ -51,7 +51,7 @@ body:
 
         Where to find it: the **Open the detailed log** button in the bottom bar of the
         application opens it directly. Otherwise it is the most recent file in the `logs/`
-        folder, next to your settings: `%LOCALAPPDATA%\WhiScribe\logs` for the installed
+        folder, next to your settings: `%LOCALAPPDATA%\Scribouille\logs` for the installed
         version, `logs/` inside the repository for the source version.
 
         The log is written in French, that is normal, it is aimed at the maintainer.

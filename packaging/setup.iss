@@ -167,12 +167,27 @@ var
   Emplacements partagés avec l'application, voir app/chemins.py
   -------------------------------------------------------------------------- }
 
-{ Le dossier de données porte encore l'ancien nom de l'application, comme dans
-  app/chemins.py : le renommer aurait abandonné sur place la configuration, le
-  glossaire et les modèles de toutes les installations existantes. }
+{ Le dossier de données est à notre nom depuis la 2.5, comme dans
+  app/chemins.py. L'ancien, « WhiScribe », est repris par l'application à son
+  premier lancement (app/migration.py) : un projet tiers homonyme range ses
+  modèles dans le même dossier sous Windows, rien de lui n'est jamais touché. }
 function DossierDonnees(): String;
 begin
+  Result := ExpandConstant('{localappdata}') + '\Scribouille';
+end;
+
+function AncienDossierDonnees(): String;
+begin
   Result := ExpandConstant('{localappdata}') + '\WhiScribe';
+end;
+
+{ Un chemin noté dans l'ancien dossier est lu comme il sera après la reprise :
+  « ...\WhiScribe\modeles » devient « ...\Scribouille\modeles ». }
+function VersNouveauDossier(Chemin: String): String;
+begin
+  Result := Chemin;
+  if Pos(Lowercase(AncienDossierDonnees() + '\'), Lowercase(Chemin + '\')) = 1 then
+    Result := DossierDonnees() + Copy(Chemin, Length(AncienDossierDonnees()) + 1, Length(Chemin));
 end;
 
 function FichierChoixModeles(): String;
@@ -205,16 +220,20 @@ end;
 function DossierModelesEffectif(): String;
 var
   Lignes: TArrayOfString;
-  Valeur: String;
+  Valeur, Fichier: String;
 begin
   Result := DossierModelesDefaut();
-  if FileExists(FichierChoixModeles()) then
+  { Mise à jour depuis une 2.4 : le choix est encore dans l'ancien dossier. }
+  Fichier := FichierChoixModeles();
+  if not FileExists(Fichier) then
+    Fichier := AncienDossierDonnees() + '\dossier-modeles.txt';
+  if FileExists(Fichier) then
   begin
-    if LoadStringsFromFile(FichierChoixModeles(), Lignes) and (GetArrayLength(Lignes) > 0) then
+    if LoadStringsFromFile(Fichier, Lignes) and (GetArrayLength(Lignes) > 0) then
     begin
       Valeur := Trim(Lignes[0]);
       if Valeur <> '' then
-        Result := Valeur;
+        Result := VersNouveauDossier(Valeur);
     end;
   end;
 end;
@@ -425,21 +444,15 @@ end;
   Désinstallation : deux questions distinctes, aucune suppression silencieuse
   -------------------------------------------------------------------------- }
 
-{ Efface les données personnelles sans toucher aux modèles quand ceux-ci sont
-  rangés à l'intérieur, ce qui est le cas de l'emplacement par défaut. Sans
-  cette précaution, répondre « garder les modèles » puis « supprimer les
-  données » les effacerait quand même. }
-procedure SupprimerDonnees(PreserverModeles: Boolean);
-var
-  Base: String;
+{ Efface les données personnelles de Scribouille, ENTRÉE PAR ENTRÉE : jamais
+  un dossier entier à l'aveugle. Le dossier « WhiScribe » d'avant la 2.5 est
+  partagé avec un projet tiers homonyme (ses modèles, « models ») : un
+  DelTree du dossier les effaçait. Même liste que app/migration.py. Les modèles
+  (« modeles ») ne partent que si l'utilisateur l'a demandé juste avant. }
+procedure SupprimerEntrees(Base: String; PreserverModeles: Boolean);
 begin
-  Base := DossierDonnees();
-  if not PreserverModeles then
-  begin
-    DelTree(Base, True, True, True);
+  if not DirExists(Base) then
     Exit;
-  end;
-
   DeleteFile(Base + '\config.json');
   DeleteFile(Base + '\jeton_hf.txt');
   DeleteFile(Base + '\dossier-modeles.txt');
@@ -447,18 +460,42 @@ begin
   DeleteFile(Base + '\corrections.txt');
   DeleteFile(Base + '\gabarit-ia.txt');
   DeleteFile(Base + '\calibration.json');
-  { Sauvegardes automatiques posées avant chaque import de données. }
+  DeleteFile(Base + '\maj-etat.json');
+  DeleteFile(Base + '\surveillance-vus.json');
+  DeleteFile(Base + '\vocabulaire.toml');
+  DeleteFile(Base + '\materiel.json');
+  DeleteFile(Base + '\openvino-chargement-en-cours.txt');
+  DeleteFile(Base + '\migration-whiscribe.json');
+  DelTree(Base + '\*-format1-sauvegarde.txt', False, True, False);
+  DelTree(Base + '\vocabulaire-propositions-*', False, True, False);
+  { Sauvegardes automatiques posées avant chaque import de données, sous le
+    nom actuel et sous l'ancien (avant la 2.4.0). }
   DelTree(Base + '\scribouille-donnees-avant-import-*.zip', False, True, False);
-  { Même chose sous l'ancien nom, pour les sauvegardes d'avant la 2.4.0. }
   DelTree(Base + '\whiscribe-donnees-avant-import-*.zip', False, True, False);
   DelTree(Base + '\logs', True, True, True);
   DelTree(Base + '\reprises', True, True, True);
-  { La séparation des locuteurs et son cache de téléchargement : 2,5 Go, annoncés
-    dans la question posée juste avant. }
+  { Séparation des locuteurs, moteur Intel et leurs caches : annoncés dans la
+    question posée juste avant. }
   DelTree(Base + '\extensions', True, True, True);
   DelTree(Base + '\cache-pip', True, True, True);
-  { Ne part que si les modèles n'y sont plus, donc jamais dans ce cas de figure. }
+  DelTree(Base + '\extensions-openvino', True, True, True);
+  DelTree(Base + '\cache-openvino', True, True, True);
+  DelTree(Base + '\paquets-hors-ligne', True, True, True);
+  DelTree(Base + '\rapports-banc', True, True, True);
+  DelTree(Base + '\comparaisons', True, True, True);
+  DelTree(Base + '\campagnes', True, True, True);
+  DelTree(Base + '\corpus-campagne', True, True, True);
+  DelTree(Base + '\ancien-whiscribe', True, True, True);
+  if not PreserverModeles then
+    DelTree(Base + '\modeles', True, True, True);
+  { Ne part que s'il est vide : ce qui n'est pas à nous y reste. }
   RemoveDir(Base);
+end;
+
+procedure SupprimerDonnees(PreserverModeles: Boolean);
+begin
+  SupprimerEntrees(DossierDonnees(), PreserverModeles);
+  SupprimerEntrees(AncienDossierDonnees(), PreserverModeles);
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
@@ -477,7 +514,12 @@ begin
     Exit;
 
   DossierModeles := DossierModelesEffectif();
-  ModelesDansLesDonnees := Pos(Lowercase(DossierDonnees()), Lowercase(DossierModeles)) = 1;
+  { Mise à jour jamais lancée : les modèles sont encore dans l'ancien dossier. }
+  if (not DirExists(DossierModeles)) and DirExists(AncienDossierDonnees() + '\modeles')
+     and (Lowercase(DossierModeles) = Lowercase(DossierModelesDefaut())) then
+    DossierModeles := AncienDossierDonnees() + '\modeles';
+  ModelesDansLesDonnees := (Pos(Lowercase(DossierDonnees()), Lowercase(DossierModeles)) = 1)
+    or (Pos(Lowercase(AncienDossierDonnees()), Lowercase(DossierModeles)) = 1);
   ModelesGardes := True;
 
   Occupe := TailleDossier(DossierModeles);
@@ -495,9 +537,10 @@ begin
   else
     ModelesGardes := False;
 
-  if DirExists(DossierDonnees()) then
+  if DirExists(DossierDonnees()) or DirExists(AncienDossierDonnees()) then
   begin
-    PoidsExtensions := TailleDossier(DossierExtensions()) + TailleDossier(DossierCachePip());
+    PoidsExtensions := TailleDossier(DossierExtensions()) + TailleDossier(DossierCachePip())
+      + TailleDossier(DossierDonnees() + '\extensions-openvino') + TailleDossier(DossierDonnees() + '\cache-openvino');
     if MsgBox(FmtMessage(ExpandConstant('{cm:DesinstallerDonnees}'), [
                 DossierDonnees(), TailleLisible(PoidsExtensions)]),
               mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
