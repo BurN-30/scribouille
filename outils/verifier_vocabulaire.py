@@ -718,11 +718,12 @@ def essai_fusion_corrections(base: Path) -> None:
         texte = txt.read_text(encoding="utf-8")
         perso = v2.lire(v2.FICHIER_PERSONNEL)[0] if v2.FICHIER_PERSONNEL.exists() else v2.Vocabulaire()
         verifier(retour["ok"] and retour["remplacements"] == 1 and "sociaux sociaux" not in texte
-                 and perso.chercher("réseaux sociaux", etat="propose") is not None,
-                 "sans mémoriser : un seul remplacement, proposition ajoutée", retour["message"])
+                 and perso.chercher("réseaux sociaux", etat="propose") is None,
+                 "sans « Mémoriser » : un seul remplacement, aucune proposition au vocabulaire",
+                 retour["message"])
         retour = lecture.annuler_correction(txt)
         verifier(retour["ok"] and not v2.FICHIER_PERSONNEL.exists(),
-                 "annulation : la proposition ajoutée est retirée aussi", retour["message"])
+                 "annulation : le vocabulaire reste vide", retour["message"])
 
         # Vue et annulation d'un remplacement du vocabulaire : texte exact, en-tête intact.
         phrase = "L'entreprise cubernetes, c'est-à-dire."

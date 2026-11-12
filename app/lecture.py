@@ -1228,17 +1228,12 @@ def corriger_plages(chemin: str | Path, plages: list[tuple[int, int, str]], sour
         return retour
     regle_ajoutee = False
     message_regle = ""
+    # Le vocabulaire n'apprend que sur demande (« Mémoriser ») : une correction
+    # ordinaire ne dépose aucune proposition à relire.
     if ajouter_regle:
         memoire = _memoriser_regle(source, cible)
         regle_ajoutee = bool(memoire.get("ajoutee"))
         message_regle = memoire.get("message", "")
-    else:
-        # Sans règle mémorisée, la correction devient une proposition du
-        # vocabulaire (format 2), à relire plus tard : rien ne sert sans accord.
-        from . import vocabulaire_interface
-
-        if vocabulaire_interface.proposer_depuis_correction(source, cible):
-            message_regle = langues.t("voc2.propose_depuis_lecture")
     ecrit = retour.pop("ecrit")
     _memoriser_annulation(fichier, ecrit, regles_avant, _instantane_regles(), regle_ajoutee)
     retour.update({"remplacements": len(plages), "regle_ajoutee": regle_ajoutee,

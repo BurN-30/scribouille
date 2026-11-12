@@ -1101,6 +1101,30 @@ def essai_annulation_profonde(base: Path) -> None:
     verifier(lecture.controler(txt) == "", "après tout cela, l'écran est toujours le fichier")
 
 
+def essai_vocabulaire_sur_demande(base: Path) -> None:
+    """Une correction ne nourrit le vocabulaire que si l'on coche « Mémoriser »."""
+    from app import relecture, vocabulaire_v2
+
+    titre("Vocabulaire : une correction n'apprend rien sans qu'on le demande")
+    dossier = base / "sur-demande"
+    dossier.mkdir()
+    personnel = vocabulaire_v2.FICHIER_PERSONNEL
+    vocabulaire_v2.FICHIER_PERSONNEL = dossier / "vocabulaire.toml"
+    try:
+        txt = ecrire(dossier, [segment(0.0, 4.0, jetons("On ouvre gitlab, puis le serveur jenkins."))])
+        for source, cible in (("gitlab", "GitLab"), ("le serveur", "le serveur de test")):
+            relecture.corriger(txt, source, cible, "tous")
+        verifier(not vocabulaire_v2.FICHIER_PERSONNEL.exists(),
+                 "deux corrections sans « Mémoriser » : aucune proposition déposée au vocabulaire")
+        retour = relecture.corriger(txt, "jenkins", "Jenkins", "tous", ajouter_regle=True)
+        verifier(retour.get("regle_ajoutee") is True,
+                 "avec « Mémoriser », la correction est retenue pour les transcriptions suivantes",
+                 str(retour)[:160])
+        lecture.annuler_correction(txt)
+    finally:
+        vocabulaire_v2.FICHIER_PERSONNEL = personnel
+
+
 def principal() -> int:
     print(f"Vérification du parcours de l'utilisateur\n{'=' * 42}")
     with tempfile.TemporaryDirectory(prefix="scribouille-parcours-") as brut:
@@ -1128,6 +1152,7 @@ def principal() -> int:
         essai_selection_exacte(base)
         essai_modifie_dehors(base)
         essai_annulation_profonde(base)
+        essai_vocabulaire_sur_demande(base)
         essai_accessibilite()
         essai_ecrans()
 
