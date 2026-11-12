@@ -325,6 +325,14 @@ def verification() -> int:
     lignes.append("")
 
     texte = "\n".join(lignes)
+    # Vers un tube ou un fichier (« scribouille verifier » le relaie), en
+    # UTF-8 : un programme gelé ignore PYTHONIOENCODING, et la page de code du
+    # poste abîmerait les accents.
+    try:
+        if not sys.stdout.isatty():
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+    except Exception:
+        pass
     try:
         print(texte)
     except Exception:

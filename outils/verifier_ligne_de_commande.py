@@ -459,6 +459,10 @@ def essai_json_partout() -> None:
     bilan = "\n".join((_json(sortie) or [{}])[-1].get("donnees", {}).get("bilan", []))
     verifier("Données" in bilan and "�" not in bilan and "Mode          : sources" in bilan,
              "verifier : accents intacts à travers le tube, mode juste", bilan[:200])
+    code, sortie, _, _, _ = lancer("--verifier", delai=120)
+    verifier("Données" in sortie and "�" not in sortie,
+             "--verifier vers un tube, page de code imposée (comme un programme gelé) : UTF-8, accents intacts",
+             sortie[:120])
     code, sortie, _, _, _ = lancer("vocabulaire", "etat")
     verifier(code == 0 and "{" not in sortie and "actifs" in sortie, "vocabulaire etat : un texte lisible, pas un "
              "dictionnaire brut", sortie[:160])
