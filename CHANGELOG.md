@@ -45,8 +45,36 @@ parole lue.
   vaudrait une seconde passe d'un autre modèle pour les signaler, et à quel
   coût, à côté des probabilités de CTranslate2.
 
+- **Épreuve d'endurance** (`--endurance [--passages 30] [--pression]`) : le
+  réglage retenu passé de nombreuses fois d'affilée sur des extraits du corpus,
+  comme dans la file de l'application. Pour chaque passage : réussi ou non,
+  erreur exacte, rejeu, repli, mémoire libre du poste avant l'ouverture du
+  modèle et avant le passage, vitesse ; puis le taux de panne avant et après
+  rejeu, avec sa borne haute à 95 %. `--pression` recrée, un passage sur deux,
+  un poste chargé : CTranslate2 large-v3 en mémoire et 4 Go libres seulement.
+  Rapport de chiffres, sans texte.
+
 Corrigé
 
+- **OpenVINO sur la puce graphique, faisceau** : OpenVINO GenAI 2026.4 ne sait
+  pas décoder Whisper en faisceau sur la puce graphique (erreur « Not
+  Implemented » de `iremote_tensor.hpp`, à chaque fois ; ticket openvino.genai
+  n° 2746). Le garde-fou des répétitions refaisait une fenêtre qui boucle avec
+  un faisceau de 5 : sur la puce graphique, une transcription pourtant
+  gloutonne pouvait donc tomber dès qu'une fenêtre bouclait. Il la refait
+  désormais par échantillonnage à température croissante sur la puce
+  graphique et le NPU (faisceau de 5 sur le processeur, comme avant), et une
+  reprise ratée garde la première version au lieu d'emporter le fichier. Le
+  faisceau n'est jamais appliqué à OpenVINO sur ces deux circuits, et la
+  campagne marque ces réglages « non pris en charge » au lieu d'une panne.
+- **Un raté d'OpenVINO ne coûte plus la vitesse** : à la première erreur, à
+  l'ouverture comme en cours de transcription, le modèle est libéré, rouvert,
+  et la transcription reprend sur la puce graphique à la fin du dernier
+  segment sorti. Si l'erreur revient, CTranslate2 prend le relais au même
+  endroit, comme avant. Une ligne le dit dans l'interface.
+- **Réglage de comparaison des réunions** : le rapport d'une réunion écrivait
+  « pas de verdict public » quand le réglage retenu avait échoué sur cette
+  réunion. Il le dit désormais, et le verdict est lu au lancement.
 - **Veille du poste** : une comparaison lancée en fin de journée ne démarrait
   qu'au réveil du portable. Comparaison et campagne demandent à Windows de ne
   pas mettre le système en veille pendant le calcul (`SetThreadExecutionState`,
