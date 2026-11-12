@@ -1226,6 +1226,12 @@ def essai_heures_et_avis(base: Path) -> None:
              "l'avis d'écoute est redessiné à chaque ouverture")
     verifier("p.debut === null || p.debut === undefined ? '' : formaterSecondes(p.debut)" in js
              and "ui.rl.sans_heures" in js, "sans heure : ni « 0:00 », ni « Copier avec les heures »")
+    gestion = js[js.index("$('#modale-correction').addEventListener('keydown'"):][:400]
+    valider = js[js.index("async function validerCorrection()"):][:700]
+    verifier("validerCorrection();" in gestion and "appliquerCorrection();" not in gestion
+             and "lect.apercuPour !== champ.value.trim()" in valider and "await majApercuCorrection();" in valider
+             and "champ.readOnly = true;" in valider,
+             "« Corriger » : Entrée pressée avant la fin de l'aperçu attend l'aperçu puis valide, sans perdre la frappe")
 
 
 def essai_depot_mele() -> None:

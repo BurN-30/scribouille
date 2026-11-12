@@ -762,6 +762,7 @@ function ouvrirCorrection() {
   $('#retour-correction').innerHTML = '';
   $('#apercu-correction').innerHTML = '';
   lect.correction = { nombre: 0, extraits: [], choisie: -1 };
+  lect.apercuPour = null;
   majQuestionRegle();
   majBoutonCorrection();
   ouvrirModale('#modale-correction');
@@ -787,6 +788,7 @@ async function majApercuCorrection() {
   if (!lect.d || !cible || cible === source) {
     zone.innerHTML = '';
     lect.correction = { nombre: 0, extraits: [], choisie: -1 };
+    lect.apercuPour = cible;
     majBoutonCorrection();
     return;
   }
@@ -800,10 +802,12 @@ async function majApercuCorrection() {
   if (!r.ok) {
     zone.innerHTML = encartAttention(r.message || t('ui.rl.code.' + (r.code || 'echec')));
     lect.correction = { nombre: 0, extraits: [], choisie: -1 };
+    lect.apercuPour = cible;
     majBoutonCorrection();
     return;
   }
   lect.correction = { nombre: r.nombre, extraits: r.extraits || [], choisie: r.choisie };
+  lect.apercuPour = cible;
   const lignes = lect.correction.extraits.map((x) => {
     const ici = x.rang === r.choisie;
     return `<li class="${ici ? 'ici' : ''}"><label><input type="checkbox" data-rang="${x.rang}" ${ici ? 'checked' : ''}>
@@ -834,6 +838,26 @@ function majBoutonCorrection() {
   bouton.textContent = coches && coches === total && total > 1
     ? tn('ui.correction.appliquer_tous', total)
     : tn('ui.correction.appliquer_n', Math.max(coches, 1));
+}
+
+/* Entree pressee avant la fin de l'apercu (0,2 a 0,4 s apres la derniere
+   frappe) : l'apercu de ce qui est tape est calcule tout de suite, puis la
+   correction est appliquee. Le champ ne prend plus de frappe entre-temps. */
+async function validerCorrection() {
+  const champ = $('#correction-cible');
+  if (lect.validation) return;
+  lect.validation = true;
+  champ.readOnly = true;
+  try {
+    if (lect.apercuPour !== champ.value.trim()) {
+      clearTimeout(lect.minuterieApercu);
+      await majApercuCorrection();
+    }
+    await appliquerCorrection();
+  } finally {
+    lect.validation = false;
+    champ.readOnly = false;
+  }
 }
 
 async function appliquerCorrection() {
@@ -1262,7 +1286,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#modale-correction').addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' || e.shiftKey || e.target.closest('[data-fermer]')) return;
     e.preventDefault();
-    appliquerCorrection();
+    validerCorrection();
   });
   $('#apercu-correction').addEventListener('change', () => {
     // Une case decochee a la main : « tout » ne vaut plus pour les endroits non listes.
