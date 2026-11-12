@@ -2584,6 +2584,247 @@ def essai_endurance(base: Path) -> None:
              "options de la ligne de commande")
 
 
+def _poste_225u() -> materiel.Materiel:
+    coeurs = [(1, [0, 1]), (1, [2, 3])] + [(0, [i]) for i in range(4, 12)] + [(0, [12]), (0, [13])]
+    topo = materiel.analyser_topologie(_tampon_topologie(coeurs, [list(range(12))]))
+    return materiel.Materiel(
+        cpu_nom="Intel(R) Core(TM) Ultra 5 225U", coeurs_physiques=12, coeurs_logiques=14,
+        topologie=topo, ram_go=32.0, basse_consommation=True, portable=True,
+        gpus=[materiel.Gpu(nom="Intel(R) Graphics", vendeur="intel", pilote="32.0.101.8801")])
+
+
+def essai_adaptation(base: Path) -> None:
+    """Table de décision du choix automatique, sources mesurées, application."""
+    titre("Choix automatique selon le poste : table de décision")
+    from app import adaptation, moteur_openvino, reglage_machine
+
+    P = adaptation.Profil
+    travail = P(processeur="Core Ultra 5 225U", logiques=14, hybride=True, basse_consommation=True,
+                ram_go=32, puce_intel=True, pilote_intel="32.0.101.8801", openvino_installe=True,
+                openvino_puce=True, npu=True, portable=True)
+    cas = [
+        ("PC du travail, puce Intel vue par OpenVINO", travail, "puce_intel", "openvino", "GPU", "rapide"),
+        ("même poste, OpenVINO pas installé", P(**{**travail.__dict__, "openvino_installe": False,
+                                                   "openvino_puce": False}),
+         "processeur_modeste", "ctranslate2", "", "rapide"),
+        ("même poste, pilote graphique en panne", P(**{**travail.__dict__, "openvino_puce": False}),
+         "puce_muette", "openvino", "CPU", "rapide"),
+        ("bureau AMD et Radeon, sans OpenVINO", P(processeur="Ryzen 7 7800X3D", logiques=16, ram_go=47),
+         "processeur_puissant", "ctranslate2", "", "qualite"),
+        ("bureau AMD et Radeon, OpenVINO installé", P(logiques=16, ram_go=47, openvino_installe=True),
+         "processeur_openvino", "openvino", "CPU", "rapide"),
+        ("carte NVIDIA", P(logiques=16, ram_go=32, cuda=True, openvino_installe=True),
+         "nvidia", "ctranslate2", "", "qualite"),
+        ("8 Go de mémoire", P(logiques=16, ram_go=8, openvino_installe=False),
+         "memoire_juste", "ctranslate2", "", "rapide"),
+        ("processeur de 8 fils", P(logiques=8, ram_go=16), "processeur_modeste", "ctranslate2", "", "rapide"),
+    ]
+    for libelle, profil, cle, moteur_, peripherique, preset in cas:
+        r = adaptation.regle(profil)
+        verifier((r.cle, r.moteur, r.peripherique, r.preset) == (cle, moteur_, peripherique, preset),
+                 f"table : {libelle} -> {cle}", str(r))
+    verifier(adaptation.pilote_ancien("27.20.100.8935") and not adaptation.pilote_ancien("32.0.101.8801")
+             and not adaptation.pilote_ancien("illisible"), "pilote Intel : minimum documenté d'OpenVINO")
+
+    mat = _poste_225u()
+    present = lambda depot: "complet"  # noqa: E731
+    absent = lambda depot: "absent"  # noqa: E731
+    p = adaptation.proposer(mat, travail, None, None, present)
+    verifier(p["source"] == "table" and p["moteur"] == "openvino" and p["peripherique"] == "GPU"
+             and not p["telechargement"] and p["rythme"] == "equilibre" and p["rythme_auto"],
+             "proposition : table, puce Intel, rythme équilibré qui s'adapte", str(p))
+    verifier("7 min" in p["phrase"] and "Rapide" in p["phrase"], "phrase claire avec la durée pour une heure",
+             p["phrase"])
+    p = adaptation.proposer(mat, travail, None, None, absent)
+    verifier(p["telechargement"] and "téléchargés au premier lancement" in p["phrase"],
+             "modèle absent : la taille est dite, rien n'est téléchargé", p["phrase"])
+    verdict = {"moteur": "openvino", "peripherique": "GPU", "modele": "large-v3", "faisceau": 1,
+               "preset": "qualite"}
+    p = adaptation.proposer(mat, travail, verdict, None, present)
+    verifier(p["source"] == "campagne" and p["preset"] == "qualite" and p["faisceau"] == 1,
+             "le verdict d'une campagne passe devant la table")
+    muette = P(**{**travail.__dict__, "openvino_puce": False})
+    p = adaptation.proposer(mat, muette, verdict, None, present)
+    verifier(p["source"] == "table" and p["peripherique"] == "CPU"
+             and any("ne tient plus" in n for n in p["notes"]),
+             "puce disparue : la campagne est écartée, et la proposition le dit", str(p["notes"]))
+    p = adaptation.proposer(mat, P(**{**travail.__dict__, "openvino_installe": False, "openvino_puce": False}),
+                            None, {"moteur": "openvino", "peripherique": "GPU"}, present)
+    verifier(p["action"] == "installer_openvino" and any("90 Mo" in n for n in p["notes"])
+             and p["moteur"] == "ctranslate2",
+             "puce Intel sans moteur : jamais d'installation d'office, l'action est proposée à part")
+    p = adaptation.proposer(mat, P(**{**travail.__dict__, "secteur": False}), None, None, present)
+    verifier(any("batterie" in n for n in p["notes"]), "sur batterie : comportement dit")
+
+    racine_reelle, temoin_reel = chemins.RACINE, moteur_openvino.TEMOIN_CHARGEMENT
+    installe, vus = moteur_openvino.installe, moteur_openvino.peripheriques_disponibles
+    chemins.RACINE = base / "adaptation"
+    chemins.RACINE.mkdir(parents=True, exist_ok=True)
+    moteur_openvino.TEMOIN_CHARGEMENT = chemins.RACINE / "temoin.txt"
+    moteur_openvino.installe = lambda: True
+    moteur_openvino.peripheriques_disponibles = lambda forcer=False: ["CPU", "GPU"]
+    try:
+        config = {"preset": "qualite", "rythme": "vitesse", "rythme_auto": False,
+                  "reglage_machine": {}}
+        p = adaptation.proposer(mat, travail, None, None, present)
+        verifier(not adaptation.deja_en_place(p, config, mat), "avant application : rien n'a changé")
+        adaptation.appliquer(config, mat, p)
+        verifier(config["preset"] == "rapide" and config["rythme"] == "equilibre" and config["rythme_auto"]
+                 and mat.cle_calcul == "openvino-gpu"
+                 and reglage_machine.lire(config, mat).get("source") == "table",
+                 "appliquer : preset, rythme et moteur écrits, signés pour ce poste")
+        verifier(adaptation.deja_en_place(p, config, mat), "ensuite, la proposition est reconnue en place")
+    finally:
+        chemins.RACINE, moteur_openvino.TEMOIN_CHARGEMENT = racine_reelle, temoin_reel
+        moteur_openvino.installe, moteur_openvino.peripheriques_disponibles = installe, vus
+    verifier(adaptation.options_reconnues(["--reconnaitre"]), "option --reconnaitre")
+
+
+class _FauxLeviers:
+    def __init__(self):
+        self.appels: list[tuple] = []
+
+    def qos_seule(self, nom):
+        self.appels.append(("qos", nom))
+
+    def rendre_qos(self):
+        self.appels.append(("rendre_qos",))
+
+    def appliquer(self, b, avec_affinite):
+        self.appels.append(("appliquer", b.rythme, b.priorite, b.qos, avec_affinite))
+
+    def rendre(self):
+        self.appels.append(("rendre",))
+
+
+def essai_rythmes() -> None:
+    """Bornes de chaque rythme, mémoire, bascule automatique sur activité simulée."""
+    titre("Rythme « je travaille en même temps » : bornes et bascule")
+    from app import banc_rythmes, rythme
+
+    poste = _poste_225u()
+    v, e, d = (rythme.bornes(n, poste) for n in rythme.RYTHMES)
+    verifier((v.fils, v.lot_max, v.priorite, v.qos, v.affinite) == (10, None, "normale", "haute", ()),
+             "vitesse maximale : comportement d'avant (10 fils, lots du preset, HighQoS)", str(v))
+    verifier((e.fils, e.lot_max, e.priorite, e.qos) == (8, 4, "inferieure", "systeme")
+             and e.ov_processeur == {"INFERENCE_NUM_THREADS": 8}
+             and e.ov_puce.get("GPU_QUEUE_PRIORITY") == "LOW",
+             "équilibré : 8 fils, lots de 4, priorité inférieure, file de la puce en priorité basse", str(e))
+    verifier(d.fils == 5 and d.lot_max == 0 and d.priorite == "basse" and d.qos == "eco"
+             and d.priorite_es == "basse" and list(d.affinite) == list(range(4, 12))
+             and d.ov_processeur.get("SCHEDULING_CORE_TYPE") == "ECORE_ONLY"
+             and d.ov_puce.get("GPU_QUEUE_THROTTLE") == "LOW",
+             "discret (225U) : 5 fils sur les 8 cœurs efficaces, un à un, EcoQoS, puce bridée", str(d))
+    bureau = materiel.Materiel(coeurs_physiques=8, coeurs_logiques=16)
+    verifier([rythme.bornes(n, bureau).fils for n in rythme.RYTHMES] == [8, 6, 4]
+             and rythme.bornes("discret", bureau).affinite == (),
+             "bureau 8 cœurs : 8, 6 et 4 fils, sans affinité (processeur homogène)")
+    mono = materiel.Materiel(coeurs_physiques=1, coeurs_logiques=1)
+    verifier(all(rythme.bornes(n, mono).fils == 1 for n in rythme.RYTHMES), "jamais moins d'un fil")
+    verifier(rythme.normaliser("inconnu") == "vitesse" and rythme.bornes("", bureau).rythme == "vitesse",
+             "valeur inconnue : vitesse maximale, le défaut")
+    auto = rythme.bornes_chargement("discret", True, poste)
+    verifier(auto.fils == 10 and auto.lot_max is None and auto.ov_puce.get("GPU_QUEUE_PRIORITY") == "LOW"
+             and "GPU_QUEUE_THROTTLE" not in auto.ov_puce,
+             "adaptation automatique : fils et lots de la vitesse maximale au chargement")
+    verifier(rythme.pause("discret", True, False) == 1.0 and rythme.pause("discret", False, False) == 0.0
+             and rythme.pause("discret", False, True) == 0.5 and rythme.pause("vitesse", True, True) == 0.0,
+             "pauses : sur la puce en discret, sur le processeur seulement en automatique")
+
+    verifier(rythme.garde_memoire("vitesse", "ctranslate2", "large-v3", 8, 2.0, presets.MODELE_TURBO)
+             == ("large-v3", 8, ""), "mémoire : la vitesse maximale ne change rien")
+    verifier(rythme.garde_memoire("equilibre", "ctranslate2", "large-v3", 4, 6.0, presets.MODELE_TURBO)
+             == ("large-v3", 0, "lots"), "6 Go libres : un passage à la fois")
+    verifier(rythme.garde_memoire("discret", "ctranslate2", "large-v3", 0, 4.0, presets.MODELE_TURBO)
+             == (presets.MODELE_TURBO, 0, "modele"), "4 Go libres : modèle plus léger, dit")
+    verifier(rythme.garde_memoire("discret", "ctranslate2", "large-v3", 0, 4.0, "")[0] == "large-v3",
+             "reprise ou mode avancé : le modèle n'est jamais changé")
+    verifier(rythme.garde_memoire("discret", "openvino", "turbo", 0, 0.0, "")[2] == "",
+             "mémoire illisible : rien ne change")
+
+    R = rythme.Releve
+    verifier(rythme.poste_occupe(R(inactivite_s=30))[1] == "clavier_souris"
+             and rythme.poste_occupe(R(inactivite_s=600, charge_autres=35))[1] == "charge"
+             and rythme.poste_occupe(R(inactivite_s=600, charge_autres=20), True)[0]
+             and not rythme.poste_occupe(R(inactivite_s=600, charge_autres=20), False)[0]
+             and rythme.poste_occupe(R(micro=True))[1] == "micro"
+             and rythme.poste_occupe(R(plein_ecran=True))[1] == "plein_ecran"
+             and rythme.poste_occupe(R(batterie=True))[1] == "batterie",
+             "poste occupé : clavier, charge des autres (avec hystérésis), micro, plein écran, batterie")
+
+    horloge = [0.0]
+    leviers = _FauxLeviers()
+    releve = [R(inactivite_s=5)]
+    reg = rythme.Regulateur(poste, "discret", True, capteur=lambda: releve[0], leviers=leviers,
+                            horloge=lambda: horloge[0])
+    reg.demarrer(suivre=False)
+    verifier(reg.effectif == "discret" and leviers.appels[0][1] == "discret" and not leviers.appels[0][4],
+             "départ, poste utilisé : discret, sans toucher à l'affinité (fils déjà fixés)")
+    horloge[0] = 60.0
+    releve[0] = R(inactivite_s=300, charge_autres=5)
+    verifier(reg.evaluer() == "vitesse" and leviers.appels[-1][1:3] == ("vitesse", "normale"),
+             "poste au repos depuis cinq minutes : pleine vitesse")
+    horloge[0] = 100.0
+    verifier(reg.evaluer(R(inactivite_s=300, charge_autres=40)) == "discret"
+             and reg.raison == "charge", "un autre programme prend 40 % : discret")
+    verifier(reg.evaluer(R(inactivite_s=300, charge_autres=20)) == "discret",
+             "hystérésis : à 20 % on reste discret")
+    horloge[0] = 130.0
+    verifier(reg.evaluer(R(inactivite_s=300, charge_autres=8)) == "vitesse", "à 8 % : pleine vitesse")
+    horloge[0] = 150.0
+    verifier(reg.evaluer(R(inactivite_s=300, micro=True)) == "discret", "appel en cours : discret")
+    horloge[0] = 160.0
+    bilan = reg.arreter()
+    verifier(bilan["bascules"] == 4 and abs(bilan["durees"]["vitesse"] - 60.0) < 1e-6
+             and abs(bilan["durees"]["discret"] - 100.0) < 1e-6 and leviers.appels[-1] == ("rendre",),
+             "bilan : 4 bascules, 60 s à pleine vitesse, 100 s discret, système rendu", str(bilan))
+
+    leviers = _FauxLeviers()
+    reg = rythme.Regulateur(poste, "vitesse", False, leviers=leviers)
+    reg.demarrer(suivre=False)
+    reg.arreter()
+    verifier(leviers.appels == [("qos", "haute"), ("rendre_qos",)],
+             "vitesse maximale sans adaptation : seulement le HighQoS d'avant", str(leviers.appels))
+    leviers = _FauxLeviers()
+    reg = rythme.Regulateur(poste, "discret", False, leviers=leviers)
+    reg.sur_puce = lambda: True
+    reg.demarrer(suivre=False)
+    verifier(leviers.appels[0] == ("appliquer", "discret", "basse", "eco", True) and reg.rapport_pause() == 1.0,
+             "discret sans adaptation : bornes complètes posées, affinité comprise, pause sur la puce")
+    import time as _time
+    debut = _time.monotonic()
+    fait = reg.frein(0.05)
+    verifier(abs(fait - 0.05) < 1e-9 and _time.monotonic() - debut >= 0.045,
+             "frein : pause égale au calcul sur la puce en discret")
+    verifier(reg.frein(10.0, interrompu=lambda: True) <= rythme.PAUSE_MAX_S
+             and _time.monotonic() - debut < 1.0, "frein interrompu aussitôt par une annulation")
+    reg.arreter()
+
+    verifier(rythme.restant_s(600, 30, 0.05) == 570 and abs(rythme.restant_s(600, 100, 0.5) - 100) < 1e-6
+             and abs(rythme.restant_s(600, 100, 0.2) - (0.5 * 500 + 0.5 * 400)) < 1e-6,
+             "temps restant : estimation, puis cadence observée")
+    verifier(rythme.coefficient("discret", "cpu", {"processeur": {"discret": 1.8}}) == 1.8
+             and rythme.coefficient("discret", "openvino-gpu", {"processeur": {"discret": 1.8}}) == 2.2
+             and rythme.coefficient("equilibre", "cpu", {"processeur": {"equilibre": 0.7}}) == 1.3
+             and rythme.coefficient("vitesse", "cpu", {}) == 1.0,
+             "coefficients de durée : mesure du banc, sinon repli prudent")
+
+    verifier(banc_rythmes.libre_pct(8.0, 1.0, 16) == 50.0 and banc_rythmes.libre_pct(0, 0, 16) == 0.0,
+             "banc des rythmes : processeur laissé libre")
+    g = banc_rythmes.gene({"travail_median_ms": 3.0, "travail_p95_ms": 9.0, "reveil_p95_ms": 2.0},
+                          {"travail_median_ms": 1.5, "travail_p95_ms": 3.0})
+    verifier(g == {"median": 2.0, "p95": 3.0, "reveil_p95_ms": 2.0}, "gêne rapportée au repos", str(g))
+    coef = banc_rythmes.coefficients([
+        {"etat": "ok", "variante": "vitesse", "rythme": "vitesse", "facteur": 0.1},
+        {"etat": "ok", "variante": "discret", "rythme": "discret", "facteur": 0.25},
+        {"etat": "ok", "variante": "vitesse-passive", "rythme": "vitesse", "facteur": 0.2}])
+    verifier(coef == {"discret": 2.5}, "coefficients : rythmes seuls, variantes écartées", str(coef))
+    verifier(materiel.analyser_topologie(_tampon_topologie(
+        [(1, [0, 1]), (1, [2, 3])] + [(0, [i]) for i in range(4, 12)] + [(0, [12]), (0, [13])],
+        [list(range(12))])).logiques_performants == [0, 1, 2, 3],
+        "topologie : processeurs logiques des cœurs performants à part")
+
+
 def principal() -> int:
     print(f"Vérification des fonctions périphériques de Scribouille\n{'=' * 54}")
     with tempfile.TemporaryDirectory(prefix="scribouille-verif-") as brut:
@@ -2619,6 +2860,8 @@ def principal() -> int:
         essai_openvino_faisceau()
         essai_filet_openvino()
         essai_endurance(base)
+        essai_adaptation(base)
+        essai_rythmes()
 
     print(f"\n{'=' * 54}")
     if _echecs:
