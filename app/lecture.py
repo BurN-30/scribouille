@@ -364,17 +364,26 @@ def _meta_de_lentete(entete: str, fichier: Path) -> dict:
 
 
 def _statistiques(paragraphes: list[dict], seuils: dict) -> dict:
+    """
+    Mots dont la confiance est connue, et ceux qui sont signalés. `sans_confiance`
+    compte les mots du moteur sans probabilité (OpenVINO n'en donne pas) : la
+    vue doit alors dire qu'elle ne peut rien surligner, pas laisser croire que
+    tout est sûr.
+    """
     faible = float(seuils.get("faible", compagnon.SEUIL_FAIBLE))
     total = 0
     signales = 0
+    sans_confiance = 0
     for paragraphe in paragraphes:
         for mot in paragraphe["mots"]:
             if mot["p"] < 0:
+                if mot["t"]:
+                    sans_confiance += 1
                 continue
             total += 1
             if mot["p"] < faible:
                 signales += 1
-    return {"mots": total, "signales": signales}
+    return {"mots": total, "signales": signales, "sans_confiance": sans_confiance}
 
 
 def texte_complet(paragraphes: list[dict]) -> str:

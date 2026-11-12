@@ -81,6 +81,10 @@ Corrections issues d'une revue d'usage de l'application réelle (vérifiées par
   standard) qui ne sert que l'enregistrement de la transcription ouverte,
   sous une adresse à jeton, avec les requêtes par plage qui permettent de se
   placer au début d'un paragraphe.
+- **Moteur Intel et mots douteux** : OpenVINO ne donne pas la confiance des
+  mots ; la légende de la relecture le dit au lieu d'annoncer des mots
+  surlignés qui n'existent pas, et la proposition de réglage dit ce que l'on
+  perd en choisissant ce moteur.
 - **Correction depuis la relecture** : l'en-tête du fichier texte reste séparé
   du corps ; la barre de fin d'en-tête et la première phrase ne se retrouvent
   plus sur la même ligne.

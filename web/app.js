@@ -1399,7 +1399,13 @@ function dessinerLecture() {
   const stats = d.statistiques || {};
   const legende = $('#lecture-legende');
   legende.style.display = d.compagnon ? 'flex' : 'none';
-  if (d.compagnon && stats.mots) {
+  // Un moteur sans confiance par mot (OpenVINO) ne surligne rien : la legende
+  // le dit, au lieu d'annoncer des mots surlignes qui n'existent pas.
+  const sansConfiance = !!(d.compagnon && !stats.mots && stats.sans_confiance);
+  $('#lecture-legende .exemple').style.display = sansConfiance ? 'none' : '';
+  if (sansConfiance) {
+    $('#lecture-legende-texte').textContent = t('ui.lecture.legende_sans_confiance');
+  } else if (d.compagnon && stats.mots) {
     const part = (stats.signales ? nb(stats.signales / stats.mots * 100, 1) : '0')
       + ' ' + t('unite.pourcent');
     $('#lecture-legende-texte').textContent = t('ui.lecture.legende_chiffree', {

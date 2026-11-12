@@ -180,6 +180,10 @@ def proposer(mat: Materiel, p: Profil, verdict: dict | None = None, conseil: dic
     if choix["moteur"] != "openvino":
         choix["peripherique"] = ""
 
+    # Ce que le moteur proposé retire, dit avant d'appliquer : OpenVINO ne
+    # donne pas la probabilité des mots, la relecture n'en surligne plus aucun.
+    if choix["moteur"] == "openvino":
+        notes.append(langues.t("adapt.note.sans_confiance"))
     if p.puce_intel and not p.openvino_installe:
         notes.append(langues.t("adapt.note.installer_openvino"))
     if p.puce_intel and pilote_ancien(p.pilote_intel):

@@ -214,6 +214,34 @@ def essai_apercu_et_annulation(base: Path) -> None:
              "un fichier modifié depuis n'est pas écrasé par l'annulation")
 
 
+def essai_moteur_sans_confiance(base: Path) -> None:
+    from app import adaptation, materiel
+
+    titre("Moteur sans confiance par mot : la relecture et la proposition le disent")
+    dossier = base / "openvino"
+    dossier.mkdir()
+    # Ce que rend OpenVINO : des mots horodatés, probabilité inconnue (-1).
+    txt = ecrire(dossier, [segment(0.0, 4.0, jetons("Le moteur Intel ne note pas ses mots.", p=-1.0))])
+    vue = lecture.charger(txt)
+    stats = vue["statistiques"]
+    verifier(vue["compagnon"] and stats["mots"] == 0 and stats["sans_confiance"] > 0,
+             "aucune confiance connue, et les mots sans confiance sont comptés", str(stats))
+    (dossier / "ct2").mkdir()
+    normal = lecture.charger(ecrire(dossier / "ct2", [segment(0.0, 4.0, jetons("Mots notés."))]))
+    verifier(normal["statistiques"]["sans_confiance"] == 0, "un moteur qui note ses mots n'est pas concerné")
+
+    mat = materiel.detecter()
+    profil = adaptation.Profil(processeur="essai", logiques=16, ram_go=32, openvino_installe=True)
+    proposition = adaptation.proposer(mat, profil, etat_modele=lambda _d: "complet")
+    verifier(proposition["moteur"] == "openvino"
+             and any("ne donne pas la confiance" in n for n in proposition["notes"]),
+             "proposer le moteur Intel dit ce que l'on perd", str(proposition["notes"]))
+    profil = adaptation.Profil(processeur="essai", logiques=16, ram_go=32)
+    proposition = adaptation.proposer(mat, profil, etat_modele=lambda _d: "complet")
+    verifier(not any("ne donne pas la confiance" in n for n in proposition["notes"]),
+             "le moteur habituel ne porte pas cette mention")
+
+
 def essai_ecoute(base: Path) -> None:
     import urllib.error
     import urllib.request
@@ -414,6 +442,7 @@ def principal() -> int:
         essai_vue_egale_fichier(base)
         essai_casse_et_doublons(base)
         essai_apercu_et_annulation(base)
+        essai_moteur_sans_confiance(base)
         essai_ecoute(base)
         essai_fichiers_produits(base)
         essai_file_apres_arret(base)

@@ -447,6 +447,9 @@ fr: {
 
   /* -- vue de lecture ---------------------------------------------------- */
   'ui.modale.lecture.titre': 'Transcription',
+  'ui.lecture.legende_sans_confiance': "Ce moteur ne donne pas la confiance de chaque mot : "
+    + "aucun mot n'est surligné, ce qui ne veut pas dire que tout est juste. Réécoutez les "
+    + 'passages importants.',
   'ui.lecture.legende': 'Les mots surlignés ont été entendus avec moins de certitude, '
     + "réécoutez ces passages. Survolez n'importe quel mot pour voir sa confiance.",
   'ui.lecture.legende_chiffree': 'Les mots surlignés ont été entendus avec moins de '
@@ -987,6 +990,9 @@ en: {
   'ui.apercu.copie': 'Text copied to the clipboard.',
 
   'ui.modale.lecture.titre': 'Transcript',
+  'ui.lecture.legende_sans_confiance': 'This engine does not give a confidence for each '
+    + 'word: no word is highlighted, which does not mean everything is right. Listen again to '
+    + 'the passages that matter.',
   'ui.lecture.legende': 'Highlighted words were heard with less certainty, listen to those '
     + 'passages again. Hover any word to see its confidence.',
   'ui.lecture.legende_chiffree': 'Highlighted words were heard with less certainty, listen to '
