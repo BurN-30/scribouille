@@ -1229,8 +1229,10 @@ function ligneHTML(id) {
       it.restant ? t('ui.ligne.restant', { duree: it.restant }) : '']
       .filter(Boolean).join(' · ');
   } else if (it.etat === 'termine') {
-    classeMeta = 'succes';
+    // Voix demandees mais non separees : la ligne passe a l'ambre et le dit.
+    classeMeta = it.voix_non_separees ? 'attention' : 'succes';
     meta = [t('ui.ligne.termine', { duree: it.duree_calcul || '?' }),
+      it.voix_non_separees ? t('ui.ligne.voix_non_separees') : '',
       it.facteur ? t('ui.ligne.facteur', { facteur: nb(it.facteur) }) : '',
       it.locuteurs ? t('ui.ligne.locuteurs', { n: it.locuteurs }) : '',
       it.corrections ? t('ui.ligne.corrections', { n: it.corrections }) : '']
@@ -1788,6 +1790,7 @@ window.onFichierTermine = function (id, d) {
     it.facteur = d.facteur;
     it.locuteurs = d.locuteurs;
     it.corrections = d.corrections;
+    it.voix_non_separees = !!d.voix_non_separees;
   } else if (d.annule) {
     it.etat = 'annule';
     it.message = t('ui.ligne.arrete');
@@ -1807,6 +1810,8 @@ window.onFileTerminee = function (d) {
     setEtat(t('ui.etat.bilan_echecs', { reussis: d.reussis, echecs: d.echecs }), 'erreur');
   } else if (d.annules) {
     setEtat(t('ui.etat.bilan_arrete', { reussis: d.reussis }), '');
+  } else if (d.voix_non_separees) {
+    setEtat(t('ui.etat.bilan_ok_sans_voix', { reussis: d.reussis }), 'attention');
   } else {
     setEtat(t('ui.etat.bilan_ok', { reussis: d.reussis }), 'succes');
   }

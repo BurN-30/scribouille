@@ -106,6 +106,7 @@ fr: {
   'ui.ligne.lire': 'Lire la transcription',
   'ui.ligne.journal': 'Ouvrir le journal',
   'ui.ligne.retirer': 'Retirer',
+  'ui.ligne.voix_non_separees': 'voix non séparées',
   'ui.ligne.relancer': 'Relancer',
 
   /* -- réglages : qualité ----------------------------------------------- */
@@ -367,6 +368,7 @@ fr: {
   'ui.etat.bilan_echecs': '{reussis} réussie(s), {echecs} en échec',
   'ui.etat.bilan_arrete': 'Arrêté, {reussis} transcription(s) produite(s)',
   'ui.etat.bilan_ok': '{reussis} transcription(s) terminée(s)',
+  'ui.etat.bilan_ok_sans_voix': '{reussis} transcription(s) terminée(s), voix non séparées',
   'ui.etat.file_terminee': 'File terminée : {reussis} réussie(s), {echecs} en échec, '
     + '{annules} annulée(s).',
   'ui.etat.en_cours': '{message}, {nom}',
@@ -674,6 +676,7 @@ en: {
   'ui.ligne.lire': 'Read the transcript',
   'ui.ligne.journal': 'Open the log',
   'ui.ligne.retirer': 'Remove',
+  'ui.ligne.voix_non_separees': 'voices not separated',
   'ui.ligne.relancer': 'Run again',
 
   'ui.section.qualite': 'Transcription quality',
@@ -918,6 +921,7 @@ en: {
   'ui.etat.bilan_echecs': '{reussis} done, {echecs} failed',
   'ui.etat.bilan_arrete': 'Stopped, {reussis} transcript(s) produced',
   'ui.etat.bilan_ok': '{reussis} transcript(s) finished',
+  'ui.etat.bilan_ok_sans_voix': '{reussis} transcript(s) finished, voices not separated',
   'ui.etat.file_terminee': 'Queue finished: {reussis} done, {echecs} failed, {annules} '
     + 'cancelled.',
   'ui.etat.en_cours': '{message}, {nom}',

@@ -117,7 +117,9 @@ def construire_entete(source: Path, details: dict) -> str:
         entrees.append((langues.t("ent.locuteurs"),
                         langues.t("ent.valeur.locuteurs", n=details["nb_locuteurs"])))
     elif details.get("diarisation_demandee"):
-        entrees.append((langues.t("ent.locuteurs"), langues.t("ent.valeur.non_separes")))
+        entrees.append((langues.t("ent.locuteurs"), langues.t(
+            "ent.valeur.non_installee" if details.get("diarisation_absente")
+            else "ent.valeur.non_separes")))
     if details.get("corrections_appliquees"):
         entrees.append((langues.t("ent.corrections"), langues.t(
             "ent.valeur.corrections", n=details["corrections_appliquees"])))

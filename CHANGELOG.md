@@ -93,6 +93,11 @@ Corrections issues d'une revue d'usage de l'application réelle (vérifiées par
   locuteurs n'allonge plus l'estimation quand elle n'est pas installée ; une
   mesure prise en rythme équilibré ou discret est rangée ramenée à la vitesse
   maximale, le coefficient du rythme n'est donc plus compté deux fois.
+- **Séparation des voix cochée mais absente** : c'est dit avant de lancer,
+  dans les avertissements des réglages ; la ligne du fichier et l'état final
+  passent à l'ambre avec « voix non séparées » au lieu d'un « Terminé » tout
+  vert ; l'en-tête du fichier en donne la raison ; plus de phase de
+  séparation ni de barre bloquée à 85 % pour une séparation impossible.
 - **Correction depuis la relecture** : l'en-tête du fichier texte reste séparé
   du corps ; la barre de fin d'en-tête et la première phrase ne se retrouvent
   plus sur la même ligne.

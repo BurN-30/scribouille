@@ -437,6 +437,109 @@ class _MoteurInerte:
         pass
 
 
+class _MoteurFactice(_MoteurInerte):
+    """Moteur qui « transcrit » en rendant des segments préparés, sans modèle."""
+
+    tokeniseur = None
+
+    def __init__(self, segments: list[Segment], pause: float = 0.0):
+        self.segments = segments
+        self.pause = pause
+
+    def charger(self, modele: str, signaler) -> None:
+        import time
+
+        signaler("info", f"Chargement du modèle {modele}...")
+        time.sleep(self.pause)
+
+    def transcrire(self, signal, duree, langue, reglages, amorce="", progression=None,
+                   interrompu=None, decalage=0.0, sur_segment=None):
+        import time
+
+        for rang, seg in enumerate(self.segments, start=1):
+            time.sleep(self.pause)
+            if sur_segment:
+                sur_segment(seg)
+            if progression:
+                progression(rang / len(self.segments))
+        return list(self.segments), {"duree": duree, "langue": langue,
+                                     "peripherique": "cpu", "type_calcul": "int8"}
+
+
+def file_factice(base: Path, nom: str, config_en_plus: dict, pause: float = 0.0):
+    """
+    Une vraie file sur un faux enregistrement : décodage et moteur remplacés,
+    tout le reste (phases, progression, écriture, bilans) est le vrai chemin.
+    Renvoie (bilan de la file, rappels reçus dans l'ordre, dossier de sortie).
+    """
+    import copy
+    import threading
+    import time
+
+    import numpy as np
+
+    from app import audio as audio_module, config as config_module, materiel, traitement
+
+    dossier = base / nom
+    dossier.mkdir()
+    audio = dossier / "reunion.wav"
+    audio.write_bytes(b"\0" * 64)
+    segments = reunion_sans_locuteurs()
+    duree = segments[-1].fin + 1.0
+    file = traitement.FileTraitement(materiel.detecter())
+    file.ajouter([str(audio)])
+    config = copy.deepcopy(config_module.DEFAUTS)
+    config.update({"dossier_sortie": str(dossier / "sorties"), "sauvegarde_progressive": False,
+                   "utiliser_glossaire": False, "appliquer_corrections": False, **config_en_plus})
+    recus: list[tuple] = []
+    fini = threading.Event()
+    bilan: dict = {}
+    depart = time.monotonic()
+    rappels = traitement.Rappels(
+        etat=lambda i, e, m: recus.append(("etat", e, m, time.monotonic() - depart)),
+        progression=lambda i, d: recus.append(("progression", dict(d), time.monotonic() - depart)),
+        termine=lambda i, d: recus.append(("termine", dict(d))),
+        journal_ui=lambda n, t: recus.append(("journal", n, t)),
+        file_terminee=lambda d: (bilan.update(d), fini.set()),
+    )
+    fabriquer, decoder = traitement.fabriquer_moteur, audio_module.decoder
+    traitement.fabriquer_moteur = lambda *_: _MoteurFactice(segments, pause)
+    audio_module.decoder = lambda *_a, **_k: np.zeros(int(duree * audio_module.FREQUENCE), dtype=np.float32)
+    try:
+        file.demarrer(config, rappels)
+        fini.wait(120)
+    finally:
+        traitement.fabriquer_moteur, audio_module.decoder = fabriquer, decoder
+    return bilan, recus, dossier / "sorties"
+
+
+def essai_voix_non_installees(base: Path) -> None:
+    from app import diarisation
+
+    titre("Séparation des voix cochée mais absente : dit avant, et dans l'état final")
+    if diarisation.disponible():
+        print("  (séparation des locuteurs installée sur ce poste : essai sans objet)")
+        return
+    racine = chemins.RACINE
+    chemins.RACINE = base / "racine-voix"
+    chemins.RACINE.mkdir()
+    try:
+        bilan, recus, sorties_dossier = file_factice(base, "voix", {"diarisation": True})
+    finally:
+        chemins.RACINE = racine
+    termine = next((r[1] for r in recus if r[0] == "termine"), {})
+    phases = [r[1] for r in recus if r[0] == "etat"]
+    verifier(termine.get("ok") and termine.get("voix_non_separees") is True,
+             "la ligne du fichier sait que les voix n'ont pas été séparées", str(termine))
+    verifier(bilan.get("voix_non_separees") == 1, "le bilan de la file le compte", str(bilan))
+    verifier("locuteurs" not in phases, "pas de phase « séparation » qui ne peut pas avoir lieu", str(phases))
+    pourcents = [r[1]["pct"] for r in recus if r[0] == "progression"]
+    verifier(max(x for x in pourcents if x < 100) == 99,
+             "la barre ne plafonne pas à 85 % pour une séparation absente", str(pourcents))
+    texte = next(sorties_dossier.glob("*.txt")).read_text(encoding="utf-8")
+    verifier("n'est pas installée" in texte, "l'en-tête dit pourquoi, sans renvoyer au journal")
+
+
 def essai_file_apres_arret(base: Path) -> None:
     import copy
     import threading
@@ -511,6 +614,7 @@ def principal() -> int:
         essai_ecoute(base)
         essai_fichiers_produits(base)
         essai_une_seule_verite(base)
+        essai_voix_non_installees(base)
         essai_file_apres_arret(base)
 
     print(f"\n{'=' * 42}")

@@ -1276,6 +1276,7 @@ def essai_reprise_locuteurs(base: Path) -> None:
         (reprise, "lire_etat"): reprise.lire_etat,
         (reprise, "lire_segments"): reprise.lire_segments,
         (diarisation, "diariser"): diarisation.diariser,
+        (diarisation, "disponible"): diarisation.disponible,
         (sorties, "ecrire_tout"): sorties.ecrire_tout,
         (traitement.calibration, "enregistrer"): traitement.calibration.enregistrer,
     }
@@ -1285,6 +1286,9 @@ def essai_reprise_locuteurs(base: Path) -> None:
     reprise.lire_segments = lambda cle: [
         moteur.Segment(debut=0.0, fin=position, texte="début")]
     diarisation.diariser = diariser_simule
+    # La séparation simulée vaut une séparation installée : sans cela, la file
+    # ne la tente plus (elle sait qu'elle ne tournerait pas).
+    diarisation.disponible = lambda: True
     sorties.ecrire_tout = lambda *a, **k: []
     traitement.calibration.enregistrer = lambda *a, **k: None
     try:

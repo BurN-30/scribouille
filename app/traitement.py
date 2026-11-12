@@ -282,7 +282,7 @@ class FileTraitement:
                          choisi, " (adaptation automatique)" if regulateur.auto else "",
                          charge.fils, reglages["lot"], charge.priorite, charge.qos)
 
-        reussis, echoues, annules = 0, 0, 0
+        reussis, echoues, annules, sans_voix = 0, 0, 0, 0
         # Une transcription d'une heure et demie ne doit pas s'arrêter parce que
         # le portable se met en veille faute d'activité (le capot fermé, lui,
         # garde son effet : c'est un geste explicite).
@@ -299,7 +299,8 @@ class FileTraitement:
                     # lancement, au lieu de finir « annulés » sans issue.
                     break
                 try:
-                    self._traiter(element, config, reglages, instance, rappels)
+                    if self._traiter(element, config, reglages, instance, rappels):
+                        sans_voix += 1
                     reussis += 1
                 except moteur.Interruption:
                     element.etat = "annule"
@@ -336,12 +337,16 @@ class FileTraitement:
                 "reussis": reussis,
                 "echecs": echoues,
                 "annules": annules,
+                # Transcriptions réussies dont les voix n'ont pas été séparées
+                # alors que c'était demandé.
+                "voix_non_separees": sans_voix,
             })
 
     # -- traitement d'un fichier -------------------------------------------
 
     def _traiter(self, element: Element, config: dict, reglages: dict,
-                 instance: moteur.MoteurTranscription, rappels: Rappels) -> None:
+                 instance: moteur.MoteurTranscription, rappels: Rappels) -> bool:
+        """Mène un fichier à son terme ; vrai si les voix demandées n'ont pas été séparées."""
         depart = time.time()
         source = Path(element.chemin)
         journal.info("=" * 60)
@@ -479,7 +484,7 @@ class FileTraitement:
 
         def progression(part: float) -> None:
             ecoule = time.time() - depart
-            part_transcription = 0.85 if config.get("diarisation") else 1.0
+            part_transcription = 0.85 if diarisation.effective(config.get("diarisation")) else 1.0
             pourcent = int(part * part_transcription * 100)
             # Estimation au départ, puis cadence observée : elle suit d'elle-même
             # les bascules du rythme automatique.
@@ -540,7 +545,9 @@ class FileTraitement:
 
         # 4. Diarisation, optionnelle et jamais bloquante
         nb_locuteurs = 0
-        if config.get("diarisation") and segments:
+        # Demandée mais pas installée : rien à tenter (c'est dit au lancement et
+        # dans l'état final), et ni phase « séparation » ni barre bloquée à 85 %.
+        if diarisation.effective(config.get("diarisation")) and segments:
             element.etat = "locuteurs"
             rappels.etat(element.identifiant, "locuteurs", langues.t("etat.locuteurs"))
             rappels.progression(element.identifiant, {
@@ -593,6 +600,8 @@ class FileTraitement:
             "preset_nom": reglages["preset_nom"],
             "nb_locuteurs": nb_locuteurs,
             "diarisation_demandee": bool(config.get("diarisation")),
+            "diarisation_absente": bool(config.get("diarisation"))
+            and not diarisation.effective(True),
             "corrections_appliquees": remplacements,
             "termes_amorce": amorce_info["nb_retenus"],
             "temps_calcul": temps_calcul,
@@ -634,5 +643,9 @@ class FileTraitement:
             "duree": presets.formater_duree(temps_calcul),
             "facteur": round(details["facteur_reel"], 2),
             "locuteurs": nb_locuteurs,
+            # Voix demandées mais non séparées (non installée, ou échec) : la
+            # ligne et l'état final le disent, au lieu d'un « Terminé » tout vert.
+            "voix_non_separees": bool(config.get("diarisation")) and not nb_locuteurs,
             "corrections": remplacements,
         })
+        return bool(config.get("diarisation")) and not nb_locuteurs

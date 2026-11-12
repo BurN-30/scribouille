@@ -990,6 +990,7 @@ _FR: dict[str, str] = {
     "ent.valeur.modele": "{modele}  ({preset})",
     "ent.valeur.locuteurs": "{n} détectés",
     "ent.valeur.non_separes": "non séparés (voir le journal)",
+    "ent.valeur.non_installee": "non séparés, la séparation des locuteurs n'est pas installée",
     "ent.valeur.corrections": "{n} remplacements automatiques",
     "ent.valeur.glossaire": "{n} termes envoyés au modèle",
     "ent.valeur.temps_calcul": "{duree}  (facteur {facteur} x temps réel)",
@@ -1076,6 +1077,11 @@ _FR: dict[str, str] = {
     "app.demarrer.file_vide": "Aucun fichier en attente dans la file.",
     "app.demarrer.lancee": "Démarrage de la file.",
     "app.diar.ignoree": "Séparation des locuteurs ignorée : {raison}",
+    "app.diar.non_installee": (
+        "La séparation des locuteurs est cochée mais n'est pas installée : les "
+        "transcriptions ne distingueront pas les voix. Elle s'installe une fois "
+        "(environ 3,6 Go) depuis le panneau « Locuteurs »."
+    ),
     "app.diar.sans_jeton": (
         "Aucun jeton Hugging Face : la transcription se fera sans étiquettes de locuteur."
     ),
@@ -2365,6 +2371,7 @@ _EN: dict[str, str] = {
     "ent.valeur.modele": "{modele}  ({preset})",
     "ent.valeur.locuteurs": "{n} detected",
     "ent.valeur.non_separes": "not separated (see the log)",
+    "ent.valeur.non_installee": "not separated, speaker separation is not installed",
     "ent.valeur.corrections": "{n} automatic replacements",
     "ent.valeur.glossaire": "{n} terms sent to the model",
     "ent.valeur.temps_calcul": "{duree}  (factor {facteur} x real time)",
@@ -2450,6 +2457,10 @@ _EN: dict[str, str] = {
     "app.demarrer.file_vide": "No file waiting in the queue.",
     "app.demarrer.lancee": "Queue started.",
     "app.diar.ignoree": "Speaker separation skipped: {raison}",
+    "app.diar.non_installee": (
+        "Speaker separation is ticked but not installed: transcripts will not tell the "
+        "voices apart. It is installed once (about 3.6 GB) from the \"Speakers\" panel."
+    ),
     "app.diar.sans_jeton": (
         "No Hugging Face token: the transcription will run without speaker labels."
     ),

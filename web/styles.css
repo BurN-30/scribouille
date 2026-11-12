@@ -315,6 +315,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .ligne .meta { font-size: 11.5px; color: var(--texte-faible); margin-top: 2px; font-variant-numeric: tabular-nums; }
 .ligne .meta.erreur { color: var(--rouge); }
 .ligne .meta.succes { color: var(--vert); }
+.ligne .meta.attention { color: var(--ambre); }
 
 .barre { height: 4px; background: var(--bordure); border-radius: 999px; overflow: hidden; margin-top: 7px; }
 .barre span { display: block; height: 100%; background: var(--accent); border-radius: 999px; transition: width 400ms ease; }
@@ -575,6 +576,7 @@ textarea { resize: vertical; font-family: var(--police-mono); font-size: 12.5px;
 .etat-global.actif .point { background: var(--accent); animation: pulsation 1.4s ease-in-out infinite; }
 .etat-global.succes .point { background: var(--vert); }
 .etat-global.erreur .point { background: var(--rouge); }
+.etat-global.attention .point { background: var(--ambre); }
 .etat-global .texte { color: var(--texte-doux); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 @keyframes pulsation { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }

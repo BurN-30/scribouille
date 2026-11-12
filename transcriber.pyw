@@ -605,6 +605,10 @@ class Passerelle:
         annonce = self._annonce_telechargement()
         if annonce:
             messages.insert(0, annonce)
+        # Dit AVANT de lancer, là où l'on regarde les réglages, et pas seulement
+        # dans le journal une fois la file partie.
+        if self.config.get("diarisation") and not diarisation.effective(True):
+            messages.append(langues.t("app.diar.non_installee"))
         return messages
 
     def _modele_courant(self) -> str:
