@@ -100,7 +100,8 @@ class Session:
     # -- cycle de vie ------------------------------------------------------
 
     def ouvrir(self, source: Path, modele: str, duree_audio: float,
-               position: float = 0.0, nb_segments: int = 0, ecoule: float = 0.0) -> None:
+               position: float = 0.0, nb_segments: int = 0, ecoule: float = 0.0,
+               sortie: str = "") -> None:
         if not self.active:
             return
         self.position = position
@@ -113,6 +114,9 @@ class Session:
             "duree_audio": round(float(duree_audio or 0), 2),
             "debut": datetime.now().isoformat(timespec="seconds"),
         }
+        # Dossier de sortie demandé : « scribouille reprendre » y écrit aussi.
+        if sortie:
+            self._infos["sortie"] = str(sortie)
         try:
             self._flux = _fichier_segments(self.identifiant).open("a", encoding="utf-8")
         except OSError as exc:

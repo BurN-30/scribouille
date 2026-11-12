@@ -542,6 +542,14 @@ def essai_instances(base: Path) -> None:
                  "le verrou d'un processus disparu est repris")
         instance.rendre_fichier(source)
         verifier(not verrou.exists(), "le verrou est rendu en fin de fichier")
+        from app import reprise
+
+        session = reprise.Session("essai-sortie", active=True)
+        session.ouvrir(source, "tiny", 60.0, sortie=str(base / "ailleurs"))
+        session.fermer()
+        verifier(reprise.lire_etat("essai-sortie").get("sortie") == str(base / "ailleurs"),
+                 "une reprise garde le dossier de sortie demandé (scribouille reprendre y écrit)")
+        session.effacer()
         from app import cli, langues
 
         langues.definir("fr")

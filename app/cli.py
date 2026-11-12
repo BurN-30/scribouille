@@ -710,7 +710,10 @@ def cmd_reprendre(options, sortie: Sortie) -> int:
         else:
             config["mode_avance"], config["modele_avance"] = True, choisie["modele"]
     source = Path(choisie["chemin"])
-    dossier = Path(options.sortie).expanduser().resolve() if options.sortie else source.parent
+    # Sans --sortie : le dossier que la transcription interrompue visait.
+    ancien = str((reprise.lire_etat(choisie["cle"]) or {}).get("sortie") or "")
+    dossier = (Path(options.sortie).expanduser().resolve() if options.sortie
+               else Path(ancien) if ancien and Path(ancien).is_dir() else source.parent)
     dossier.mkdir(parents=True, exist_ok=True)
     element = traitement.Element(identifiant="r1", chemin=str(source), nom=source.name, taille=source.stat().st_size,
                                  reprise=choisie["cle"], sortie=str(dossier))

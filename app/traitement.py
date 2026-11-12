@@ -613,7 +613,7 @@ class FileTraitement:
             session.ouvrir(
                 source, reglages["modele"], duree_audio,
                 position=decalage, nb_segments=len(deja_transcrits),
-                ecoule=ecoule_anterieur,
+                ecoule=ecoule_anterieur, sortie=str(config.get("dossier_sortie") or ""),
             )
             if session.active:
                 getattr(rappels, "reprise", lambda i, c: None)(element.identifiant, identifiant)
