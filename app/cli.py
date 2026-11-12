@@ -45,7 +45,7 @@ SCHEMA = "scribouille.cli/1"
 
 OK, ECHEC_PARTIEL, ARGUMENTS, PAS_PRET, SORTIE_EXISTANTE, INTERROMPU, RESSOURCE = 0, 1, 2, 3, 4, 5, 6
 
-COMMANDES = ("transcrire", "reprendre", "etat", "lire", "reglages", "diagnostic", "agent", "espace",
+COMMANDES = ("transcrire", "reprendre", "etat", "lire", "exporter", "reglages", "diagnostic", "agent", "espace",
              "effacer", "vocabulaire", "mesurer", "materiel", "donnees", "verifier", "aide", "version")
 
 #: Réglages accessibles par `reglages`, avec leur effet. Les clés absentes
@@ -250,6 +250,14 @@ def _analyseur() -> argparse.ArgumentParser:
     lire.add_argument("--texte", action="store_true")
     lire.add_argument("--json", action="store_true")
 
+    x = s.add_parser("exporter", add_help=False)
+    x.add_argument("fichier")
+    x.add_argument("--format", default="md", choices=("md",))
+    choix = x.add_mutually_exclusive_group()
+    choix.add_argument("--remplacer", action="store_true")
+    choix.add_argument("--nouveau", action="store_true")
+    x.add_argument("--json", action="store_true")
+
     g = s.add_parser("reglages", add_help=False)
     g.add_argument("action", nargs="?", default="liste", choices=("liste", "lire", "definir", "defaut"))
     g.add_argument("valeurs", nargs="*")
@@ -320,6 +328,8 @@ AIDE = """Scribouille {version}, transcription locale, sans fenêtre.
   scribouille reprendre [CLE|FICHIER]          reprendre une transcription interrompue
   scribouille etat                             transcriptions en cours et reprenables, moteurs actifs
   scribouille lire SORTIE.json [--depuis S --jusqua S] [--limite N --decalage N] [--douteux] [--texte]
+  scribouille exporter SORTIE.txt [--format md] [--remplacer|--nouveau]
+                                               export à côté ; remplace un export intact de Scribouille
   scribouille reglages [liste|lire CLE|definir CLE=VALEUR...|defaut CLE]
   scribouille diagnostic [--materiel]          prêt ou non, et pourquoi
   scribouille espace                           ce que Scribouille occupe, par poste
@@ -727,6 +737,27 @@ def cmd_etat(options, sortie: Sortie) -> int:
         lignes.append(f"  {t['nom']} : {t['pct']} % ({presets.formater_duree(t['position'])} sur "
                       f"{presets.formater_duree(t['duree_audio'])}), {t['etat']}, clé {t['cle']}")
     sortie.donnees({"moteurs": moteurs, "taches": taches}, "\n".join(lignes))
+    return OK
+
+
+def cmd_exporter(options, sortie: Sortie) -> int:
+    from . import relecture
+
+    fichier = Path(options.fichier).expanduser()
+    if fichier.suffix.lower() == ".json":
+        fichier = fichier.with_suffix(".txt")
+    if not fichier.is_file():
+        raise Echec("introuvable", f"transcription introuvable : {fichier}", ARGUMENTS)
+    forcer = True if options.remplacer else False if options.nouveau else None
+    resultat = relecture.enregistrer_export(fichier, "." + options.format, relecture.markdown(fichier), forcer)
+    if not resultat.get("ok"):
+        raise Echec(str(resultat.get("code") or "echec"), f"export non écrit : {resultat.get('code')}", ECHEC_PARTIEL)
+    texte = f"Export écrit : {resultat['chemin']}"
+    if resultat.get("variante"):
+        texte += " (l'export précédent a été modifié ou n'est pas de Scribouille : gardé tel quel)"
+    elif resultat.get("remplace"):
+        texte += " (remplace l'export précédent, intact)"
+    sortie.donnees(resultat, texte)
     return OK
 
 
@@ -1268,6 +1299,7 @@ def cmd_donnees(options, sortie: Sortie) -> int:
 
 _COMMANDES = {
     "transcrire": cmd_transcrire, "reprendre": cmd_reprendre, "etat": cmd_etat, "lire": cmd_lire,
+    "exporter": cmd_exporter,
     "reglages": cmd_reglages, "diagnostic": cmd_diagnostic, "agent": cmd_agent, "espace": cmd_espace,
     "effacer": cmd_effacer, "vocabulaire": cmd_vocabulaire, "mesurer": cmd_mesurer, "materiel": cmd_materiel,
     "donnees": cmd_donnees, "verifier": cmd_verifier,

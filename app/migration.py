@@ -48,7 +48,7 @@ FICHIERS = (
     NOM_CHOIX_MODELES, "calibration.json", "maj-etat.json", "surveillance-vus.json",
     "vocabulaire.toml", "materiel.json", "openvino-chargement-en-cours.txt",
     # Positions de lecture de la relecture, depuis la 2.5.
-    "relecture-positions.json",
+    "relecture-positions.json", "exports.json",
 )
 #: Fichiers datés ou dérivés, reconnus à leur nom.
 MOTIFS = (

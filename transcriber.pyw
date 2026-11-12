@@ -2281,6 +2281,12 @@ class Passerelle:
 
         return relecture.enregistrer_export(chemin, extension, contenu)
 
+    def markdown_relecture(self, chemin: str) -> str:
+        """Export Markdown d'une transcription (même texte que la relecture)."""
+        from app import relecture
+
+        return relecture.markdown(chemin)
+
     def ouvrir_dossier_de(self, chemin: str) -> None:
         """Ouvre le dossier qui contient ce fichier."""
         self.ouvrir(str(Path(chemin or "").parent))

@@ -79,7 +79,8 @@ _GROUPES = {
     "affichage": ("webview",),
     # Pile d'annulation de la relecture (avec l'original de chaque texte
     # corrigé) et dernière position de lecture par transcription.
-    "relecture": ("historique-relecture", "relecture-positions.json", "relecture-positions.json.scribouille-tmp"),
+    "relecture": ("historique-relecture", "relecture-positions.json", "relecture-positions.json.scribouille-tmp",
+                  "exports.json"),
 }
 
 #: Postes libérables sans rien perdre : refaits ou retéléchargés au besoin.

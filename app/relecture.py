@@ -22,10 +22,13 @@ aucune phrase n'est ajoutée au catalogue Python.
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
+import os
 import re
 from pathlib import Path
 
-from . import journal, lecture, sorties
+from . import chemins, journal, lecture, sorties
 
 #: Endroits détaillés au plus dans un aperçu : au-delà, « tout corriger » reste
 #: possible, mais la liste ne sert plus à choisir.
@@ -222,19 +225,99 @@ def renommer_locuteur(chemin: str | Path, ancien: str, nouveau: str, empreinte: 
 EXTENSIONS_EXPORT = (".md",)
 
 
-def enregistrer_export(chemin: str | Path, extension: str, contenu: str) -> dict:
-    """Écrit un export à côté de la transcription, sans jamais écraser un fichier."""
+#: Empreinte de chaque export écrit par Scribouille, pour savoir s'il a été
+#: retouché depuis (dans le dossier de données, poste « Relecture »).
+def _fichier_exports() -> Path:
+    return chemins.RACINE / "exports.json"
+
+
+def _empreinte(octets: bytes) -> str:
+    return hashlib.sha256(octets).hexdigest()
+
+
+def _lire_exports() -> dict:
+    try:
+        donnees = json.loads(_fichier_exports().read_text(encoding="utf-8"))
+        return donnees if isinstance(donnees, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _cle_export(cible: Path) -> str:
+    try:
+        return str(cible.resolve()).lower()
+    except OSError:
+        return str(cible).lower()
+
+
+def markdown(chemin: str | Path) -> str:
+    """
+    Export Markdown d'une transcription : titre, repères (durée, date, voix),
+    paragraphes avec leur heure et leur locuteur. Même texte que la relecture.
+    """
+    d = lecture.charger(chemin)
+    meta = d.get("meta") or {}
+    reperes = " · ".join(str(x) for x in (meta.get("duree"), meta.get("date"),
+                                           meta.get("locuteurs_texte") if meta.get("locuteurs") else "") if x)
+    nom = str(d.get("nom") or meta.get("fichier") or "")
+    lignes = [f"# {re.sub(r'(?i)[.]txt$', '', nom)}", ""]
+    if reperes:
+        lignes += [f"*{reperes}*", ""]
+    corps = []
+    for p in d.get("paragraphes") or []:
+        tete = []
+        if p.get("debut") is not None:
+            total = max(0, int(float(p["debut"] or 0)))
+            tete.append(f"[{total // 3600:02d}:{total % 3600 // 60:02d}:{total % 60:02d}]")
+        if p.get("locuteur"):
+            tete.append(str(p["locuteur"]))
+        corps.append((f"**{' '.join(tete)}** " if tete else "") + str(p.get("texte") or ""))
+    return "\n".join(lignes + ["\n\n".join(corps)]) + "\n"
+
+
+def enregistrer_export(chemin: str | Path, extension: str, contenu: str,
+                       remplacer: bool | None = None) -> dict:
+    """
+    Écrit un export à côté de la transcription. Le `.txt` n'est jamais touché.
+
+    Un export est un fichier dérivé : s'il existe déjà, qu'il vient de
+    Scribouille et n'a pas été modifié depuis (empreinte gardée), le nouveau
+    le remplace. Retouché à la main ou d'un autre outil, il est gardé et
+    l'export part dans une variante numérotée (« -2 »), ce qui est dit.
+    `remplacer` force l'un (True) ou l'autre (False).
+    """
     fichier = Path(chemin or "")
     extension = str(extension or "").lower()
     if extension not in EXTENSIONS_EXPORT:
         return {"ok": False, "code": "format_refuse"}
     if not fichier.parent.is_dir():
         return {"ok": False, "code": "absent"}
-    cible = sorties.chemin_libre(fichier.parent, fichier.stem, extension)
+    cible = fichier.parent / f"{fichier.stem}{extension}"
+    exports = _lire_exports()
+    remplace = variante = False
+    if cible.exists():
+        try:
+            intact = exports.get(_cle_export(cible)) == _empreinte(cible.read_bytes())
+        except OSError:
+            intact = False
+        if remplacer is True or (remplacer is None and intact):
+            remplace = True
+        else:
+            cible = sorties.chemin_libre(fichier.parent, fichier.stem, extension)
+            variante = True
+    octets = (contenu or "").encode("utf-8")
     try:
-        cible.write_text(contenu or "", encoding="utf-8")
+        provisoire = cible.with_name(cible.name + ".scribouille-tmp")
+        provisoire.write_bytes(octets)
+        os.replace(provisoire, cible)
     except OSError as exc:
         journal.attention("Export non écrit (%s) : %s", cible, exc)
         return {"ok": False, "code": "non_reecrit"}
-    journal.info("Export écrit : %s", cible)
-    return {"ok": True, "chemin": str(cible), "nom": cible.name}
+    exports[_cle_export(cible)] = _empreinte(octets)
+    try:
+        _fichier_exports().parent.mkdir(parents=True, exist_ok=True)
+        _fichier_exports().write_text(json.dumps(exports, ensure_ascii=False, indent=0), encoding="utf-8")
+    except OSError as exc:
+        journal.attention("Empreinte de l'export non gardée : %s", exc)
+    journal.info("Export écrit : %s (%s)", cible, "remplacé" if remplace else "variante" if variante else "nouveau")
+    return {"ok": True, "chemin": str(cible), "nom": cible.name, "remplace": remplace, "variante": variante}

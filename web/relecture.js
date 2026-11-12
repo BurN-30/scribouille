@@ -937,18 +937,10 @@ function paragraphesAvecHeures() {
 
 /* Markdown : titre, une ligne de reperes (duree, date, et les locuteurs
    seulement s'il y en a), puis les paragraphes. */
+/* Le Markdown vient de Python (app/relecture.py, `markdown`) : le meme texte
+   pour la copie, l'enregistrement et `scribouille exporter`. */
 function markdown() {
-  const d = lect.d;
-  const m = d.meta || {};
-  const reperes = [m.duree, m.date, m.locuteurs ? m.locuteurs_texte : ''].filter(Boolean).join(' · ');
-  const entete = [`# ${String(d.nom || m.fichier || '').replace(/\.txt$/i, '')}`, ''];
-  if (reperes) entete.push(`*${reperes}*`, '');
-  const corps = (d.paragraphes || []).map((p) => {
-    const tete = [p.debut === null || p.debut === undefined ? '' : `[${horodatage(p.debut)}]`, p.locuteur || '']
-      .filter(Boolean).join(' ');
-    return (tete ? `**${tete}** ` : '') + p.texte;
-  });
-  return entete.concat(corps.join('\n\n')).join('\n') + '\n';
+  return appelPasserelle('markdown_relecture', lect.chemin);
 }
 
 async function exporter(nature) {
@@ -963,11 +955,13 @@ async function exporter(nature) {
     await copier(paragraphesAvecHeures());
     statutRelecture(t('ui.rl.copie.heures'), 'ok');
   } else if (nature === 'markdown') {
-    await copier(markdown());
+    await copier(await markdown());
     statutRelecture(t('ui.rl.copie.markdown'), 'ok');
   } else if (nature === 'enregistrer_md') {
-    const r = await appelPasserelle('enregistrer_export', lect.chemin, '.md', markdown());
-    statutRelecture(r.ok ? t('ui.rl.export_ecrit', { nom: r.nom }) : t('ui.rl.code.' + (r.code || 'echec')),
+    const r = await appelPasserelle('enregistrer_export', lect.chemin, '.md', await markdown());
+    // Export intact de Scribouille : remplace ; retouche a la main : variante, et on le dit.
+    const cle = !r.ok ? '' : (r.variante ? 'ui.rl.export_variante' : (r.remplace ? 'ui.rl.export_remplace' : 'ui.rl.export_ecrit'));
+    statutRelecture(r.ok ? t(cle, { nom: r.nom }) : t('ui.rl.code.' + (r.code || 'echec')),
       r.ok ? 'ok' : 'erreur');
     if (r.ok) journaliser('ok', t('ui.rl.export_ecrit', { nom: r.chemin }));
   } else if (nature === 'ouvrir') {

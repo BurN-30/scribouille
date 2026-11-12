@@ -843,12 +843,32 @@ def essai_relecture_ciblee(base: Path) -> None:
     verifier(relecture.renommer_locuteur(txt, "Locuteur 1", "1 : x").get("code") == "nom_invalide",
              "un nom qui ne se relirait pas depuis le fichier est refusé")
 
-    retour = relecture.enregistrer_export(txt, ".md", "# Essai\n")
-    verifier(retour.get("ok") and Path(retour["chemin"]).read_text(encoding="utf-8") == "# Essai\n"
-             and Path(retour["chemin"]).parent == txt.parent,
-             "l'export Markdown s'écrit à côté de la transcription", str(retour))
-    second = relecture.enregistrer_export(txt, ".md", "# Autre\n")
-    verifier(second.get("ok") and second["chemin"] != retour["chemin"], "un export n'en écrase jamais un autre")
+    empreintes = relecture._fichier_exports
+    relecture._fichier_exports = lambda: txt.parent / "exports-essai.json"
+    try:
+        retour = relecture.enregistrer_export(txt, ".md", "# Essai\n")
+        verifier(retour.get("ok") and Path(retour["chemin"]).read_text(encoding="utf-8") == "# Essai\n"
+                 and Path(retour["chemin"]).parent == txt.parent,
+                 "l'export Markdown s'écrit à côté de la transcription", str(retour))
+        second = relecture.enregistrer_export(txt, ".md", "# Autre\n")
+        verifier(second.get("ok") and second["chemin"] == retour["chemin"] and second["remplace"]
+                 and Path(second["chemin"]).read_text(encoding="utf-8") == "# Autre\n",
+                 "un export intact de Scribouille est remplacé par le nouveau", str(second))
+        Path(second["chemin"]).write_text("# Autre\nNote ajoutée à la main\n", encoding="utf-8")
+        troisieme = relecture.enregistrer_export(txt, ".md", "# Encore\n")
+        verifier(troisieme.get("ok") and troisieme["variante"] and troisieme["chemin"] != second["chemin"]
+                 and "Note ajoutée" in Path(second["chemin"]).read_text(encoding="utf-8"),
+                 "un export retouché à la main est gardé : variante numérotée, dite", str(troisieme))
+        force = relecture.enregistrer_export(txt, ".md", "# Forcé\n", remplacer=True)
+        verifier(force["chemin"] == second["chemin"] and force["remplace"], "--remplacer force le remplacement")
+        nouveau = relecture.enregistrer_export(txt, ".md", "# Neuf\n", remplacer=False)
+        verifier(nouveau["variante"] and nouveau["chemin"] not in (second["chemin"], troisieme["chemin"]),
+                 "--nouveau force une variante")
+        md = relecture.markdown(txt)
+        verifier(md.startswith("# ") and "Alice" not in md.splitlines()[0],
+                 "le Markdown part du texte relu (titre, puis paragraphes)", md[:80])
+    finally:
+        relecture._fichier_exports = empreintes
     verifier(relecture.enregistrer_export(txt, ".txt", "x").get("code") == "format_refuse",
              "un export ne peut pas créer une seconde transcription .txt")
 
