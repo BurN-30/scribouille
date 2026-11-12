@@ -183,7 +183,7 @@ fr: {
   'ui.voc.regles_enregistrees': '{n} règle(s) de correction enregistrée(s).',
 
   /* -- vocabulaire, format 2 -------------------------------------------- */
-  'ui.bouton.vocabulaire': 'Vocabulaire : termes, fautes et propositions',
+  'ui.bouton.vocabulaire': 'Vocabulaire et propositions',
   'ui.modale.vocabulaire.titre': 'Vocabulaire',
   'ui.voc2.intro': 'Les noms, sociétés et sigles à bien écrire, avec ce que le modèle écrit à '
     + 'leur place. Une proposition apprise ne sert à rien tant que vous ne l\'avez pas acceptée.',
@@ -820,7 +820,7 @@ en: {
   'ui.voc.regles_enregistrees': '{n} correction rule(s) saved.',
 
   /* -- vocabulary, format 2 --------------------------------------------- */
-  'ui.bouton.vocabulaire': 'Vocabulary: terms, errors and suggestions',
+  'ui.bouton.vocabulaire': 'Vocabulary and suggestions',
   'ui.modale.vocabulaire.titre': 'Vocabulary',
   'ui.voc2.intro': 'Names, companies and acronyms to spell right, with what the model writes '
     + 'instead. A learned suggestion does nothing until you accept it.',

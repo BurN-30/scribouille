@@ -29,7 +29,7 @@ cubernetes => Kubernetes
 
 ### Vocabulary, format 2 (`vocabulaire.toml`)
 
-The **Vocabulary: terms, errors and suggestions** button opens a screen that gathers both settings in a single file, `vocabulaire.toml`, readable and editable by hand (a subset of TOML). Each term carries its correct form, its category (person, company, acronym, product or tool, trade term, English word), what the model writes instead, a weight from 1 to 5, its origin and its state: **active**, **suggested** or **rejected**. Only active terms are used. Fictitious example:
+The **Vocabulary and suggestions** button opens a screen that gathers both settings in a single file, `vocabulaire.toml`, readable and editable by hand (a subset of TOML). Each term carries its correct form, its category (person, company, acronym, product or tool, trade term, English word), what the model writes instead, a weight from 1 to 5, its origin and its state: **active**, **suggested** or **rejected**. Only active terms are used. Fictitious example:
 
 ```toml
 format = "scribouille-vocabulaire"

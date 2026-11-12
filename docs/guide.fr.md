@@ -29,7 +29,7 @@ cubernetes => Kubernetes
 
 ### Le vocabulaire, format 2 (`vocabulaire.toml`)
 
-Le bouton **« Vocabulaire : termes, fautes et propositions »** ouvre un écran qui réunit les deux leviers dans un seul fichier, `vocabulaire.toml`, lisible et modifiable à la main (un sous-ensemble de TOML). Chaque terme y porte sa forme correcte, sa catégorie (personne, société, sigle, produit ou outil, terme métier, anglicisme), ce que le modèle écrit à sa place, un poids de 1 à 5, son origine et son état : **actif**, **proposé** ou **refusé**. Seuls les termes actifs servent. Exemple fictif :
+Le bouton **« Vocabulaire et propositions »** ouvre un écran qui réunit les deux leviers dans un seul fichier, `vocabulaire.toml`, lisible et modifiable à la main (un sous-ensemble de TOML). Chaque terme y porte sa forme correcte, sa catégorie (personne, société, sigle, produit ou outil, terme métier, anglicisme), ce que le modèle écrit à sa place, un poids de 1 à 5, son origine et son état : **actif**, **proposé** ou **refusé**. Seuls les termes actifs servent. Exemple fictif :
 
 ```toml
 format = "scribouille-vocabulaire"
