@@ -666,6 +666,9 @@ class MoteurTranscription:
         #: fois par modèle et par file de traitement, jamais deux : sans cette
         #: mémoire, chaque fichier de la file relançait la même réparation.
         self._reparations: set[str] = set()
+        #: Fils de calcul imposés par le rythme (`app/rythme.py`), 0 : ceux
+        #: du poste. Lus au chargement du modèle.
+        self.fils = 0
 
     # -- cycle de vie ------------------------------------------------------
 
@@ -700,7 +703,7 @@ class MoteurTranscription:
 
         journal.info(
             "Chargement du modèle %s (périphérique=%s, calcul=%s, fils=%s, état=%s)",
-            modele, self.peripherique, self.type_calcul, self.materiel.fils_calcul,
+            modele, self.peripherique, self.type_calcul, self.fils_effectifs,
             etat["etat"],
         )
         if signaler:
@@ -735,10 +738,14 @@ class MoteurTranscription:
                 chemin_instanciation(modele),
                 device=self.peripherique,
                 compute_type=self.type_calcul,
-                cpu_threads=self.materiel.fils_calcul,
+                cpu_threads=self.fils_effectifs,
                 num_workers=1,
                 download_root=str(chemins.DOSSIER_MODELES),
             )
+
+    @property
+    def fils_effectifs(self) -> int:
+        return int(self.fils) if self.fils and self.fils > 0 else self.materiel.fils_calcul
 
     def liberer(self) -> None:
         """Déréférence le modèle et rend la mémoire avant l'étape suivante."""
@@ -831,11 +838,18 @@ class MoteurTranscription:
             else:
                 iterateur, info = self._modele.transcribe(signal, **options)
 
+            # Rythme « je travaille en même temps » : une pause après chaque
+            # morceau de calcul, à proportion de sa durée (voir app/rythme.py).
+            frein = reglages.get("frein")
+            if frein is not None:
+                frein.depart()
             segments: list[Segment] = []
             for brut in iterateur:
                 if interrompu is not None and interrompu():
                     journal.attention("Transcription interrompue à la demande de l'utilisateur")
                     raise Interruption()
+                if frein is not None:
+                    frein()
                 texte = (brut.text or "").strip()
                 if texte:
                     segment = Segment(

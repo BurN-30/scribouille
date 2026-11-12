@@ -305,6 +305,10 @@ class MoteurOpenVINO:
         #: Témoin d'ouverture : posé par l'application, pas par le banc d'essai,
         #: dont chaque essai tourne déjà dans un processus à part.
         self.temoin = False
+        #: Propriétés de compilation ajoutées par le rythme (priorité de file
+        #: de la puce graphique, fils du processeur : voir `app/rythme.py`).
+        #: Refusées par le pilote, elles sont abandonnées et le journal le dit.
+        self.proprietes: dict = {}
 
     @property
     def peripherique(self) -> str:
@@ -344,27 +348,27 @@ class MoteurOpenVINO:
                 "ov.chargement", modele=moteur.nom_court(modele),
                 peripherique=nom_peripherique(self.peripherique_ov)))
         journal.info("Chargement OpenVINO %s sur %s (%s)", depot, self.peripherique_ov, dossier)
-        proprietes = {"CACHE_DIR": str(cache)}
+        base = {"CACHE_DIR": str(cache)}
         temoin = self.temoin and self.peripherique_ov != "CPU"
         if temoin:
             try:
                 TEMOIN_CHARGEMENT.write_text(self.peripherique_ov, encoding="utf-8")
             except OSError:
                 temoin = False
+        essais = [{**base, **self.proprietes}, base] if self.proprietes else [base]
         try:
-            try:
-                self._pipeline = ov_genai.WhisperPipeline(
-                    str(dossier), self.peripherique_ov, word_timestamps=True, **proprietes)
-                self._mots = True
-            except Exception as exc:
-                # Les horodatages de mots demandent une décomposition de
-                # l'attention que certains périphériques refusent : on retente
-                # sans, plutôt que de renoncer au périphérique.
-                journal.attention("OpenVINO sans horodatage des mots sur %s : %s",
-                                  self.peripherique_ov, exc)
-                self._pipeline = ov_genai.WhisperPipeline(
-                    str(dossier), self.peripherique_ov, **proprietes)
-                self._mots = False
+            for rang, proprietes in enumerate(essais):
+                try:
+                    self._ouvrir(ov_genai, str(dossier), proprietes)
+                    if self.proprietes:
+                        journal.info("OpenVINO : propriétés du rythme %s",
+                                     "appliquées" if rang == 0 else "refusées, ouverture sans elles")
+                    break
+                except Exception as exc:
+                    if rang == len(essais) - 1:
+                        raise
+                    journal.attention("OpenVINO refuse les propriétés du rythme (%s) : %s",
+                                      ", ".join(sorted(self.proprietes)), exc)
         finally:
             if temoin:
                 effacer_temoin()
@@ -376,6 +380,20 @@ class MoteurOpenVINO:
             journal.debug("Tokeniseur du glossaire indisponible : %s", exc)
             self._tokeniseur = None
         self._nom_modele = modele
+
+    def _ouvrir(self, ov_genai, dossier: str, proprietes: dict) -> None:
+        try:
+            self._pipeline = ov_genai.WhisperPipeline(
+                dossier, self.peripherique_ov, word_timestamps=True, **proprietes)
+            self._mots = True
+        except Exception as exc:
+            # Les horodatages de mots demandent une décomposition de
+            # l'attention que certains périphériques refusent : on retente
+            # sans, plutôt que de renoncer au périphérique.
+            journal.attention("OpenVINO sans horodatage des mots sur %s : %s",
+                              self.peripherique_ov, exc)
+            self._pipeline = ov_genai.WhisperPipeline(dossier, self.peripherique_ov, **proprietes)
+            self._mots = False
 
     def liberer(self) -> None:
         if self._pipeline is None:
@@ -483,6 +501,12 @@ class MoteurOpenVINO:
         segments: list[Segment] = []
         langue_detectee = langue_fixee or ""
         plafond = 0
+        # Rythme « je travaille en même temps » : pause après chaque fenêtre,
+        # à proportion de son calcul (voir app/rythme.py). Seul levier qui se
+        # change à chaud sur la puce graphique.
+        frein = reglages.get("frein")
+        if frein is not None:
+            frein.depart()
         for fenetre in fenetres:
             if arret():
                 journal.attention("Transcription interrompue à la demande de l'utilisateur")
@@ -523,6 +547,8 @@ class MoteurOpenVINO:
             if progression and duree_totale > 0:
                 fin_fenetre = fenetre[-1]["end"] / FREQUENCE + decalage
                 progression(min(0.99, fin_fenetre / duree_totale))
+            if frein is not None:
+                frein()
 
         if progression:
             progression(1.0)
@@ -635,6 +661,27 @@ class MoteurAvecRepli:
     @property
     def peripherique(self) -> str:
         return self._actif.peripherique
+
+    @property
+    def fils(self) -> int:
+        return self._ct2.fils
+
+    @fils.setter
+    def fils(self, valeur: int) -> None:
+        """Fils du repli sur CTranslate2 (rythme), comme pour le moteur seul."""
+        self._ct2.fils = int(valeur or 0)
+
+    @property
+    def proprietes(self) -> dict:
+        return self._ov.proprietes
+
+    @proprietes.setter
+    def proprietes(self, valeur: dict) -> None:
+        self._ov.proprietes = dict(valeur or {})
+
+    @property
+    def sur_puce(self) -> bool:
+        return self._actif is self._ov and self._ov.peripherique_ov != "CPU"
 
     @property
     def cle_calcul(self) -> str:

@@ -39,6 +39,9 @@ DEFAUTS: dict = {
     "condition_on_previous_text": True,
     "forcer_processeur": False,
     "reglage_machine": {},          # réglage mesuré par le banc d'essai, voir app/reglage_machine.py
+    "rythme": "vitesse",            # vitesse | equilibre | discret, voir app/rythme.py
+    "rythme_auto": False,           # s'adapter tout seul à l'usage du poste
+    "proposition_ecartee": "",      # signature du poste dont la proposition a été écartée
     "theme": "auto",                # auto | clair | sombre
     "zoom": 1.0,
     "journal_ouvert": False,

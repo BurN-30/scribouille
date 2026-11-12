@@ -24,7 +24,7 @@ from . import audio as audio_module
 from . import calibration
 from . import config as config_module
 from . import diarisation, energie, journal, langues, moteur, presets, reprise as reprise_module
-from . import reglage_machine, sorties, vocabulaire
+from . import reglage_machine, rythme, sorties, vocabulaire
 from .journal import ErreurLisible
 from .materiel import Materiel
 
@@ -41,6 +41,8 @@ class Element:
     etat: str = "attente"
     #: Clé de reprise quand ce fichier a été remis en file après une interruption.
     reprise: str = ""
+    #: Durée annoncée par l'en-tête du fichier, mesurée à l'ajout (0 : inconnue).
+    duree_annoncee: float = 0.0
 
     def en_dict(self) -> dict:
         return {
@@ -89,6 +91,8 @@ class FileTraitement:
         self._en_cours = False
         #: Sauvegarde progressive du fichier en cours, fermée quoi qu'il arrive.
         self._session = reprise_module.session_inactive()
+        #: Rythme de la file en cours : choisi, adaptation, régulateur.
+        self._rythme: dict = {}
 
     # -- gestion de la file -------------------------------------------------
 
@@ -170,6 +174,7 @@ class FileTraitement:
                     continue
                 valeur = audio_module.duree(element.chemin)
                 element.duree = valeur
+                element.duree_annoncee = valeur
                 rappel(element.identifiant, round(valeur, 1), presets.formater_duree(valeur))
 
         threading.Thread(target=travail, daemon=True).start()
@@ -218,13 +223,39 @@ class FileTraitement:
                 reglages["faisceau_openvino"] = faisceau
             else:
                 reglages["beam_size"] = reglages["best_of"] = faisceau
-        moteur.limiter_parallelisme(self.materiel.fils_calcul)
+        # Rythme « je travaille en même temps » (voir app/rythme.py). En vitesse
+        # maximale sans adaptation, la file se comporte exactement comme avant.
+        choisi = rythme.normaliser(config.get("rythme"))
+        regulateur = rythme.Regulateur(
+            self.materiel, choisi, bool(config.get("rythme_auto")),
+            sur_bascule=lambda nouveau, raison: journal.info(
+                "Rythme effectif : %s (%s)", nouveau, raison))
+        charge = regulateur.chargement
+        if charge.lot_max is not None and reglages["lot"]:
+            reglages["lot"] = min(int(reglages["lot"]), charge.lot_max)
+        moteur.limiter_parallelisme(charge.fils)
+        self._rythme = {"choisi": choisi, "auto": regulateur.auto, "regulateur": regulateur}
 
         instance = fabriquer_moteur(self.materiel, reglages)
+        if charge.rythme != "vitesse" or regulateur.auto:
+            instance.fils = charge.fils
+            if self.materiel.moteur == "openvino":
+                sur_puce = (self.materiel.peripherique_openvino or "CPU").upper() != "CPU"
+                instance.proprietes = charge.ov_puce if sur_puce else charge.ov_processeur
+            reglages["frein"] = rythme.Frein(regulateur, self._interrompu)
+        regulateur.sur_puce = lambda: bool(getattr(instance, "sur_puce", False))
+        if not regulateur.leger:
+            journal.info("Rythme %s%s : %s fils, lots %s, priorité %s, qualité de service %s",
+                         choisi, " (adaptation automatique)" if regulateur.auto else "",
+                         charge.fils, reglages["lot"], charge.priorite, charge.qos)
 
         reussis, echoues, annules = 0, 0, 0
-        pleine_vitesse = energie.pleine_vitesse()
-        pleine_vitesse.__enter__()
+        # Une transcription d'une heure et demie ne doit pas s'arrêter parce que
+        # le portable se met en veille faute d'activité (le capot fermé, lui,
+        # garde son effet : c'est un geste explicite).
+        sans_veille = energie.sans_veille()
+        sans_veille.__enter__()
+        regulateur.demarrer(self._interrompu)
         try:
             for element in list(self.elements):
                 if element.etat != "attente":
@@ -258,7 +289,14 @@ class FileTraitement:
         finally:
             instance.liberer()
             gc.collect()
-            pleine_vitesse.__exit__(None, None, None)
+            bilan_rythme = regulateur.arreter()
+            sans_veille.__exit__(None, None, None)
+            if regulateur.auto and bilan_rythme["bascules"]:
+                durees = bilan_rythme["durees"]
+                rappels.journal_ui("info", langues.t(
+                    "rythme.bilan", rapide=presets.formater_duree(durees.get("vitesse", 0)),
+                    discret=presets.formater_duree(sum(v for k, v in durees.items() if k != "vitesse")),
+                    rythme=langues.t(f"rythme.nom.{choisi}")))
             self._en_cours = False
             rappels.file_terminee({
                 "total": reussis + echoues + annules,
@@ -289,8 +327,38 @@ class FileTraitement:
             "trait.duree_audio", nom=element.nom,
             duree=presets.formater_duree(duree_audio)))
 
+        # Fichier abîmé : FFmpeg lit ce qu'il peut et rend la main sans erreur.
+        # La durée annoncée par le conteneur, mesurée à l'ajout, dit s'il manque
+        # un morceau notable ; on le signale au lieu de le taire.
+        annoncee = float(element.duree_annoncee or 0) or audio_module.duree(source)
+        if annoncee > 60 and duree_audio < 0.90 * annoncee:
+            journal.attention("Audio lu en partie : %.1f s sur %.1f s annoncées", duree_audio, annoncee)
+            signaler("attention", langues.t(
+                "trait.audio_partiel", nom=element.nom, lu=presets.formater_duree(duree_audio),
+                annonce=presets.formater_duree(annoncee)))
+
         if self._interrompu():
             raise moteur.Interruption()
+
+        # Mémoire libre du moment, en rythme équilibré ou discret : lots, puis
+        # modèle plus léger si même un passage à la fois ne tient plus. Une
+        # reprise garde son modèle, pour ne pas mêler deux modèles dans un texte.
+        reglages = dict(reglages)
+        choisi = (self._rythme or {}).get("choisi", "vitesse")
+        if choisi != "vitesse":
+            from . import materiel as materiel_module
+
+            libre = materiel_module._memoire()[1]
+            nom_moteur = "openvino" if self.materiel.moteur == "openvino" else "ctranslate2"
+            modele, lot, raison = rythme.garde_memoire(
+                choisi, nom_moteur, reglages["modele"], int(reglages.get("lot") or 0), libre,
+                "" if element.reprise or bool(config.get("mode_avance")) else presets.MODELE_TURBO)
+            if raison:
+                journal.attention("Mémoire libre %.1f Go : %s", libre, raison)
+                signaler("attention", langues.t(
+                    f"rythme.memoire_{raison}", libre=langues.nombre(libre, 1),
+                    modele=moteur.nom_court(modele)))
+                reglages["modele"], reglages["lot"] = modele, lot
 
         # 1 bis. Sauvegarde progressive et reprise éventuelle.
         #
@@ -326,6 +394,7 @@ class FileTraitement:
         if config.get("sauvegarde_progressive", True):
             identifiant = element.reprise or reprise_module.cle(source, reglages["modele"])
             session = self._session = reprise_module.Session(identifiant, active=True)
+            session.alerte = lambda _detail: signaler("attention", langues.t("trait.reprise_coupee"))
             session.ouvrir(
                 source, reglages["modele"], duree_audio,
                 position=decalage, nb_segments=len(deja_transcrits),
@@ -343,10 +412,16 @@ class FileTraitement:
             reglages["preset"],
             self.materiel,
             diarisation=bool(config.get("diarisation")),
-            modele_avance=reglages["modele"] if config.get("mode_avance") else "",
+            modele_avance=reglages["modele"] if (
+                config.get("mode_avance")
+                or reglages["modele"] != presets.preset(reglages["preset"])["modele"]) else "",
             beam=int(reglages["beam_size"] or 0),
             lot=int(reglages.get("lot") or 0),
         )
+        # Rythme équilibré ou discret : l'estimation de départ en tient compte
+        # (adaptation automatique : celle du rythme choisi, la plus longue).
+        estimation *= rythme.coefficient(choisi, getattr(instance, "cle_calcul", self.materiel.cle_calcul))
+        regulateur = (self._rythme or {}).get("regulateur")
         rappels.etat(element.identifiant, "transcription", langues.t("etat.transcription"))
 
         instance.charger(reglages["modele"], signaler)
@@ -366,10 +441,15 @@ class FileTraitement:
             ecoule = time.time() - depart
             part_transcription = 0.85 if config.get("diarisation") else 1.0
             pourcent = int(part * part_transcription * 100)
-            restant = max(0.0, estimation - ecoule)
+            # Estimation au départ, puis cadence observée : elle suit d'elle-même
+            # les bascules du rythme automatique.
+            restant = rythme.restant_s(estimation, ecoule, part)
+            effectif = getattr(regulateur, "effectif", "vitesse")
             rappels.progression(element.identifiant, {
                 "pct": min(99, pourcent),
-                "phase": langues.t("phase.transcription"),
+                "phase": (langues.t("phase.transcription") if effectif == "vitesse"
+                          else langues.t("phase.transcription_rythme",
+                                         rythme=langues.t(f"rythme.nom.{effectif}"))),
                 "ecoule": presets.formater_duree(ecoule),
                 "restant": (
                     presets.formater_duree(restant) if restant > 5

@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import time
 from datetime import datetime
 from pathlib import Path
@@ -92,6 +93,9 @@ class Session:
         self.position = 0.0
         self._infos: dict = {}
         self._flux = None
+        #: Appelée une fois si l'écriture échoue (disque plein, clé retirée) :
+        #: l'interface le dit, au lieu de laisser croire que tout est protégé.
+        self.alerte = None
 
     # -- cycle de vie ------------------------------------------------------
 
@@ -158,6 +162,11 @@ class Session:
         except OSError as exc:
             journal.attention("Écriture de reprise impossible, sauvegarde coupée : %s", exc)
             self.active = False
+            if self.alerte is not None:
+                try:
+                    self.alerte(str(exc))
+                except Exception:
+                    pass
             return
         self.nb_segments += 1
         self.position = segment.fin
@@ -173,10 +182,14 @@ class Session:
             "ecoule": round(float(ecoule), 1),
             "maj": datetime.now().isoformat(timespec="seconds"),
         })
+        # Écrit à côté puis renommé : une fenêtre fermée ou un courant coupé
+        # pendant l'écriture laisse l'ancien état, jamais un état à moitié écrit
+        # qui rendrait la reprise impossible.
+        cible = _fichier_etat(self.identifiant)
+        provisoire = cible.with_name(cible.name + ".tmp")
         try:
-            _fichier_etat(self.identifiant).write_text(
-                json.dumps(etat, ensure_ascii=False), encoding="utf-8"
-            )
+            provisoire.write_text(json.dumps(etat, ensure_ascii=False), encoding="utf-8")
+            os.replace(provisoire, cible)
         except OSError:
             pass
 
