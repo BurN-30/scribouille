@@ -40,7 +40,7 @@ En ligne de commande : `scribouille reglages` (liste), `reglages lire CLE`, `reg
 
 | Clé | Défaut | Effet |
 |---|---|---|
-| `dossier_sortie` | `Documents\Transcriptions` | Dossier des transcriptions de la fenêtre. La ligne de commande écrit à côté de la source, ou dans `--sortie`. |
+| `dossier_sortie` | `Documents\Transcriptions` ; avec `SCRIBOUILLE_DONNEES`, `Transcriptions` dans ce dossier | Dossier des transcriptions de la fenêtre. La ligne de commande écrit à côté de la source, ou dans `--sortie`. |
 | `formats` | `txt`, avec `horodatage` | `txt`, `srt`, `vtt` ; `horodatage` met l'heure en tête de chaque paragraphe du `.txt`. L'en-tête du `.txt` : titre, durée, date, voix séparées ; le reste est dans le compagnon. |
 | `compagnon_confiance` | `true` | Écrire le `.json` compagnon : segments, mots horodatés, probabilités, remplacements. Nécessaire à la relecture et à `scribouille lire`. |
 | `motif_sortie` | vide | Nom des fichiers : `{nom}`, `{date}`, `{heure}`, `{modele}`. Vide : `{date}-{nom}`. |
@@ -73,5 +73,5 @@ Sans `mode_avance`, les quatre clés suivantes sont ignorées.
 
 | Variable | Effet |
 |---|---|
-| `SCRIBOUILLE_DONNEES` | Dossier de données imposé, sans reprise de l'ancien dossier `WhiScribe` (essais, mesures, agents). |
+| `SCRIBOUILLE_DONNEES` | Dossier de données imposé, sans reprise de l'ancien dossier `WhiScribe` (essais, mesures, agents). Le dossier de sortie par défaut est alors `Transcriptions` dans ce dossier, jamais le `Documents` de l'utilisateur : rien n'est écrit hors de ce dossier sans qu'on le demande (sauf les modèles, si `dossier-modeles.txt` en désigne d'autres). |
 | `TRANSCRIPTEUR_DEBUG` | Outils de développement de la fenêtre. |

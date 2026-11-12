@@ -248,10 +248,21 @@ def espace_libre_go(chemin: str | Path) -> float:
 # ---------------------------------------------------------------------------
 
 def dossier_sortie_defaut() -> Path:
-    """Dossier de sortie proposé au premier lancement : Documents/Transcriptions."""
+    """
+    Dossier de sortie proposé au premier lancement : Documents/Transcriptions.
+    Avec un dossier de données imposé (`SCRIBOUILLE_DONNEES` : essai, agent,
+    poste de démonstration), « Transcriptions » DANS ce dossier : rien n'est
+    écrit dans le vrai profil de l'utilisateur sans qu'on le demande.
+    """
+    if os.environ.get("SCRIBOUILLE_DONNEES", "").strip():
+        return RACINE / NOM_SORTIES_IMPOSEES
     documents = Path.home() / "Documents"
     base = documents if documents.is_dir() else Path.home()
     return base / "Transcriptions"
+
+
+#: Dossier de sortie par défaut sous un dossier de données imposé.
+NOM_SORTIES_IMPOSEES = "Transcriptions"
 
 
 def assurer_dossiers() -> None:

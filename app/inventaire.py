@@ -304,11 +304,15 @@ def postes(config: dict | None = None, mesurer: bool = True) -> tuple[list[Poste
     if chemins.EST_GELE or (chemins.DOSSIER_PROGRAMME / "transcriber.pyw").is_file():
         ajouter("programme", chemins.DOSSIER_PROGRAMME)
 
-    # Dossier de données : entrée par entrée.
+    # Dossier de données : entrée par entrée. Le dossier de sortie, s'il y
+    # est (dossier de données imposé), est compté à part, comme ailleurs.
     modeles = Path(chemins.DOSSIER_MODELES)
+    sortie = str(Path((config or {}).get("dossier_sortie") or chemins.dossier_sortie_defaut()).resolve()).lower()
     if racine.is_dir():
         for entree in sorted(racine.iterdir()):
             dossier = entree.is_dir()
+            if dossier and str(entree.resolve()).lower() == sortie:
+                continue
             if sources and entree.name in ("app", "web", "lexique", "banc", "packaging", "outils", "docs") \
                     or sources and entree.name in EXCLUS_SOURCE:
                 continue

@@ -393,6 +393,23 @@ def essai_options_honorees() -> None:
              "--noms Alice,Bob : les voix sont renommées dans le fichier", f"{resultat} {texte[-80:]!r}")
 
 
+def essai_sortie_par_defaut() -> None:
+    titre("6. Dossier de données imposé : la sortie par défaut y reste")
+    (TEMPORAIRE / "maison" / "Documents").mkdir(exist_ok=True)
+    code, sortie, _, _, _ = lancer("reglages", "lire", "dossier_sortie", "--json")
+    valeur = (_json(sortie) or [{}])[-1].get("donnees", {}).get("valeur", "")
+    attendu = str(TEMPORAIRE / "donnees" / "Transcriptions")
+    verifier(code == 0 and Path(valeur) == Path(attendu),
+             "SCRIBOUILLE_DONNEES posé : sortie par défaut dans ce dossier, jamais Documents", f"{code} {valeur}")
+    Path(attendu).mkdir(parents=True, exist_ok=True)
+    code, sortie, _, _, _ = lancer("espace", "--json")
+    donnees = (_json(sortie) or [{}])[-1].get("donnees", {})
+    verifier(code == 0 and not any("Transcriptions" in x for x in donnees.get("non_reconnus", []))
+             and Path(donnees.get("transcriptions", {}).get("dossier", "")) == Path(attendu),
+             "espace : ce dossier est celui des transcriptions, pas un inconnu", str(donnees.get("non_reconnus")))
+    verifier(not any((TEMPORAIRE / "maison" / "Documents").iterdir()), "rien n'est écrit dans Documents")
+
+
 def principal() -> int:
     print(f"Vérification de la ligne de commande\n{'=' * 40}\n(dossier temporaire : {TEMPORAIRE})")
     try:
@@ -401,6 +418,7 @@ def principal() -> int:
         essai_aide()
         essai_sans_bureau()
         essai_options_honorees()
+        essai_sortie_par_defaut()
     finally:
         import shutil
 
