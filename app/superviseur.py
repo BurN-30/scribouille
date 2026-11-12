@@ -227,7 +227,10 @@ class Superviseur:
         with self._verrou:
             p = self._processus
             if p is None or p.poll() is not None:
-                self._changer_etat("arrete")
+                # Un moteur mort de lui-même reste « en panne » à l'écran jusqu'au
+                # prochain lancement : la fin de la file ne l'efface pas.
+                if self.etat != "panne":
+                    self._changer_etat("arrete")
                 return
             self._arret_voulu = True
         try:
