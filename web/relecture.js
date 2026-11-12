@@ -97,6 +97,10 @@ async function ecrireRelecture(appel) {
 async function chargerLecture(chemin, garderPosition) {
   const zone = $('#rl-defilement');
   const haut = garderPosition ? zone.scrollTop : 0;
+  // Le mot atteint (N, recherche) est retenu par son instant : apres une
+  // correction, N repart de la, pas du premier point.
+  const repere = garderPosition && lect.vise >= 0 && lect.mots[lect.vise]
+    ? { d: lect.mots[lect.vise].d, k: lect.mots[lect.vise].k } : null;
   let d;
   const t0 = performance.now();
   try {
@@ -115,6 +119,7 @@ async function chargerLecture(chemin, garderPosition) {
   lect.d = d;
   dessinerRelecture();
   zone.scrollTop = haut;
+  if (repere) retablirVise(repere);
   majAnnulation();
   lect.mesures.appel_ms = Math.round(t1 - t0);
   lect.mesures.rendu_ms = Math.round(performance.now() - t1);
@@ -552,6 +557,16 @@ function allerPoint(pas) {
     const p = lect.mots[point.i].p;
     statutRelecture(t('ui.lecture.confiance', { pct: Math.round((p || 0) * 100) }));
   }
+}
+
+/* Remet le cadre du mot atteint apres un nouveau rendu, sans defiler ni
+   deplacer l'ecoute : premier mot du meme paragraphe a partir du meme instant. */
+function retablirVise(repere) {
+  let j = lect.mots.findIndex((m) => m.k >= repere.k && m.d >= repere.d - 0.01);
+  if (j < 0) j = lect.mots.length - 1;
+  if (j < 0 || !lect.spans[j]) return;
+  lect.vise = j;
+  lect.spans[j].classList.add('vise');
 }
 
 function viser(i) {
