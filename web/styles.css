@@ -782,9 +782,11 @@ textarea { resize: vertical; font-family: var(--police-mono); font-size: 12.5px;
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 9px 18px; background: var(--carte); border-bottom: 1px solid var(--bordure); flex: none;
 }
-.rl-titres { min-width: 0; flex: 0 1 auto; }
+.rl-titres { min-width: 0; flex: 1 1 0; }
 .rl-titres h1 { font-size: 15px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; outline: none; }
-.rl-meta { font-size: 12px; color: var(--texte-faible); font-variant-numeric: tabular-nums; display: flex; flex-wrap: wrap; gap: 0 12px; }
+.rl-meta { font-size: 12px; color: var(--texte-faible); font-variant-numeric: tabular-nums; display: flex; flex-wrap: nowrap; gap: 0 12px; overflow: hidden; }
+.rl-meta span { white-space: nowrap; flex: none; }
+.rl-meta span:last-child { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 .rl-outils {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;

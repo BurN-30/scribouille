@@ -1226,6 +1226,7 @@ def essai_finition() -> None:
         ("la relecture masque l'en-tête de l'application", 'html[data-vue="relecture"] .entete { display: none; }'),
         ("barre d'outils en deux rangées fixes", ".rl-lecteur { flex: 1 0 100%; }"),
         ("compteurs à largeur réservée", "min-width: 9ch;"),
+        ("en-tête de la relecture sur une ligne, la fin des repères coupée", ".rl-titres { min-width: 0; flex: 1 1 0; }"),
         ("heure de lecture à largeur fixe", "min-width: 17ch;"),
         ("aucun saut à l'apparition de la barre de défilement", "scrollbar-gutter: stable;"),
         ("colonne de lecture tenue en fenêtre étroite", "grid-template-columns: 76px minmax(0, 66ch)"),
