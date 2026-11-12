@@ -151,6 +151,8 @@ def executer(rythmes: list[str] | None = None, moteur_voulu: str = "", peripheri
     config = config_module.charger()
     mat = materiel.detecter()
     reglage_machine.appliquer_au_materiel(config, mat)
+    if not moteur_voulu and peripherique and peripherique.upper() != "CPU":
+        moteur_voulu = "openvino"  # puce graphique ou NPU : seul OpenVINO y calcule
     moteur_voulu = moteur_voulu or mat.moteur
     peripherique = (peripherique or mat.peripherique_openvino or "CPU").upper() \
         if moteur_voulu == "openvino" else "cpu"
