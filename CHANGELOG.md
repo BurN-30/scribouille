@@ -106,6 +106,14 @@ Corrections issues d'une revue d'usage de l'application réelle (vérifiées par
   plus sur « Chargement du modèle... ». À la fin, le titre de la fenêtre le
   dit et son bouton clignote dans la barre des tâches, jusqu'au retour sur la
   fenêtre.
+- **Accessibilité élémentaire** : texte secondaire à 4,75:1 au moins en
+  thème clair (4,83:1 en sombre) ; les fichiers produits d'une ligne sont des
+  boutons et les lignes de l'historique s'ouvrent au clavier ; les modales
+  sont des dialogues nommés, le focus y entre, la tabulation ne passe plus
+  derrière (arrière-plan inerte) et revient à son point de départ à la
+  fermeture ; boutons de fermeture et boutons à icône nommés ; la ligne
+  d'état est une région annoncée aux lecteurs d'écran et la barre d'un
+  fichier en cours une barre de progression.
 - **Correction depuis la relecture** : l'en-tête du fichier texte reste séparé
   du corps ; la barre de fin d'en-tête et la première phrase ne se retrouvent
   plus sur la même ligne.

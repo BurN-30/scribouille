@@ -39,7 +39,9 @@
 
   --texte: #16181d;
   --texte-doux: #565b66;
-  --texte-faible: #7d8391;
+  /* Texte secondaire : 4,75:1 au moins sur tous les fonds clairs, le seuil
+     de 4,5:1 valant pour les petits corps (11 à 12 px) de l'aide. */
+  --texte-faible: #646a78;
 
   --vert: #1a7f4b;
   --vert-fond: #e6f4ec;
@@ -73,7 +75,7 @@
 
     --texte: #e7eaf0;
     --texte-doux: #a3aab8;
-    --texte-faible: #7b8393;
+    --texte-faible: #8a92a1;
 
     --vert: #55d68f;
     --vert-fond: #122a1f;
@@ -93,7 +95,7 @@
   --accent: #2f5fe0; --accent-fort: #244cb8; --accent-doux: #eaf0ff; --accent-contraste: #fff;
   --fond: #f4f5f7; --carte: #fff; --carte-creuse: #fafbfc;
   --bordure: #dcdfe5; --bordure-forte: #c3c8d2;
-  --texte: #16181d; --texte-doux: #565b66; --texte-faible: #7d8391;
+  --texte: #16181d; --texte-doux: #565b66; --texte-faible: #646a78;
   --vert: #1a7f4b; --vert-fond: #e6f4ec; --ambre: #96610a; --ambre-fond: #fdf2dd;
   --rouge: #b5292f; --rouge-fond: #fbeaea;
   --ombre: 0 1px 2px rgba(16,20,30,.06), 0 4px 12px rgba(16,20,30,.05);
@@ -105,7 +107,7 @@
   --accent: #7f9dff; --accent-fort: #9db3ff; --accent-doux: #1c2540; --accent-contraste: #0d1017;
   --fond: #0f1218; --carte: #171b23; --carte-creuse: #1c212b;
   --bordure: #2a3140; --bordure-forte: #3a4354;
-  --texte: #e7eaf0; --texte-doux: #a3aab8; --texte-faible: #7b8393;
+  --texte: #e7eaf0; --texte-doux: #a3aab8; --texte-faible: #8a92a1;
   --vert: #55d68f; --vert-fond: #122a1f; --ambre: #e9b667; --ambre-fond: #2c2314;
   --rouge: #f28b8b; --rouge-fond: #2e1a1c;
   --ombre: 0 1px 2px rgba(0,0,0,.4), 0 4px 12px rgba(0,0,0,.3);
@@ -690,7 +692,7 @@ textarea { resize: vertical; font-family: var(--police-mono); font-size: 12.5px;
 .sorties { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 .sortie {
   display: inline-flex; align-items: center; gap: 5px;
-  font-size: 11.5px; font-weight: 550;
+  font-size: 11.5px; font-weight: 550; font-family: inherit; color: var(--texte);
   border: 1px solid var(--bordure); background: var(--carte-creuse);
   border-radius: 999px; padding: 2px 9px; cursor: pointer;
   transition: border-color var(--vitesse) ease, color var(--vitesse) ease;

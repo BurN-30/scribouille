@@ -1242,7 +1242,7 @@ function ligneHTML(id) {
   }
 
   const sorties = (it.sorties || []).map((s) =>
-    `<span class="sortie" data-ouvrir="${ech(s.chemin)}">${ech(s.format)} · ${ech(s.nom)}</span>`
+    `<button class="sortie" data-ouvrir="${ech(s.chemin)}">${ech(s.format)} · ${ech(s.nom)}</button>`
   ).join('');
 
   // Une transcription qui vient de se terminer se relit d'un clic, sans passer
@@ -1254,13 +1254,15 @@ function ligneHTML(id) {
     <div class="infos">
       <div class="nom" title="${ech(it.chemin)}">${ech(it.nom)}</div>
       <div class="meta ${classeMeta}">${ech(meta)}</div>
-      ${actif ? `<div class="barre ${it.indetermine ? 'indeterminee' : ''}"><span style="width:${it.pct || 0}%"></span></div>` : ''}
+      ${actif ? `<div class="barre ${it.indetermine ? 'indeterminee' : ''}" role="progressbar"
+        aria-valuemin="0" aria-valuemax="100" aria-label="${ech(it.nom)}"
+        ${it.indetermine ? '' : `aria-valuenow="${it.pct || 0}"`}><span style="width:${it.pct || 0}%"></span></div>` : ''}
       ${sorties ? `<div class="sorties">${sorties}</div>` : ''}
     </div>
-    ${texte ? `<button class="bouton-ligne" data-lire="${ech(texte.chemin)}" title="${ech(t('ui.ligne.lire'))}">${icone('i-loupe', 'icone-s')}</button>` : ''}
+    ${texte ? `<button class="bouton-ligne" data-lire="${ech(texte.chemin)}" title="${ech(t('ui.ligne.lire'))}" aria-label="${ech(t('ui.ligne.lire'))}">${icone('i-loupe', 'icone-s')}</button>` : ''}
     ${['annule', 'erreur'].includes(it.etat) ? `<button class="bouton-ligne" data-relancer title="${ech(t('ui.ligne.relancer'))}" aria-label="${ech(t('ui.ligne.relancer'))}">${icone('i-reprise', 'icone-s')}</button>` : ''}
-    ${it.etat === 'erreur' ? `<button class="bouton-ligne" data-log title="${ech(t('ui.ligne.journal'))}">${icone('i-info', 'icone-s')}</button>` : ''}
-    ${actif ? '' : `<button class="bouton-ligne" data-retirer title="${ech(t('ui.ligne.retirer'))}">${icone('i-croix', 'icone-s')}</button>`}
+    ${it.etat === 'erreur' ? `<button class="bouton-ligne" data-log title="${ech(t('ui.ligne.journal'))}" aria-label="${ech(t('ui.ligne.journal'))}">${icone('i-info', 'icone-s')}</button>` : ''}
+    ${actif ? '' : `<button class="bouton-ligne" data-retirer title="${ech(t('ui.ligne.retirer'))}" aria-label="${ech(t('ui.ligne.retirer'))}">${icone('i-croix', 'icone-s')}</button>`}
   </div>`;
 }
 
@@ -1316,7 +1318,7 @@ function dessinerHistorique() {
   }
   /* Une ligne par transcription ; chaque format present s'ouvre a part. */
   vue.innerHTML = etat.historique.map((h) => `
-    <div class="ligne" data-chemin="${ech(h.chemin)}">
+    <div class="ligne" data-chemin="${ech(h.chemin)}" role="button" tabindex="0">
       <span class="pastille termine">${icone('i-coche', 'icone-s')}</span>
       <div class="infos">
         <div class="nom">${ech(h.nom)}</div>
@@ -1327,6 +1329,12 @@ function dessinerHistorique() {
     </div>`).join('');
   $$('#vue-historique .ligne').forEach((l) => {
     l.onclick = () => ouvrirSortie(l.dataset.chemin);
+    l.onkeydown = (e) => {
+      if (e.target === l && (e.key === 'Enter' || e.key === ' ')) {
+        e.preventDefault();
+        ouvrirSortie(l.dataset.chemin);
+      }
+    };
   });
   $$('#vue-historique [data-ouvrir]').forEach((b) => {
     b.onclick = (e) => { e.stopPropagation(); ouvrirSortie(b.dataset.ouvrir); };
@@ -1815,6 +1823,8 @@ window.onProgression = function (id, d) {
     if (barre) {
       barre.classList.toggle('indeterminee', it.indetermine);
       barre.querySelector('span').style.width = d.pct + '%';
+      if (it.indetermine) barre.removeAttribute('aria-valuenow');
+      else barre.setAttribute('aria-valuenow', String(d.pct));
     }
     const meta = ligne.querySelector('.meta');
     if (meta) meta.textContent = metaActive(it);
@@ -1883,10 +1893,60 @@ window.finDepot = function () {
 
 /* ---------------------------------------------------------------- Modales */
 
-function ouvrirModale(selecteur) { $(selecteur).classList.add('ouvert'); }
+/* Modales accessibles : chaque fenetre est un dialogue nomme par son titre,
+   le reste de la page devient inerte tant qu'elle est ouverte (la tabulation
+   ne passe plus derriere), le focus y entre a l'ouverture et revient a
+   l'element de depart a la fermeture. */
+function preparerModales() {
+  $$('.voile .modale').forEach((m, i) => {
+    m.setAttribute('role', 'dialog');
+    m.setAttribute('aria-modal', 'true');
+    const titre = m.querySelector('.modale-entete h2');
+    if (titre) {
+      if (!titre.id) titre.id = 'titre-modale-' + i;
+      m.setAttribute('aria-labelledby', titre.id);
+    }
+  });
+  $$('.voile .bouton-icone[data-fermer]').forEach((b) => {
+    if (!b.dataset.i18nAria) b.dataset.i18nAria = 'ui.bouton.fermer';
+  });
+}
+
+const pileFocus = [];
+
+function majInertie() {
+  const ouvertes = $$('.voile.ouvert');
+  const dessus = ouvertes[ouvertes.length - 1] || null;
+  Array.from(document.body.children).forEach((el) => {
+    if (el.tagName === 'SCRIPT' || el.tagName === 'svg' || el.id === 'btn-corriger-selection') return;
+    el.inert = !!dessus && el !== dessus;
+  });
+}
+
+function ouvrirModale(selecteur) {
+  const voile = $(selecteur);
+  if (!voile.classList.contains('ouvert')) pileFocus.push(document.activeElement);
+  voile.classList.add('ouvert');
+  majInertie();
+  setTimeout(() => {
+    if (voile.contains(document.activeElement)) return;
+    const cible = voile.querySelector('input:not([readonly]):not([type=hidden]), textarea, select')
+      || voile.querySelector('.modale');
+    if (cible) {
+      if (!cible.hasAttribute('tabindex') && cible.classList.contains('modale')) cible.setAttribute('tabindex', '-1');
+      cible.focus({ preventScroll: true });
+    }
+  }, 30);
+}
 
 function fermerModale(el) {
+  const etaitOuverte = el.classList.contains('ouvert');
   el.classList.remove('ouvert');
+  majInertie();
+  if (etaitOuverte) {
+    const retour = pileFocus.pop();
+    if (retour && retour.focus && document.contains(retour)) retour.focus({ preventScroll: true });
+  }
   if (el.id === 'modale-lecture') {
     masquerBoutonCorrection();
     const son = $('#lecture-son');
@@ -1951,6 +2011,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Langue provisoire, le temps que Python reponde : celle du dernier
   // lancement, sinon celle du navigateur integre. Evite une fenetre vide.
   definirLangue(langueProvisoire());
+  preparerModales();
   traduirePage();
 
   dessinerFile();

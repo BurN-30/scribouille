@@ -640,6 +640,60 @@ def essai_file_apres_arret(base: Path) -> None:
     verifier(len(file.elements) == 2, "toujours deux lignes, jamais de doublon")
 
 
+# ---------------------------------------------------------------------------
+# Accessibilité élémentaire de l'interface
+# ---------------------------------------------------------------------------
+
+def _contraste(couleur_a: str, couleur_b: str) -> float:
+    def luminance(couleur: str) -> float:
+        h = couleur.lstrip("#")
+        if len(h) == 3:
+            h = "".join(c * 2 for c in h)
+        canaux = [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+        lin = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in canaux]
+        return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+
+    claire, sombre = sorted((luminance(couleur_a), luminance(couleur_b)), reverse=True)
+    return (claire + 0.05) / (sombre + 0.05)
+
+
+def essai_accessibilite() -> None:
+    import re
+
+    titre("Accessibilité : contraste, clavier, dialogues, annonces")
+    css = (RACINE / "web" / "styles.css").read_text(encoding="utf-8")
+    html = (RACINE / "web" / "index.html").read_text(encoding="utf-8")
+    js = (RACINE / "web" / "app.js").read_text(encoding="utf-8")
+
+    # Chaque bloc de thème qui définit le texte secondaire, avec ses fonds.
+    ratios = []
+    for bloc in css.split("}"):
+        faible = re.search(r"--texte-faible:\s*(#[0-9a-fA-F]{3,6})", bloc)
+        if not faible:
+            continue
+        for fond in ("--fond", "--carte", "--carte-creuse"):
+            valeur = re.search(rf"{fond}:\s*(#[0-9a-fA-F]{{3,6}})", bloc)
+            if valeur:
+                ratios.append(round(_contraste(faible.group(1), valeur.group(1)), 2))
+    verifier(len(ratios) == 12 and min(ratios) >= 4.5,
+             "texte secondaire à 4,5:1 au moins sur tous les fonds, dans les deux thèmes", str(ratios))
+
+    verifier('class="sortie"' not in js.replace('<button class="sortie"', ""),
+             "les fichiers produits d'une ligne sont des boutons, atteignables au clavier")
+    verifier('role="button" tabindex="0"' in js and "onkeydown" in js,
+             "une ligne de l'historique s'ouvre au clavier")
+    verifier("setAttribute('role', 'dialog')" in js and "setAttribute('aria-modal', 'true')" in js
+             and "aria-labelledby" in js, "chaque modale est un dialogue nommé par son titre")
+    verifier("el.inert" in js and "pileFocus" in js,
+             "l'arrière-plan d'une modale est inerte et le focus revient à son point de départ")
+    verifier(re.search(r'id="etat-global"[^>]*role="status"[^>]*aria-live="polite"', html) is not None,
+             "la ligne d'état (progression, bilans, erreurs) est annoncée aux lecteurs d'écran")
+    verifier('role="progressbar"' in js and "aria-valuenow" in js,
+             "la barre d'un fichier en cours est une barre de progression lisible")
+    sans_nom = [b for b in re.findall(r'<button class="bouton-ligne"[^>]*>', js) if "aria-label" not in b]
+    verifier(not sans_nom, "les boutons à icône des lignes ont un nom accessible", str(sans_nom))
+
+
 def principal() -> int:
     print(f"Vérification du parcours de l'utilisateur\n{'=' * 42}")
     with tempfile.TemporaryDirectory(prefix="scribouille-parcours-") as brut:
@@ -658,6 +712,7 @@ def principal() -> int:
         essai_voix_non_installees(base)
         essai_retour_pendant_calcul(base)
         essai_file_apres_arret(base)
+        essai_accessibilite()
 
     print(f"\n{'=' * 42}")
     if _echecs:
