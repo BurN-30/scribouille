@@ -9,6 +9,13 @@ Tout se passe sur la machine : aucun envoi vers un service en ligne.
 
 Lancement : double-clic sur ce fichier, ou « lancer.bat ».
 
+Ligne de commande, sans fenêtre (voir `app/cli.py`, `docs/ligne-de-commande.md`) :
+
+    transcriber.pyw transcrire FICHIER|DOSSIER [--json] ...
+    transcriber.pyw aide
+
+Version gelée : « scribouille.com COMMANDE ».
+
 Option de diagnostic, utilisée par la chaîne de publication :
 
     transcriber.pyw --verifier
@@ -85,6 +92,14 @@ if "--moteur" in sys.argv[1:]:
     from app import moteur_processus as _moteur_processus
 
     sys.exit(_moteur_processus.principal(sys.argv[1:]))
+
+# Ligne de commande (voir app/cli.py) : « scribouille COMMANDE ... ». Rien de
+# l'interface n'est importé sur ce chemin. « scribouille.com » seul affiche l'aide.
+from app import cli as _cli  # noqa: E402
+
+if _cli.reconnue(sys.argv[1:]) or (
+        chemins.EST_GELE and not sys.argv[1:] and Path(sys.executable).suffix.lower() == ".com"):
+    sys.exit(_cli.principal(sys.argv[1:] or ["aide"]))
 
 # Retour arrière du dossier de données vers « WhiScribe », pour une ancienne
 # version (voir app/migration.py) : « scribouille-verifier.exe --revenir-whiscribe ».
