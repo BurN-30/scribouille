@@ -301,6 +301,7 @@ def principal_cli(arguments: list[str]) -> int:
     print(langues.t("adapt.cli.source", source=langues.t(f"adapt.source.{proposition['source']}"),
                     regle=proposition["regle"]))
     print("  " + proposition["phrase"])
+    print("  " + langues.t("adapt.cli.rythme", rythme=langues.t(f"rythme.nom.{proposition['rythme']}")))
     for note in proposition["notes"]:
         print("  " + note)
     print()
