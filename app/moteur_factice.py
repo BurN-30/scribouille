@@ -57,6 +57,8 @@ class MoteurFactice:
         pause = float(self.options.get("pause_s") if self.options.get("pause_s") is not None else 0.05)
         plantage = int(self.options.get("plantage_segment") or 0)
         temoin = str(self.options.get("temoin") or "")
+        if self.options.get("plantage_debut"):
+            os._exit(3)  # plantage avant le premier segment : rien de gardé
         pas = float(duree_totale) / nombre
         segments: list[Segment] = []
         for rang in range(nombre):

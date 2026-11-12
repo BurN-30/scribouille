@@ -479,9 +479,16 @@ class Superviseur:
 
     def _echec_definitif(self, element, rappels, cle: str, cause: str) -> str:
         element.etat = "erreur"
-        if cle:
-            element.reprise = cle
-        titre = langues.t("superviseur.echec_definitif", nom=element.nom)
+        from . import reprise as reprise_module
+
+        # « Reprenable » seulement si un segment au moins est gardé : sinon,
+        # rien à reprendre, la ligne propose « Relancer » (comme `etat`).
+        etat = reprise_module.lire_etat(cle) if cle else None
+        if not (etat and float(etat.get("position") or 0) > 0):
+            cle = ""
+        element.reprise = cle
+        titre = langues.t("superviseur.echec_definitif" if cle else "superviseur.echec_definitif_vide",
+                          nom=element.nom)
         journal.erreur("Fichier %s abandonné après plantage du moteur (%s)", element.nom, cause)
         rappels.etat(element.identifiant, "erreur", titre)
         rappels.journal_ui("erreur", titre)

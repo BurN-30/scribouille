@@ -313,9 +313,23 @@ def lister() -> list[dict]:
 
 
 def purger(jours: int = RETENTION_JOURS) -> int:
-    """Retire les reprises trop vieilles ou dont la source a disparu."""
+    """Retire les reprises trop vieilles ou dont la source a disparu, et les
+    verrous de fichier (`.en-cours`) laissés par un processus disparu."""
+    from . import instance
+
     limite = time.time() - jours * 86400
     retires = 0
+    for verrou in list(dossier().glob("*.en-cours")):
+        try:
+            pid = int(verrou.read_text(encoding="ascii").strip() or 0)
+        except (OSError, ValueError):
+            pid = 0
+        if not instance._vivant(pid):
+            try:
+                verrou.unlink()
+                retires += 1
+            except OSError:
+                pass
     for fichier in list(dossier().glob("*.json")):
         etat = lire_etat(fichier.stem)
         trop_vieux = False

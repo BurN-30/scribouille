@@ -351,6 +351,22 @@ def essai_plantage() -> None:
     verifier(termine.get("plantage_moteur") is True and termine.get("reprise") == element.reprise,
              "la ligne du fichier sait que c'est le moteur, et garde la clé de reprise", str(termine))
 
+    f = File("double-plantage-vide", {"segments": 20, "pause_s": 0.02, "plantage_debut": True})
+    f.demarrer()
+    f.attendre(60)
+    termine = next((r[2] for r in f.recus if r[0] == "termine"), {})
+    verifier(termine.get("plantage_moteur") is True and not termine.get("reprise")
+             and "reprenable" not in str(termine.get("titre")) and not f.file.elements[0].reprise,
+             "deux plantages avant tout segment gardé : rien n'est dit reprenable, la ligne propose « Relancer »",
+             str(termine)[:200])
+    from app import instance as instance_module
+
+    verrou = instance_module._fichier_verrou(TEMPORAIRE / "fantome.wav")
+    verrou.parent.mkdir(parents=True, exist_ok=True)
+    verrou.write_text("999999", encoding="ascii")
+    reprise.purger()
+    verifier(not verrou.exists(), "le verrou d'un processus disparu (.en-cours) est retiré au démarrage")
+
 
 # ---------------------------------------------------------------------------
 # 5. Aucun orphelin
