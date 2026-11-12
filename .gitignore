@@ -30,6 +30,8 @@ reprises/
 # réunion) et dernière position de relecture de chaque transcription.
 historique-relecture/
 relecture-positions.json
+# Empreintes des exports écrits (remplacer un export resté intact).
+exports.json
 # Séparation des locuteurs installée depuis l'application, et son cache de
 # téléchargement. Plusieurs gigaoctets de bibliothèques, jamais versionnés.
 extensions/
