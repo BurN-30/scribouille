@@ -187,8 +187,16 @@ def proposer(mat: Materiel, p: Profil, verdict: dict | None = None, conseil: dic
     # donne pas la probabilité des mots, la relecture n'en surligne plus aucun.
     if choix["moteur"] == "openvino":
         notes.append(langues.t("adapt.note.sans_confiance"))
+    # Le moteur Intel s'installe d'un clic, jamais d'office. Il est proposé
+    # partout où il apporte : puce graphique Intel, et tout processeur sans
+    # carte NVIDIA (campagne sur processeur : turbo glouton 33,1 % d'erreur à
+    # 0,09 fois l'audio, contre 35,1 % à 0,42 pour « Qualité » et 35,2 % à 0,17
+    # pour « Rapide » sous CTranslate2).
+    installer_ov = not p.openvino_installe and (p.puce_intel or not p.cuda)
     if p.puce_intel and not p.openvino_installe:
         notes.append(langues.t("adapt.note.installer_openvino"))
+    elif installer_ov:
+        notes.append(langues.t("adapt.note.installer_openvino_processeur"))
     if p.puce_intel and pilote_ancien(p.pilote_intel):
         notes.append(langues.t("adapt.note.pilote_ancien", version=p.pilote_intel,
                                minimum=".".join(str(n) for n in PILOTE_INTEL_MIN)))
@@ -220,7 +228,7 @@ def proposer(mat: Materiel, p: Profil, verdict: dict | None = None, conseil: dic
             choix["peripherique"] or "CPU"))
     else:
         moteur_lisible = langues.t("adapt.moteur_cuda" if p.cuda else "adapt.moteur_ct2")
-    raison = langues.t(f"adapt.raison.{choix['regle']}")
+    raison = _raison(choix, mat, essai)
     phrase = langues.t("adapt.phrase", preset=presets.nom_preset(choix["preset"]),
                        moteur=moteur_lisible, duree=une_heure, raison=raison)
     if telechargement:
@@ -230,7 +238,30 @@ def proposer(mat: Materiel, p: Profil, verdict: dict | None = None, conseil: dic
             "resume": langues.t("adapt.resume", preset=presets.nom_preset(choix["preset"]),
                                 moteur=moteur_lisible),
             "rythme": RYTHME_PROPOSE, "rythme_auto": True,
-            "action": "installer_openvino" if (p.puce_intel and not p.openvino_installe) else ""}
+            "action": "installer_openvino" if installer_ov else ""}
+
+
+def _raison(choix: dict, mat: Materiel, essai: Materiel) -> str:
+    """
+    Pourquoi ce réglage, en une proposition. Quand le moteur Intel est proposé,
+    la comparaison de vitesse vient des durées annoncées SUR CE POSTE (celles
+    des cartes des presets, mesurées dès qu'une transcription a eu lieu), jamais
+    d'une phrase fixe : sur un poste où le moteur habituel a été mesuré plus
+    rapide, la phrase ne prétend pas le contraire.
+    """
+    if choix["moteur"] != "openvino" or choix["source"] != "table":
+        return langues.t(f"adapt.raison.{choix['regle']}")
+    habituel = copy.copy(mat)
+    habituel.moteur, habituel.peripherique_openvino = "ctranslate2", ""
+    # Sur la puce, la référence est la qualité maximale sur le processeur ; sur
+    # le processeur, le même preset avec le moteur habituel.
+    preset_habituel = "qualite" if choix["regle"] == "puce_intel" else choix["preset"]
+    secondes_ov = presets.estimer_annonce(3600, choix["preset"], essai, RYTHME_PROPOSE)
+    secondes_habituel = presets.estimer_annonce(3600, preset_habituel, habituel, RYTHME_PROPOSE)
+    plus_rapide = 0 < secondes_ov < 0.9 * secondes_habituel
+    cle = f"adapt.raison.{choix['regle']}" + ("" if plus_rapide else "_juste")
+    return langues.t(cle, habituel=presets.formater_duree(secondes_habituel),
+                     preset_habituel=presets.nom_preset(preset_habituel))
 
 
 def deja_en_place(proposition: dict, config: dict, mat: Materiel) -> bool:

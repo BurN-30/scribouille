@@ -2703,8 +2703,10 @@ def essai_adaptation(base: Path) -> None:
     verifier(p["source"] == "table" and p["moteur"] == "openvino" and p["peripherique"] == "GPU"
              and not p["telechargement"] and p["rythme"] == "equilibre" and p["rythme_auto"],
              "proposition : table, puce Intel, rythme équilibré qui s'adapte", str(p))
-    verifier("7 min" in p["phrase"] and "Rapide" in p["phrase"], "phrase claire avec la durée pour une heure",
-             p["phrase"])
+    # La durée est celle annoncée sur ce poste, et aucune autre durée fixe ne
+    # vient la contredire (l'ancienne raison disait « 7 minutes » à côté).
+    verifier(p["une_heure"] in p["phrase"] and "Rapide" in p["phrase"] and "7 minutes" not in p["phrase"],
+             "phrase claire avec la durée pour une heure", p["phrase"])
     p = adaptation.proposer(mat, travail, None, None, absent)
     verifier(p["telechargement"] and "téléchargés au premier lancement" in p["phrase"],
              "modèle absent : la taille est dite, rien n'est téléchargé", p["phrase"])

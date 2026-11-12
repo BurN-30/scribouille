@@ -283,6 +283,49 @@ def essai_modele_garde(base: Path) -> None:
         diarisation.effective = ancien
 
 
+# ---------------------------------------------------------------------------
+# 4. Réglage proposé : les phrases suivent les durées du poste
+# ---------------------------------------------------------------------------
+
+def essai_reglage_propose() -> None:
+    titre("4. Réglage proposé : jamais une vitesse que les durées du poste contredisent")
+    from app import adaptation, materiel, presets
+
+    P = adaptation.Profil
+    mat = materiel.Materiel(cpu_nom="Processeur de bureau", coeurs_physiques=8, coeurs_logiques=16, ram_go=32.0)
+    present = lambda depot: "complet"  # noqa: E731
+    vrai = presets.estimer_annonce
+
+    def annonces(ov: float, habituel: float):
+        def estimer(duree, cle_preset, m, rythme_choisi="vitesse", *a, **k):
+            return ov if m.cle_calcul.startswith("openvino") else habituel
+        return estimer
+
+    try:
+        presets.estimer_annonce = annonces(ov=540.0, habituel=1200.0)
+        p = adaptation.proposer(mat, P(logiques=16, ram_go=32, openvino_installe=True), None, None, present)
+        verifier(p["regle"] == "processeur_openvino" and "20 min" in p["phrase"] and "pas annoncé" not in p["phrase"],
+                 "moteur Intel annoncé plus rapide ici : la phrase donne la durée du moteur habituel", p["phrase"])
+        presets.estimer_annonce = annonces(ov=1151.0, habituel=820.0)
+        p = adaptation.proposer(mat, P(logiques=16, ram_go=32, openvino_installe=True), None, None, present)
+        verifier("pas annoncé plus rapide" in p["phrase"] and "deux fois" not in p["phrase"],
+                 "moteur habituel mesuré plus rapide ici : la phrase ne prétend pas le contraire", p["phrase"])
+        muette = P(logiques=14, ram_go=32, puce_intel=True, openvino_installe=True, openvino_puce=False)
+        p = adaptation.proposer(mat, muette, None, None, present)
+        verifier(p["regle"] == "puce_muette" and "pas annoncé plus rapide" in p["phrase"],
+                 "puce muette, moteur habituel plus rapide ici : dit tel quel", p["phrase"])
+    finally:
+        presets.estimer_annonce = vrai
+    p = adaptation.proposer(mat, P(logiques=16, ram_go=32), None, None, present)
+    verifier(p["action"] == "installer_openvino" and p["moteur"] == "ctranslate2"
+             and any("2 points" in n for n in p["notes"]),
+             "processeur sans moteur Intel : son installation est proposée (un clic, jamais d'office)")
+    p = adaptation.proposer(mat, P(logiques=16, ram_go=32, cuda=True), None, None, present)
+    verifier(p["action"] == "" and p["moteur"] == "ctranslate2", "carte NVIDIA : rien à installer")
+    verifier(presets.PRESET_DEFAUT == "qualite",
+             "installation neuve sans moteur Intel : « Qualité maximale » reste le défaut")
+
+
 def principal() -> int:
     print(f"Vérification du socle de Scribouille\n{'=' * 40}")
     with tempfile.TemporaryDirectory(prefix="scribouille-socle-") as brut:
@@ -290,6 +333,7 @@ def principal() -> int:
         essai_decodage(base)
         essai_demarrage(base)
         essai_modele_garde(base)
+        essai_reglage_propose()
     print(f"\n{'=' * 40}")
     if _echecs:
         print(f"{_reussites} vérifications passées, {len(_echecs)} en échec :")
