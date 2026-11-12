@@ -317,7 +317,7 @@ from webview.dom import DOMEventHandler  # noqa: E402
 
 from app import audio as audio_module  # noqa: E402
 from app import config as config_module  # noqa: E402
-from app import barre_taches, diarisation, donnees, gabarit, lecture, maj  # noqa: E402
+from app import barre_taches, diarisation, donnees, ecoute, gabarit, lecture, maj  # noqa: E402
 from app import banc, materiel, nommage, presets, reglage_machine, reprise, rythme, stockage  # noqa: E402
 from app import surveillance, traitement, vocabulaire  # noqa: E402
 
@@ -343,6 +343,9 @@ class Passerelle:
         if rythme.normaliser(self.config.get("rythme")) != "vitesse":
             os.environ.setdefault("OMP_WAIT_POLICY", "PASSIVE")
         self._proposition: dict = {}
+        #: Serveur local de l'audio pour la relecture (voir app/ecoute.py) :
+        #: un seul fichier servi à la fois, démarré au premier besoin.
+        self._ecoute = ecoute.Ecoute()
         # Glossaire et corrections d'une installation ancienne restés tels que
         # livrés, exemples fictifs actifs : remplacés par les modèles actuels.
         # Seulement à l'ouverture de la fenêtre, jamais depuis la ligne de
@@ -1744,6 +1747,11 @@ class Passerelle:
         retour = lecture.charger(chemin)
         retour["lecture_audio"] = bool(self.config.get("lecture_audio"))
         retour["annulable"] = lecture.correction_annulable(chemin)
+        # L'audio passe par le serveur local, jamais par un « file:// » que le
+        # navigateur intégré refuse depuis une page servie en http.
+        meta = retour.get("meta") or {}
+        if retour["lecture_audio"] and meta.get("source_presente"):
+            retour["audio_url"] = self._ecoute.adresse_pour(meta.get("source_chemin", ""))
         return retour
 
     def copier_pour_ia(self, chemin: str) -> dict:

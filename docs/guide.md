@@ -254,6 +254,7 @@ app/
   barre_taches.py     Windows taskbar progress
   compagnon.py        .json file of word by word confidence
   lecture.py          reading view, learned corrections, copy for AI
+  ecoute.py           local server of the audio for the reading view
   gabarit.py          instruction template for an AI assistant
   reprise.py          progressive saving and resume after interruption
   traitement.py       sequential queue

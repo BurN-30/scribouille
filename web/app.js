@@ -1346,12 +1346,6 @@ function formaterSecondes(valeur) {
   return h ? `${h}:${deux(m)}:${deux(s)}` : `${m}:${deux(s)}`;
 }
 
-/* file:/// pour un chemin Windows. encodeURI laisse « : » et « / » en place et
-   ne code que les espaces et les accents, ce qui est exactement le besoin. */
-function urlFichierLocal(chemin) {
-  return encodeURI('file:///' + String(chemin || '').replace(/\\/g, '/'));
-}
-
 async function ouvrirLecture(chemin) {
   ouvrirModale('#modale-lecture');
   $('#titre-lecture').textContent = String(chemin).split(/[\\/]/).pop();
@@ -1420,20 +1414,23 @@ function dessinerLecture() {
   const zoneAudio = $('#lecture-audio');
   zoneAudio.innerHTML = '';
   if (d.lecture_audio) {
-    if (m.source_presente) {
-      zoneAudio.innerHTML = `<audio id="lecture-son" controls preload="none"
-        src="${ech(urlFichierLocal(m.source_chemin))}"></audio>`;
+    // L'adresse vient du serveur local de l'application : un « file:/// »
+    // est refuse par le navigateur integre depuis une page servie en http.
+    if (m.source_presente && d.audio_url) {
+      zoneAudio.innerHTML = `<audio id="lecture-son" controls preload="metadata"
+        src="${ech(d.audio_url)}"></audio>`;
       const son = $('#lecture-son');
       son.addEventListener('error', () => {
         zoneAudio.innerHTML = encartInfo(t('ui.lecture.audio_illisible'));
       });
     } else {
-      zoneAudio.innerHTML = encartInfo(t('ui.lecture.audio_absent'));
+      zoneAudio.innerHTML = encartInfo(t(m.source_presente
+        ? 'ui.lecture.audio_illisible' : 'ui.lecture.audio_absent'));
     }
   }
 
   const seuils = d.seuils || { faible: 0.5, tres_faible: 0.3 };
-  const ecoutable = !!(d.lecture_audio && m.source_presente);
+  const ecoutable = !!(d.lecture_audio && m.source_presente && d.audio_url);
   $('#lecture-texte').innerHTML = (d.paragraphes || []).map((p) => `
     <div class="lecture-para ${ecoutable ? 'ecoutable' : ''}" data-debut="${p.debut || 0}">
       ${p.locuteur ? `<span class="locuteur">${ech(p.locuteur)}

@@ -214,6 +214,60 @@ def essai_apercu_et_annulation(base: Path) -> None:
              "un fichier modifié depuis n'est pas écrasé par l'annulation")
 
 
+def essai_ecoute(base: Path) -> None:
+    import urllib.error
+    import urllib.request
+
+    from app import ecoute
+
+    titre("Écoute de la relecture : un seul fichier, servi en local, par plages")
+    dossier = base / "ecoute"
+    dossier.mkdir()
+    audio = dossier / "réunion du lundi.wav"
+    contenu = bytes(range(256)) * 40
+    audio.write_bytes(contenu)
+    autre = dossier / "autre.wav"
+    autre.write_bytes(b"autre")
+
+    serveur = ecoute.Ecoute()
+    try:
+        adresse = serveur.adresse_pour(audio)
+        verifier(adresse.startswith("http://127.0.0.1:") and "file:" not in adresse
+                 and "réunion" not in adresse,
+                 "adresse http locale, sans chemin ni nom de fichier", adresse)
+
+        def lire(url: str, plage: str = "") -> tuple[int, dict, bytes]:
+            requete = urllib.request.Request(url, headers={"Range": plage} if plage else {})
+            try:
+                with urllib.request.urlopen(requete, timeout=10) as reponse:
+                    return reponse.status, dict(reponse.headers), reponse.read()
+            except urllib.error.HTTPError as exc:
+                return exc.code, dict(exc.headers), b""
+
+        statut, entetes, corps = lire(adresse)
+        verifier(statut == 200 and corps == contenu and entetes.get("Content-Type") == "audio/wav"
+                 and entetes.get("Accept-Ranges") == "bytes",
+                 "le fichier entier, avec son type et l'annonce des plages", f"{statut} {entetes}")
+        statut, entetes, corps = lire(adresse, "bytes=1000-1099")
+        verifier(statut == 206 and corps == contenu[1000:1100]
+                 and entetes.get("Content-Range") == f"bytes 1000-1099/{len(contenu)}",
+                 "une plage pour se déplacer dans l'enregistrement", f"{statut} {entetes.get('Content-Range')}")
+        statut, _, corps = lire(adresse, "bytes=-10")
+        verifier(statut == 206 and corps == contenu[-10:], "la fin du fichier, pour la durée")
+        statut, _, _ = lire(adresse, f"bytes={len(contenu) + 5}-")
+        verifier(statut == 416, "une plage hors du fichier est refusée")
+        racine = adresse.split("/son/")[0]
+        refus = [lire(racine + chemin)[0] for chemin in (
+            "/son/inconnu-inconnu-inconnu", "/son/../autre.wav", "/autre.wav",
+            "/" + str(autre).replace("\\", "/"))]
+        verifier(all(code == 404 for code in refus), "aucune autre adresse ne sert un fichier", str(refus))
+        nouvelle = serveur.adresse_pour(autre)
+        verifier(lire(adresse)[0] == 404 and lire(nouvelle)[2] == b"autre",
+                 "ouvrir une autre transcription remplace le fichier servi")
+    finally:
+        serveur.arreter()
+
+
 # ---------------------------------------------------------------------------
 # Fichiers produits
 # ---------------------------------------------------------------------------
@@ -360,6 +414,7 @@ def principal() -> int:
         essai_vue_egale_fichier(base)
         essai_casse_et_doublons(base)
         essai_apercu_et_annulation(base)
+        essai_ecoute(base)
         essai_fichiers_produits(base)
         essai_file_apres_arret(base)
 

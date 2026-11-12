@@ -252,6 +252,7 @@ app/
   barre_taches.py     progression dans la barre des tâches Windows
   compagnon.py        fichier .json de confiance mot à mot
   lecture.py          vue de lecture, corrections relues, copie pour l'IA
+  ecoute.py           serveur local de l'audio pour la relecture
   gabarit.py          gabarit d'instructions pour un assistant IA
   reprise.py          sauvegarde progressive et reprise après interruption
   traitement.py       file séquentielle

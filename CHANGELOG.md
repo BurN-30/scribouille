@@ -74,6 +74,13 @@ Corrections issues d'une revue d'usage de l'application réelle (vérifiées par
   ses sous-titres et son compagnon ; l'onglet « Transcriptions » compte des
   transcriptions (une ligne avec ses formats) et ne s'arrête plus à 40
   fichiers.
+- **Écoute pendant la relecture** : le lecteur pointait vers un `file:///`,
+  que le navigateur intégré refuse depuis une page servie en http
+  (« Media load rejected by URL safety check ») ; l'audio passe maintenant
+  par un petit serveur local (`app/ecoute.py`, 127.0.0.1, bibliothèque
+  standard) qui ne sert que l'enregistrement de la transcription ouverte,
+  sous une adresse à jeton, avec les requêtes par plage qui permettent de se
+  placer au début d'un paragraphe.
 - **Correction depuis la relecture** : l'en-tête du fichier texte reste séparé
   du corps ; la barre de fin d'en-tête et la première phrase ne se retrouvent
   plus sur la même ligne.
