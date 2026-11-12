@@ -432,7 +432,9 @@ def depuis_donnees(donnees: dict, source: str = "") -> tuple[Vocabulaire, list[s
             faute = _faute_depuis(faute_brute)
             if faute is None:
                 continue
-            if cle(faute.forme) == entree.cle:
+            if cle(faute.forme) == entree.cle and not faute.forcer:
+                # Identique à la casse près : la graphie s'en charge déjà. Gardée
+                # seulement si forcée (mots courants écrits ainsi partout).
                 remarques.append(f"« {forme} » : faute identique à la forme correcte, ignorée")
                 continue
             entree.ajouter_faute(faute)
@@ -911,7 +913,7 @@ def appliquer_modification(entree: Entree, modification: dict) -> list[str]:
         fautes = []
         for brut in modification["fautes"] or []:
             faute = _faute_depuis(brut)
-            if faute is not None and cle(faute.forme) != cle(entree.forme):
+            if faute is not None and (cle(faute.forme) != cle(entree.forme) or faute.forcer):
                 fautes.append(faute)
         entree.fautes = []
         for f in fautes:

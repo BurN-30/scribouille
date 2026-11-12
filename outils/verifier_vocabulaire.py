@@ -671,6 +671,22 @@ def essai_fusion_corrections(base: Path) -> None:
         entete_voc = ['format = "scribouille-vocabulaire"', "version = 2"]
         return v2.lire_texte("\n".join(entete_voc + list(lignes)) + "\n")[0]
 
+    # Pas de doublon quand la forme juste prolonge la faute, même en tête de
+    # phrase (casse différente de la forme).
+    c = usage.Correcteur(vocabulaire_de("[[terme]]", 'forme = "réseaux sociaux"',
+                                        'fautes = [{ forme = "réseaux", forcer = true }]'))
+    rendu = c.corriger_texte("Réseaux sociaux et réseaux.")[0]
+    verifier(rendu == "Réseaux sociaux et réseaux sociaux.",
+             "pas de doublon : « Réseaux sociaux » reste tel quel, « réseaux » seul est corrigé", rendu)
+    # Casse seule de mots courants, forcée (règle « pierre => Pierre » du format 1).
+    ancien = v2.depuis_v1("", "pierre => Pierre\ngitlab => GitLab\n")
+    rendu = usage.Correcteur(ancien).corriger_texte("pierre parle de gitlab et de GitLab.")[0]
+    verifier(rendu == "Pierre parle de GitLab et de GitLab.",
+             "casse : règles du format 1 de casse seule appliquées comme avant", rendu)
+    relu = v2.lire_texte(v2.ecrire_texte(ancien))[0]
+    verifier(any(f.forcer and f.forme == "pierre" for e in relu.entrees for f in e.fautes),
+             "casse forcée : gardée à l'écriture et à la relecture du fichier")
+
     anciens = (v2.FICHIER_PERSONNEL, chemins.FICHIER_VOCABULAIRE, chemins.FICHIER_CORRECTIONS)
     try:
         v2.FICHIER_PERSONNEL = base / "perso.toml"

@@ -175,6 +175,7 @@ class _Motif:
     mots: list[str]
     faute: Faute | None      # None : la forme elle-même (graphie)
     regle: str               # « faute », « contexte », « graphie »
+    forcee: bool = False     # graphie appliquée même à des mots courants
 
 
 @dataclass
@@ -198,9 +199,15 @@ class Correcteur:
             if not mots_forme:
                 continue
             self.formes_justes.add(tuple(mots_forme))
+            graphie_forcee = False
             for f in e.fautes:
                 mots = lexique.mots_de(f.forme)
-                if not mots or tuple(mots) == tuple(mots_forme):
+                if tuple(mots) == tuple(mots_forme):
+                    # Même mots, autre casse, forcée : « pierre => Pierre » du
+                    # format 1 s'appliquait partout, il s'applique toujours.
+                    graphie_forcee = graphie_forcee or f.forcer
+                    continue
+                if not mots:
                     continue
                 if not f.voisins and not f.forcer and lexique.tous_courants(mots):
                     # Garde-fou : une suite de mots courants n'est jamais
@@ -210,7 +217,7 @@ class Correcteur:
                     continue
                 self.motifs.append(_Motif(e, mots, f, "contexte" if f.voisins else "faute"))
             # Graphie : même mots, autre casse ou accents (« rgpd », « kubernetes »).
-            self.motifs.append(_Motif(e, mots_forme, None, "graphie"))
+            self.motifs.append(_Motif(e, mots_forme, None, "graphie", graphie_forcee))
             if rapprochement and e.rapprochement and e.categorie in CATEGORIES_RAPPROCHEES:
                 sources = [e.forme] + ([e.prononciation] if e.prononciation else [])
                 if lexique.est_sigle(e.forme):
@@ -252,6 +259,18 @@ class Correcteur:
             return texte, []
         trouves: list[tuple[int, int, Entree, str, int]] = []   # début, fin (mots), entrée, règle, distance
         occupe = [False] * len(mots)
+        # Où la forme juste d'un terme est déjà écrite (à la casse près) : une
+        # faute de CE terme qui la chevauche n'est pas appliquée. Sans cela,
+        # « réseaux » ramené à « réseaux sociaux » ajoutait un « sociaux » de
+        # plus à « Réseaux sociaux » en tête de phrase.
+        formes_presentes: dict[str, list[tuple[int, int]]] = {}
+        for motif in self.motifs:
+            if motif.regle != "graphie":
+                continue
+            n = len(motif.mots)
+            for k in range(len(mots) - n + 1):
+                if mots[k:k + n] == motif.mots:
+                    formes_presentes.setdefault(motif.entree.cle, []).append((k, k + n))
         # 1. Fautes listées et graphie.
         i = 0
         while i < len(mots):
@@ -262,6 +281,9 @@ class Correcteur:
                     continue
                 if motif.regle == "contexte" and not self._voisins_presents(mots, i, i + n, motif.faute.voisins):
                     continue
+                if motif.regle != "graphie" and any(
+                        a < i + n and i < b for a, b in formes_presentes.get(motif.entree.cle, ())):
+                    continue
                 if motif.regle == "graphie":
                     original = texte[jetons[i][1]:jetons[i + n - 1][2]]
                     if original == motif.entree.forme or lexique.sans_accents(original) == motif.entree.forme:
@@ -271,7 +293,8 @@ class Correcteur:
                         pris = True
                         i += n
                         break
-                    if lexique.tous_courants(motif.mots) and not lexique.est_sigle(motif.entree.forme) \
+                    if not motif.forcee and lexique.tous_courants(motif.mots) \
+                            and not lexique.est_sigle(motif.entree.forme) \
                             and not (motif.entree.categorie == "personne" and i > 0
                                      and mots[i - 1] in lexique.CIVILITES):
                         # « pierre » n'est pas toujours « Pierre » ; « madame
