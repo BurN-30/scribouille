@@ -64,10 +64,10 @@ Points d'attention, tous appris à la construction et vérifiés sur le gel rée
 Limite connue, dite ici plutôt que découverte plus tard
 ------------------------------------------------------
 torchcodec, tiré par pyannote.audio, cherche au chargement les bibliothèques
-partagées de FFmpeg, « avcodec-61.dll » et compagnie. Scribouille n'en pose
-aucune : il embarque un exécutable FFmpeg entier, ce qui n'est pas la même
-chose. torchcodec écrit donc quelques lignes d'avertissement à l'import, et ses
-décodeurs restent inertes.
+partagées de FFmpeg, « avcodec-61.dll » et compagnie, à un endroit où
+Scribouille n'en pose aucune : les siennes sont celles de PyAV, rangées et
+renommées dans son propre dossier. torchcodec écrit donc quelques lignes
+d'avertissement à l'import, et ses décodeurs restent inertes.
 
 Sans conséquence ici : la diarisation reçoit un signal déjà décodé, sous forme
 de tableau numpy passé en mémoire (voir `app/diarisation.py`), et ne demande

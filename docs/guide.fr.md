@@ -272,7 +272,7 @@ app/
   chemins.py          emplacements, selon source ou version installée
   materiel.py         détection processeur, mémoire, GPU, NPU
   presets.py          presets, estimations, garde-fous mémoire
-  audio.py            FFmpeg, durée, décodage 16 kHz mono
+  audio.py            décodage 16 kHz mono (FFmpeg par PyAV), durée
   moteur.py           faster-whisper, chargement et libération
   diarisation.py      pyannote, jeton, attribution des locuteurs
   extensions.py       installation de la séparation des locuteurs, pip embarqué

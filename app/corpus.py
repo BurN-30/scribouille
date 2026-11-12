@@ -50,7 +50,6 @@ import io
 import json
 import re
 import struct
-import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -314,20 +313,15 @@ def en_flottants(octets: bytes, format_: int, bits: int) -> np.ndarray:
 
 
 def reechantillonner(signal: np.ndarray, frequence: int) -> np.ndarray:
-    """Vers 16 kHz, par le FFmpeg livré avec l'application."""
+    """Vers 16 kHz, par le même rééchantillonneur que le décodage (FFmpeg par PyAV)."""
     if frequence == FREQUENCE:
         return signal.astype(np.float32)
     from . import audio
 
-    resultat = subprocess.run(
-        [audio.binaire_ffmpeg(), "-nostdin", "-hide_banner", "-loglevel", "error",
-         "-f", "f32le", "-ar", str(frequence), "-ac", "1", "-i", "pipe:0",
-         "-f", "f32le", "-acodec", "pcm_f32le", "-ar", str(FREQUENCE), "-ac", "1", "-"],
-        input=np.ascontiguousarray(signal, dtype="<f4").tobytes(), capture_output=True,
-        creationflags=(subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0))
-    if resultat.returncode != 0:
-        raise ErreurCorpus("reechantillonnage", (resultat.stderr or b"").decode("utf-8", "replace")[:200])
-    return np.frombuffer(resultat.stdout, dtype="<f4").astype(np.float32)
+    try:
+        return audio.reechantillonner(signal, frequence)
+    except Exception as exc:
+        raise ErreurCorpus("reechantillonnage", f"{type(exc).__name__}: {exc}"[:200]) from exc
 
 
 def melanger(signaux: list[np.ndarray], paroles: list[list[tuple[float, float]]]) -> np.ndarray:

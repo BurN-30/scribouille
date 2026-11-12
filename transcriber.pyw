@@ -10,7 +10,7 @@ Option de diagnostic, utilisée par la chaîne de publication :
 
     transcriber.pyw --verifier
 
-vérifie les imports, la présence de FFmpeg et l'écriture des dossiers de
+vérifie les imports, le décodeur audio et l'écriture des dossiers de
 travail, affiche un bilan, et sort avec le code 0 si tout va bien.
 
 Options d'extension, sans fenêtre elles non plus. C'est par elles que
@@ -210,19 +210,15 @@ def verification() -> int:
     except Exception as exc:
         resultat(False, "lexique du français (vocabulaire)", f"{type(exc).__name__}: {exc}")
 
-    # FFmpeg : présence du binaire, puis exécution réelle.
+    # Décodeur (FFmpeg par PyAV) : décodage réel de l'extrait livré.
     try:
-        from app import audio as audio_verif
+        from app import audio as audio_verif, banc as banc_verif
 
-        binaire = audio_verif.binaire_ffmpeg()
-        sortie = subprocess.run(
-            [binaire, "-version"], capture_output=True, text=True, errors="replace",
-            timeout=30, creationflags=(subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0),
-        )
-        premiere = (sortie.stdout or "").splitlines()[0] if sortie.stdout else ""
-        resultat(sortie.returncode == 0, "décodeur audio (FFmpeg)", premiere or binaire)
+        signal = audio_verif.decoder(banc_verif.EXTRAIT)
+        resultat(signal.size > audio_verif.FREQUENCE, "décodeur audio (FFmpeg par PyAV)",
+                 f"{audio_verif.version_decodeur()}, extrait de {signal.size / audio_verif.FREQUENCE:.1f} s")
     except Exception as exc:
-        resultat(False, "décodeur audio (FFmpeg)", f"{type(exc).__name__}: {exc}")
+        resultat(False, "décodeur audio (FFmpeg par PyAV)", f"{type(exc).__name__}: {exc}")
 
     # Écriture des dossiers de travail : c'est le point qui casse quand une
     # version installée essaie encore d'écrire dans son dossier de programme.

@@ -34,6 +34,7 @@ run by hand, without the network and without a window:
 .venv\Scripts\python outils\verifier_donnees.py
 .venv\Scripts\python outils\verifier_parcours.py
 .venv\Scripts\python outils\verifier_vocabulaire.py
+.venv\Scripts\python outils\verifier_socle.py
 ```
 
 All of them exit with code 0 when everything passes. Run at least `--verifier` and

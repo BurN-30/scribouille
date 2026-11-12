@@ -107,9 +107,9 @@ donnees = [
 # dans son dossier « assets ». Il n'est pas téléchargé : il doit être livré.
 donnees += collect_data_files("faster_whisper")
 
-# Le binaire FFmpeg d'imageio-ffmpeg. Le hook officiel le copie déjà, on le
-# redemande explicitement pour ne pas dépendre d'une version du hook.
-donnees += collect_data_files("imageio_ffmpeg", subdir="binaries")
+# FFmpeg : une seule, celle de PyAV (bibliothèques partagées, sous « av.libs »),
+# que faster-whisper livre déjà. Le décodage passe par elle (app/audio.py) :
+# l'exécutable d'imageio-ffmpeg (84 Mo) n'est plus embarqué.
 
 # tokenizers et huggingface_hub emportent quelques fichiers de données.
 donnees += collect_data_files("tokenizers")
@@ -220,6 +220,9 @@ imports_caches += collect_submodules("webview.platforms")
 # bibliotheque que s'il compte s'en servir.
 exclusions = [
     "hf_xet",
+    # Plus utilisé depuis la 2.5 (décodage par PyAV) : exclu au cas où
+    # l'environnement de construction l'aurait encore.
+    "imageio_ffmpeg",
     # Le moteur OpenVINO s'installe à la demande, comme la séparation des
     # locuteurs (app/extensions.py) : 260 Mo que tout le monde n'utilise pas.
     # Exclu explicitement, sans quoi un environnement de construction qui

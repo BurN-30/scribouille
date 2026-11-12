@@ -242,12 +242,12 @@ _FR: dict[str, str] = {
     ),
     "audio.ffmpeg.msg_sources": (
         "Le décodeur audio est introuvable. Relancez « installer.bat », ou installez-le "
-        "à la main avec : pip install imageio-ffmpeg"
+        "à la main avec : pip install av"
     ),
     "audio.introuvable.titre": "Fichier introuvable",
     "audio.introuvable.msg": "« {nom} » n'existe plus à l'emplacement indiqué.",
     "audio.decodage.titre": "Décodage impossible",
-    "audio.decodage.msg": "FFmpeg n'a pas pu être lancé sur « {nom} ».",
+    "audio.decodage.msg": "Le décodeur n'a pas pu être lancé sur « {nom} ».",
     "audio.illisible.titre": "Fichier audio illisible",
     "audio.illisible.msg": (
         "« {nom} » n'a pas pu être décodé : le fichier est peut-être corrompu, "
@@ -1682,12 +1682,12 @@ _EN: dict[str, str] = {
     ),
     "audio.ffmpeg.msg_sources": (
         "The audio decoder could not be found. Run \"installer.bat\" again, or install it "
-        "by hand with: pip install imageio-ffmpeg"
+        "by hand with: pip install av"
     ),
     "audio.introuvable.titre": "File not found",
     "audio.introuvable.msg": "\"{nom}\" is no longer at the given location.",
     "audio.decodage.titre": "Decoding failed",
-    "audio.decodage.msg": "FFmpeg could not be started on \"{nom}\".",
+    "audio.decodage.msg": "The decoder could not be started on \"{nom}\".",
     "audio.illisible.titre": "Unreadable audio file",
     "audio.illisible.msg": (
         "\"{nom}\" could not be decoded: the file may be corrupted, incomplete, or "

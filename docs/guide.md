@@ -274,7 +274,7 @@ app/
   chemins.py          locations, source or installed version
   materiel.py         processor, memory, GPU and NPU detection
   presets.py          presets, estimates, memory guardrails
-  audio.py            FFmpeg, duration, 16 kHz mono decoding
+  audio.py            16 kHz mono decoding (FFmpeg through PyAV), duration
   moteur.py           faster-whisper, loading and release
   diarisation.py      pyannote, token, speaker attribution
   extensions.py       speaker separation install, embedded pip

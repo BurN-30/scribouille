@@ -8,8 +8,8 @@ Ce qu'il fait :
   1. vérifie la version de Python ;
   2. crée l'environnement isolé « .venv » à côté de l'application ;
   3. installe le socle (transcription seule, léger, sans PyTorch) ;
-  4. pose FFmpeg via un paquet Python qui embarque le binaire, donc sans
-     droits administrateur, sans winget et sans PATH à configurer ;
+  4. pose FFmpeg via PyAV, un paquet Python qui embarque ses bibliothèques,
+     donc sans droits administrateur, sans winget et sans PATH à configurer ;
   5. si une carte NVIDIA est détectée, ajoute les bibliothèques CUDA au bon
      endroit pour éviter le grand classique « cublas64_12.dll introuvable » ;
   6. sur demande, installe la séparation des locuteurs (PyTorch + pyannote),
@@ -278,10 +278,10 @@ def verifier(locuteurs_demandes: bool) -> bool:
             echec(etiquette + " : manquant")
             tout_va_bien = False
 
-    # FFmpeg embarqué
-    code = "import imageio_ffmpeg,os,sys;p=imageio_ffmpeg.get_ffmpeg_exe();sys.exit(0 if os.path.exists(p) else 1)"
+    # FFmpeg embarqué, par PyAV
+    code = "import av,sys;sys.exit(0 if av.library_versions.get('libavcodec') else 1)"
     if subprocess.run([str(python_du_venv()), "-c", code], capture_output=True).returncode == 0:
-        ok("décodeur audio (FFmpeg embarqué)")
+        ok("décodeur audio (FFmpeg embarqué, PyAV)")
     else:
         echec("décodeur audio (FFmpeg) : manquant")
         tout_va_bien = False

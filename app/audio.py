@@ -1,5 +1,5 @@
 """
-Lecture audio : localisation de FFmpeg, mesure de durée, décodage.
+Lecture audio : mesure de durée, décodage.
 
 On décode nous-mêmes une seule fois, en mono 16 kHz float32, pour trois raisons :
   - c'est exactement ce qu'attendent Whisper et pyannote, donc pas de double
@@ -8,22 +8,30 @@ On décode nous-mêmes une seule fois, en mono 16 kHz float32, pour trois raison
   - cela évite de dépendre du backend audio de torchaudio, source du fameux
     avertissement torchcodec au démarrage.
 
-Le binaire FFmpeg vient du paquet `imageio-ffmpeg`, qui l'embarque : ni PATH à
-configurer, ni droits administrateur, ni winget.
+Le décodage passe par PyAV, c'est-à-dire les bibliothèques de FFmpeg que
+faster-whisper livre déjà : une seule FFmpeg dans le paquet, aucun sous-processus,
+et le signal est écrit au fil du décodage dans un tableau réservé d'avance (le
+pic de mémoire d'une réunion de 1 h 30 passe d'environ deux copies à une).
+Le chemin est le même que celui de la ligne de commande `ffmpeg` utilisée
+jusqu'en 2.4 : mêmes filtres, même conversion (`aformat`, donc `aresample` avec
+ses réglages par défaut), même découpe d'un extrait.
+
+numpy et PyAV ne sont importés qu'au premier décodage : la fenêtre démarre
+sans eux.
 """
 
 from __future__ import annotations
 
-import re
-import subprocess
-import sys
-from functools import lru_cache
+import importlib.util
+import math
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-import numpy as np
-
-from . import chemins, journal, langues
+from . import journal, langues
 from .journal import ErreurLisible
+
+if TYPE_CHECKING:
+    import numpy as np
 
 EXTENSIONS_AUDIO = {
     ".m4a", ".mp3", ".wav", ".ogg", ".oga", ".flac", ".webm", ".wma",
@@ -37,73 +45,26 @@ FREQUENCE = 16000
 # (hors bande de la voix), puis normalisation de niveau EBU R128.
 FILTRES_SALLE = "highpass=f=100,lowpass=f=8000,loudnorm=I=-18:TP=-2:LRA=11"
 
-_SANS_FENETRE = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+#: Conversion finale, celle que `-f f32le -ac 1 -ar 16000` demandait à FFmpeg.
+_FORMAT_SORTIE = f"sample_fmts=flt:sample_rates={FREQUENCE}:channel_layouts=mono"
 
 
-def _ffmpeg_livre() -> str:
-    """
-    Binaire FFmpeg livré avec la version installée.
-
-    PyInstaller ne copie pas le binaire d'imageio-ffmpeg tout seul : il est ajouté
-    explicitement dans le fichier .spec, sous « imageio_ffmpeg/binaries ». On le
-    cherche là, puis n'importe où dans les ressources en dernier recours.
-    """
-    racine = chemins.DOSSIER_RESSOURCES
-    candidats = [
-        *(racine / "imageio_ffmpeg" / "binaries").glob("ffmpeg*.exe"),
-        *(racine / "imageio_ffmpeg" / "binaries").glob("ffmpeg-*"),
-        *racine.glob("ffmpeg*.exe"),
-    ]
-    for candidat in candidats:
-        if candidat.is_file():
-            return str(candidat)
-    return ""
-
-
-@lru_cache(maxsize=1)
-def binaire_ffmpeg() -> str:
-    """Chemin du binaire FFmpeg utilisable, ou lève une erreur lisible."""
-    if chemins.EST_GELE:
-        livre = _ffmpeg_livre()
-        if livre:
-            # imageio-ffmpeg respecte cette variable : les appels indirects
-            # trouveront le même binaire que nous.
-            import os
-
-            os.environ.setdefault("IMAGEIO_FFMPEG_EXE", livre)
-            journal.info("FFmpeg livré avec l'application : %s", livre)
-            return livre
-
-    try:
-        import imageio_ffmpeg  # type: ignore
-
-        chemin = imageio_ffmpeg.get_ffmpeg_exe()
-        if chemin and Path(chemin).exists():
-            journal.info("FFmpeg embarqué : %s", chemin)
-            return chemin
-    except Exception as exc:
-        journal.debug("imageio-ffmpeg indisponible : %s", exc)
-
-    import shutil
-
-    systeme = shutil.which("ffmpeg")
-    if systeme:
-        journal.info("FFmpeg du système : %s", systeme)
-        return systeme
-
-    raise ErreurLisible(
-        langues.t("audio.ffmpeg.titre"),
-        langues.t("audio.ffmpeg.msg_installee" if chemins.EST_GELE
-                  else "audio.ffmpeg.msg_sources"),
-    )
+def decodeur_present() -> bool:
+    """PyAV (les bibliothèques de FFmpeg) est-il là ? Test léger, sans import."""
+    return importlib.util.find_spec("av") is not None
 
 
 def ffmpeg_present() -> bool:
-    try:
-        binaire_ffmpeg()
-        return True
-    except ErreurLisible:
-        return False
+    """Ancien nom, gardé : le décodeur, c'est FFmpeg par PyAV."""
+    return decodeur_present()
+
+
+def version_decodeur() -> str:
+    """Versions de PyAV et de FFmpeg (libavcodec), pour le bilan `--verifier`."""
+    import av  # type: ignore
+
+    avcodec = av.library_versions.get("libavcodec") or ()
+    return f"PyAV {av.__version__}, libavcodec {'.'.join(str(n) for n in avcodec)}"
 
 
 def est_audio(chemin: str | Path) -> bool:
@@ -138,104 +99,175 @@ def lister_dossier(dossier: str | Path) -> tuple[list[str], int]:
     return retenus, ignores
 
 
-_MOTIF_DUREE = re.compile(r"Duration:\s*(\d+):(\d\d):(\d\d(?:\.\d+)?)")
+def _duree_conteneur(conteneur, flux) -> float:
+    """Durée annoncée par le conteneur (la ligne « Duration » de FFmpeg), sinon par le flux."""
+    if conteneur.duration:
+        return conteneur.duration / 1_000_000
+    if flux is not None and flux.duration and flux.time_base:
+        return float(flux.duration * flux.time_base)
+    return 0.0
 
 
 def duree(chemin: str | Path) -> float:
-    """
-    Durée du fichier en secondes, 0 si elle n'a pas pu être lue.
-
-    On lit l'en-tête via `ffmpeg -i` : le paquet imageio-ffmpeg ne fournit pas
-    ffprobe, mais ffmpeg annonce la durée sur sa sortie d'erreur.
-    """
+    """Durée du fichier en secondes, 0 si elle n'a pas pu être lue. Lit l'en-tête seulement."""
     try:
-        binaire = binaire_ffmpeg()
-    except ErreurLisible:
-        return 0.0
+        import av  # type: ignore
 
-    try:
-        resultat = subprocess.run(
-            [binaire, "-hide_banner", "-i", str(chemin)],
-            capture_output=True, text=True, errors="replace", timeout=60,
-            creationflags=_SANS_FENETRE,
-        )
-        trouve = _MOTIF_DUREE.search(resultat.stderr or "")
-        if trouve:
-            heures, minutes, secondes = trouve.groups()
-            return int(heures) * 3600 + int(minutes) * 60 + float(secondes)
+        with av.open(str(chemin)) as conteneur:
+            flux = next((s for s in conteneur.streams if s.type == "audio"), None)
+            return _duree_conteneur(conteneur, flux)
     except Exception as exc:
         journal.debug("Mesure de durée impossible pour %s : %s", chemin, exc)
     return 0.0
 
 
+def _graphe(av, flux, filtres_salle: bool, debut: float, duree_extrait: float, origine: float):
+    """
+    Chaîne de filtres : découpe éventuelle (comme `-ss` avant `-i`, puis `-t`),
+    filtres de salle, conversion en mono 16 kHz flottant.
+    """
+    graphe = av.filter.Graph()
+    noeuds = [graphe.add_abuffer(template=flux)]
+    if debut > 0 or duree_extrait > 0:
+        # Les instants des trames sont ceux du flux : le début du fichier n'est
+        # pas forcément à zéro (`start_time`), FFmpeg le compte aussi.
+        options = [f"start={origine + max(0.0, debut):.6f}"] if debut > 0 else []
+        if duree_extrait > 0:
+            options.append(f"duration={duree_extrait:.6f}")
+        noeuds.append(graphe.add("atrim", ":".join(options)))
+        noeuds.append(graphe.add("asetpts", "PTS-STARTPTS"))
+    if filtres_salle:
+        for filtre in FILTRES_SALLE.split(","):
+            nom, _, arguments = filtre.partition("=")
+            noeuds.append(graphe.add(nom, arguments))
+    noeuds.append(graphe.add("aformat", _FORMAT_SORTIE))
+    noeuds.append(graphe.add("abuffersink"))
+    for amont, aval in zip(noeuds, noeuds[1:]):
+        amont.link_to(aval)
+    graphe.configure()
+    return graphe
+
+
+class _Tampon:
+    """Tableau réservé d'avance d'après la durée annoncée, agrandi si elle était fausse."""
+
+    def __init__(self, np, echantillons: int):
+        self.np = np
+        self.donnees = np.empty(max(echantillons, FREQUENCE), dtype=np.float32)
+        self.taille = 0
+
+    def ajouter(self, morceau) -> None:
+        fin = self.taille + morceau.size
+        if fin > self.donnees.size:
+            nouveau = self.np.empty(max(fin, int(self.donnees.size * 1.25)), dtype=self.np.float32)
+            nouveau[:self.taille] = self.donnees[:self.taille]
+            self.donnees = nouveau
+        self.donnees[self.taille:fin] = morceau
+        self.taille = fin
+
+    def resultat(self):
+        if self.taille == self.donnees.size:
+            return self.donnees
+        # Copie seulement si la réserve dépasse nettement : quelques secondes
+        # de marge ne valent pas une copie de tout le signal.
+        if self.donnees.size - self.taille > 60 * FREQUENCE:
+            return self.donnees[:self.taille].copy()
+        return self.donnees[:self.taille]
+
+
 def decoder(chemin: str | Path, filtres_salle: bool = False,
-            debut: float = 0.0, duree: float = 0.0) -> np.ndarray:
+            debut: float = 0.0, duree: float = 0.0) -> "np.ndarray":
     """
     Décode le fichier en tableau float32 mono 16 kHz, normalisé entre -1 et 1.
 
     `debut` et `duree`, en secondes, ne décodent qu'un extrait (comparaison des
-    moteurs) : FFmpeg se place directement au début voulu, sans décoder ce qui
-    précède. Zéro pour l'un ou l'autre : depuis le début, jusqu'à la fin.
+    moteurs) : le décodage se place directement près du début voulu, sans
+    décoder ce qui précède. Zéro pour l'un ou l'autre : depuis le début,
+    jusqu'à la fin.
 
     Lève une ErreurLisible si le fichier est illisible ou ne contient pas d'audio.
     """
-    binaire = binaire_ffmpeg()
-    fichier = Path(chemin)
+    import numpy as np
 
+    fichier = Path(chemin)
     if not fichier.exists():
         raise ErreurLisible(
             langues.t("audio.introuvable.titre"),
             langues.t("audio.introuvable.msg", nom=fichier.name),
         )
-
-    commande = [
-        binaire, "-nostdin", "-hide_banner", "-loglevel", "error",
-        "-threads", "0",
-    ]
-    if debut and debut > 0:
-        commande += ["-ss", f"{float(debut):.3f}"]
-    commande += ["-i", str(fichier)]
-    if duree and duree > 0:
-        commande += ["-t", f"{float(duree):.3f}"]
-    if filtres_salle:
-        commande += ["-af", FILTRES_SALLE]
-    commande += [
-        "-f", "f32le", "-acodec", "pcm_f32le",
-        "-ac", "1", "-ar", str(FREQUENCE), "-",
-    ]
-
-    journal.debug("Décodage : %s", " ".join(commande[:1] + commande[-10:]))
-
     try:
-        resultat = subprocess.run(
-            commande, capture_output=True, creationflags=_SANS_FENETRE
-        )
+        import av  # type: ignore
     except Exception as exc:
         raise ErreurLisible(
-            langues.t("audio.decodage.titre"),
-            langues.t("audio.decodage.msg", nom=fichier.name),
+            langues.t("audio.ffmpeg.titre"),
+            langues.t("audio.ffmpeg.msg_installee"),
             exc,
         ) from exc
 
-    if resultat.returncode != 0 or not resultat.stdout:
-        detail = (resultat.stderr or b"").decode("utf-8", "replace").strip()
-        journal.erreur("FFmpeg a échoué sur %s : %s", fichier.name, detail[:2000])
+    debut = max(0.0, float(debut or 0.0))
+    duree_extrait = max(0.0, float(duree or 0.0))
+    try:
+        with av.open(str(fichier)) as conteneur:
+            flux = next((s for s in conteneur.streams if s.type == "audio"), None)
+            if flux is None:
+                raise ErreurLisible(
+                    langues.t("audio.muet.titre"),
+                    langues.t("audio.muet.msg", nom=fichier.name),
+                )
+            origine = float(conteneur.start_time or 0) / 1_000_000
+            total = _duree_conteneur(conteneur, flux)
+            attendu = duree_extrait if duree_extrait > 0 else max(0.0, total - debut)
+            tampon = _Tampon(np, int(math.ceil(attendu * FREQUENCE)) + FREQUENCE)
+            graphe = _graphe(av, flux, filtres_salle, debut, duree_extrait, origine)
+            if debut > 0:
+                # Recherche vers l'arrière jusqu'à l'image clé précédente ; la
+                # découpe exacte est faite par « atrim », comme FFmpeg le fait
+                # après un « -ss » placé devant l'entrée.
+                conteneur.seek(int((origine + debut) * 1_000_000), backward=True, any_frame=False)
+
+            def tirer() -> None:
+                while True:
+                    try:
+                        trame = graphe.pull()
+                    except (av.error.BlockingIOError, av.error.EOFError):
+                        return
+                    tampon.ajouter(trame.to_ndarray().reshape(-1))
+
+            ferme = False
+            for trame in conteneur.decode(flux):
+                try:
+                    graphe.push(trame)
+                except av.error.EOFError:
+                    # « atrim » a reçu tout l'extrait : la chaîne est close.
+                    ferme = True
+                    break
+                tirer()
+            if not ferme:
+                try:
+                    graphe.push(None)
+                except av.error.EOFError:
+                    pass
+            tirer()
+    except ErreurLisible:
+        raise
+    except Exception as exc:
+        journal.erreur("Décodage en échec sur %s : %s", fichier.name, f"{type(exc).__name__}: {exc}"[:2000])
         raise ErreurLisible(
             langues.t("audio.illisible.titre"),
             langues.t("audio.illisible.msg",
                       nom=fichier.name, journal=journal.nom_fichier()),
-        )
+            exc,
+        ) from exc
 
-    signal = np.frombuffer(resultat.stdout, dtype=np.float32)
+    signal = tampon.resultat()
     if signal.size == 0:
         raise ErreurLisible(
             langues.t("audio.muet.titre"),
             langues.t("audio.muet.msg", nom=fichier.name),
         )
 
-    # Copie explicite : le tampon de frombuffer est en lecture seule.
-    signal = np.array(signal, dtype=np.float32, copy=True)
-    maximum = float(np.max(np.abs(signal))) if signal.size else 0.0
+    # Crête sans tableau intermédiaire (np.abs en ferait une copie entière).
+    maximum = max(float(signal.max()), -float(signal.min()))
     if maximum > 1.0:
         signal /= maximum
 
@@ -245,6 +277,48 @@ def decoder(chemin: str | Path, filtres_salle: bool = False,
         " (filtres de salle appliqués)" if filtres_salle else "",
     )
     return signal
+
+
+def reechantillonner(signal: "np.ndarray", frequence: int) -> "np.ndarray":
+    """Un signal mono flottant vers 16 kHz, par le même rééchantillonneur que le décodage."""
+    import numpy as np
+
+    if frequence == FREQUENCE:
+        return np.asarray(signal, dtype=np.float32)
+    import av  # type: ignore
+
+    graphe = av.filter.Graph()
+    from fractions import Fraction
+
+    base = Fraction(1, int(frequence))
+    source = graphe.add_abuffer(format="flt", sample_rate=int(frequence), layout="mono", time_base=base)
+    conversion = graphe.add("aformat", _FORMAT_SORTIE)
+    sortie = graphe.add("abuffersink")
+    source.link_to(conversion)
+    conversion.link_to(sortie)
+    graphe.configure()
+    tampon = _Tampon(np, int(signal.size * FREQUENCE / frequence) + FREQUENCE)
+    donnees = np.ascontiguousarray(signal, dtype=np.float32)
+    pas = 65536
+    for depart in range(0, donnees.size, pas):
+        trame = av.AudioFrame.from_ndarray(donnees[depart:depart + pas].reshape(1, -1), format="flt",
+                                           layout="mono")
+        trame.sample_rate = int(frequence)
+        trame.pts = depart
+        trame.time_base = base
+        graphe.push(trame)
+        while True:
+            try:
+                tampon.ajouter(graphe.pull().to_ndarray().reshape(-1))
+            except (av.error.BlockingIOError, av.error.EOFError):
+                break
+    graphe.push(None)
+    while True:
+        try:
+            tampon.ajouter(graphe.pull().to_ndarray().reshape(-1))
+        except (av.error.BlockingIOError, av.error.EOFError):
+            break
+    return np.array(tampon.resultat(), dtype=np.float32)
 
 
 def formater_taille(octets: int) -> str:
