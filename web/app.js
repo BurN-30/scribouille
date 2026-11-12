@@ -1425,6 +1425,8 @@ function dessinerFile() {
   const aFaire = lignes.filter((f) => f.etat === 'attente' || ETATS_ACTIFS.includes(f.etat)).length;
   const finis = lignes.filter((f) => ['termine', 'erreur', 'annule'].includes(f.etat)).length;
   $('#compteur-file').textContent = String(aFaire);
+  // « File d'attente 0 » au-dessus de lignes en echec ne dit rien : le compteur se tait.
+  $('#compteur-file').hidden = !aFaire;
   $('#btn-vider').hidden = !finis;
   // Le depot se reduit a une ligne des qu'il y a des fichiers : la file reste
   // visible sans defiler.
