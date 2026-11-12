@@ -1026,7 +1026,12 @@ class Passerelle:
         return bilan
 
     def effacement_apercu(self, garder_transcriptions: bool = True) -> dict:
-        return inventaire.apercu_effacement(bool(garder_transcriptions), self.config)
+        # Version portable (ou sources) : rien ne retire le programme, il n'est
+        # donc pas annoncé ; l'écran dit qu'il reste à supprimer à la main.
+        installee = inventaire.desinstalleur() is not None
+        apercu = inventaire.apercu_effacement(bool(garder_transcriptions), self.config, avec_programme=installee)
+        apercu["programme_reste"] = "" if installee else str(chemins.DOSSIER_PROGRAMME)
+        return apercu
 
     def effacement_executer(self, jeton: str) -> dict:
         if self.file.occupee:

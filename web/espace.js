@@ -194,7 +194,8 @@ async function apercuEffacement() {
     ${garder ? encartSucces(conserves.length
       ? t('ui.eff.gardees_ou', { ou: conserves.map((c) => c.chemin || c.libelle).join(', ') })
       : t('ui.eff.gardees')) : encartAttention(t('ui.eff.aussi_transcriptions_avis'))}
-    ${etrangers ? `<p class="aide">${ech(tn('ui.eff.non_reconnus', etrangers))}</p>` : ''}`;
+    ${etrangers ? `<p class="aide">${ech(tn('ui.eff.non_reconnus', etrangers))}</p>` : ''}
+    ${r.programme_reste ? `<p class="aide">${ech(t('ui.eff.portable', { dossier: r.programme_reste }))}</p>` : ''}`;
   $('#eff-compris').checked = false;
   $('#btn-eff-executer').disabled = true;
   $('#btn-eff-executer').textContent = t('ui.eff.executer_taille', { taille: formaterOctets(total) });
@@ -215,7 +216,9 @@ async function executerEffacement() {
   // La fenetre se ferme d'elle-meme : son journal et son profil d'affichage
   // sont effaces juste apres, puis le desinstalleur passe (version installee).
   const message = t(r.fermeture ? 'ui.eff.fait_fermeture' : 'ui.eff.fait', { taille: formaterOctets(r.octets || 0) });
-  const restes = (r.restes || []).length;
+  // Fenetre qui se ferme : ses derniers fichiers ouverts (journal, profil
+  // d'affichage) sont effaces juste apres, ce ne sont pas des restes.
+  const restes = r.fermeture ? 0 : (r.restes || []).length;
   $('#eff-retour').innerHTML = restes ? encartAttention(message + ' ' + tn('ui.espace.restes', restes))
     : encartSucces(message);
   journaliser(restes ? 'attention' : 'ok', message);
