@@ -60,7 +60,7 @@ correction laisse un défaut de justesse du faisceau sur la puce graphique en
 précision par défaut (CVS-195124). Le NPU passe par un pipeline statique sans
 faisceau. Le faisceau y est donc ramené à 1, quoi que demande le réglage, et le
 garde-fou des répétitions n'y utilise jamais le faisceau : c'est lui qui, avant
-la 2.4.1, faisait tomber une transcription en glouton sur la puce graphique
+la 3.0, faisait tomber une transcription en glouton sur la puce graphique
 quand une fenêtre bouclait.
 
 Le compilé pour la puce graphique ou le NPU est mis en cache sous les données

@@ -33,7 +33,7 @@ from pathlib import Path
 
 #: Nom du dossier de données, sous %LOCALAPPDATA%. Jusqu'à la 2.4, il portait
 #: l'ancien nom de l'application, « WhiScribe », que partage un projet tiers
-#: homonyme (ses modèles vont dans le même dossier sous Windows). Depuis la 2.5,
+#: homonyme (ses modèles vont dans le même dossier sous Windows). Depuis la 3.0,
 #: le dossier est à notre nom ; ce que Scribouille reconnaît comme sien dans
 #: l'ancien y est déplacé au premier lancement, sans rien perdre ni
 #: retélécharger (`app/migration.py`). Le programme d'installation lit les
@@ -56,7 +56,7 @@ EST_GELE = bool(getattr(sys, "frozen", False))
 
 #: Exécutable console de la version gelée : la ligne de commande, le moteur et
 #: les travailleurs de fond. Windows le préfère à « Scribouille.exe » quand on
-#: tape « scribouille » (le .com passe avant le .exe). Avant la 2.5, il
+#: tape « scribouille » (le .com passe avant le .exe). Avant la 3.0, il
 #: s'appelait « scribouille-verifier.exe » : ce nom est encore cherché.
 NOM_EXE_CONSOLE = "scribouille.com"
 ANCIEN_EXE_CONSOLE = "scribouille-verifier.exe"

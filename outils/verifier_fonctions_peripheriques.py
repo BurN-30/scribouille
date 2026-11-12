@@ -1029,7 +1029,7 @@ def essai_renommage(base: Path) -> None:
     poser("autre-chose")
     verifier(compagnon.lire(sortie) is None, "un marqueur inconnu reste refusé")
 
-    # Depuis la 2.5, le dossier de données est à notre nom ; l'ancien est repris
+    # Depuis la 3.0, le dossier de données est à notre nom ; l'ancien est repris
     # au premier lancement (vérifications dans outils/verifier_socle.py).
     verifier(chemins.NOM_DOSSIER_UTILISATEUR == "Scribouille" and chemins.NOM_DOSSIER_ANCIEN == "WhiScribe",
              "le dossier de données est à notre nom, l'ancien est connu pour être repris",
@@ -2365,7 +2365,7 @@ def essai_openvino_faisceau() -> None:
         tube = FauxPipeline([boucle], lever_si_faisceau=True)
         segments, details = moteur_sur("GPU", tube).transcrire(
             signal, 2.0, "fr", {"faisceau_openvino": 1, "garde_repetition": "faisceau"})
-        # Depuis la 2.5, la boucle restée est coupée en dernier recours (la
+        # Depuis la 3.0, la boucle restée est coupée en dernier recours (la
         # suite répétée gardée une fois) au lieu d'être gardée telle quelle.
         verifier(details["echecs_garde"] == 1 and "Not Implemented" in details["erreur_garde"]
                  and segments and segments[0].texte == "bonjour" and details["boucles_coupees"] == 1,

@@ -428,7 +428,7 @@ def _est_transcription(fichier: Path, compagnon) -> bool:
                 tete = "".join(flux.readline() for _ in range(25))
             if not tete.startswith("=" * 68):
                 return False
-            # En-tête court (2.5) : titre « Transcription : » ; avant, la
+            # En-tête court (3.0) : titre « Transcription : » ; avant, la
             # mention « Produit localement » fermait un en-tête de dix lignes.
             lignes = tete.splitlines()
             titre = lignes[1] if len(lignes) > 1 else ""

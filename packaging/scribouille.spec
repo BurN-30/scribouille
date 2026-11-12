@@ -17,7 +17,7 @@ Deux exécutables sortent de la même analyse :
                       travailleurs de fond. Windows prend le .com avant le .exe
                       quand on tape « scribouille ». C'est un exécutable Windows
                       ordinaire, renommé après la construction (PyInstaller
-                      ajoute toujours « .exe »). Jusqu'à la 2.5, il s'appelait
+                      ajoute toujours « .exe »). Jusqu'à la 2.4, il s'appelait
                       « scribouille-verifier.exe » ; « scribouille.com --verifier »
                       fait ce que faisait cet ancien exécutable lancé seul.
 
@@ -224,7 +224,7 @@ imports_caches += collect_submodules("webview.platforms")
 # bibliotheque que s'il compte s'en servir.
 exclusions = [
     "hf_xet",
-    # Plus utilisé depuis la 2.5 (décodage par PyAV) : exclu au cas où
+    # Plus utilisé depuis la 3.0 (décodage par PyAV) : exclu au cas où
     # l'environnement de construction l'aurait encore.
     "imageio_ffmpeg",
     # Le moteur OpenVINO s'installe à la demande, comme la séparation des

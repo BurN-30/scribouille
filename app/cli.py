@@ -65,7 +65,6 @@ REGLAGES: dict[str, str] = {
     "rapprochement_vocabulaire": "Corrections par rapprochement phonétique borné.",
     "vocabulaires_partages": "Fichiers de vocabulaire d'équipe lus en plus du personnel.",
     "sauvegarde_progressive": "Écrire chaque segment au fil de l'eau (reprise après coupure).",
-    "lecture_audio": "Écouter l'extrait depuis la vue de lecture.",
     "motif_sortie": "Nom des fichiers produits ; vide : {date}-{nom}.",
     "dossier_surveille": "Dossier scruté par la surveillance.",
     "surveillance": "Transcrire ce qui arrive dans le dossier surveillé.",

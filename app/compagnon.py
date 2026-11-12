@@ -148,7 +148,7 @@ def construire(source: Path, segments, details: dict) -> dict:
         "transcription": {
             "date": datetime.now().isoformat(timespec="seconds"),
             "modele": details.get("modele_lisible", details.get("modele", "")),
-            # Détail technique que l'en-tête du .txt ne porte plus (2.5).
+            # Détail technique que l'en-tête du .txt ne porte plus (3.0).
             "preset": details.get("preset_nom") or "",
             "calcul": f"{details.get('peripherique', 'cpu')} / {details.get('type_calcul', 'int8')}",
             "termes_amorce": int(details.get("termes_amorce", 0) or 0),

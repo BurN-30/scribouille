@@ -3,7 +3,7 @@ Rythme de la transcription : « je travaille en même temps ».
 
 Trois positions, réglées par l'utilisateur dans le panneau des réglages :
 
-  « vitesse »    Vitesse maximale. Le comportement d'avant la 2.4.1, à l'octet
+  « vitesse »    Vitesse maximale. Le comportement d'avant la 3.0, à l'octet
                  près : tous les fils du réglage automatique ou du banc, lots du
                  preset, priorité normale, bridage d'énergie de Windows levé
                  (HighQoS, voir `app/energie.py`). C'est la valeur par défaut :
@@ -555,7 +555,7 @@ class Regulateur:
         self._depuis = self.horloge()
         if self.leger:
             # Vitesse maximale sans adaptation : exactement ce que faisait la
-            # file avant la 2.4.1 (HighQoS), ni priorité ni affinité touchées.
+            # file avant la 3.0 (HighQoS), ni priorité ni affinité touchées.
             self.leviers.qos_seule("haute")
         else:
             self.leviers.appliquer(bornes(self.effectif, self.materiel) if self.auto

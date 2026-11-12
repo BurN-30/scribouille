@@ -22,7 +22,7 @@ Scribouille is a desktop app for Windows built on [faster-whisper](https://githu
 
 Nothing else to install. The setup is per user, **no administrator rights**, and it installs into `%LOCALAPPDATA%\Programs\Scribouille`. Your settings, glossary and logs live in `%LOCALAPPDATA%\Scribouille`, never inside the program folder, so reinstalling a newer version over the old one loses nothing.
 
-> **The application was called WhiScribe up to 2.3.3.** The repository name has changed, the old addresses redirect. On a machine that already has it, the update installs over the existing setup, in its original folder `%LOCALAPPDATA%\Programs\WhiScribe`. Since 2.5, the data moves on first launch from `%LOCALAPPDATA%\WhiScribe` to `%LOCALAPPDATA%\Scribouille`, by a plain rename: nothing is lost, the models are not downloaded again, and only Scribouille's own files are moved (another program called "Whiscribe" keeps its models in the same place). To go back to an earlier version: `scribouille.com donnees revenir-whiscribe` in the program folder.
+> **The application was called WhiScribe up to 2.3.3.** The repository name has changed, the old addresses redirect. On a machine that already has it, the update installs over the existing setup, in its original folder `%LOCALAPPDATA%\Programs\WhiScribe`. Since 3.0, the data moves on first launch from `%LOCALAPPDATA%\WhiScribe` to `%LOCALAPPDATA%\Scribouille`, by a plain rename: nothing is lost, the models are not downloaded again, and only Scribouille's own files are moved (another program called "Whiscribe" keeps its models in the same place). To go back to an earlier version: `scribouille.com donnees revenir-whiscribe` in the program folder.
 
 The setup asks **where to keep the transcription models**, 1.6 to 3.1 GB depending on the quality. The models are not bundled: they are downloaded once, on first use, and the app tells you the size before starting. After that it works offline.
 
@@ -36,7 +36,7 @@ The installer is not signed, so SmartScreen may warn on first run: "More info", 
 
 - **Drop and go.** Drop files or a folder, choose the quality, start. Files are processed one after another, a failure does not stop the queue.
 - **Formats in:** `m4a` (including phone recordings), `mp3`, `wav`, `ogg`, `flac`, `opus`, `webm`, `wma`, `aac`, `amr`, and the usual video containers (`mp4`, `mkv`, `mov`), whose audio track is extracted.
-- **Formats out:** `.txt` in paragraphs, each starting with its time (by default, to find a passage in the recording), with a header (recording name, duration, model, date, real compute time), plus optional `.srt` and `.vtt`. Output names follow a configurable pattern with `{nom}`, `{date}`, `{heure}` and `{modele}`.
+- **Formats out:** `.txt` in paragraphs, each starting with its time (by default, to find a passage in the recording), with a short header (recording name, duration, date, speakers), plus optional `.srt` and `.vtt`. Output names follow a configurable pattern with `{nom}`, `{date}`, `{heure}` and `{modele}`.
 - **Two qualities.** *Highest quality* (`large-v3`) for anything that will be read back, *Fast* (`large-v3-turbo`) to get the gist. Other Whisper models are reachable in advanced mode.
 - **Glossary and corrections.** A list of proper nouns primes the model before it transcribes, and a list of rewrite rules cleans up the recurring mistakes afterwards. See [the guide](docs/guide.md#vocabulary-and-corrections).
 - **Review in the app, while listening.** Clicking a word places playback there and the text follows it; doubtful words highlighted, search (`Ctrl` + `F`), points to check from the keyboard (`N`).
@@ -48,6 +48,7 @@ The installer is not signed, so SmartScreen may warn on first run: "More info", 
 - **Disk usage and full erase.** `scribouille espace` details what the app takes up, item by item, and what can be freed without losing anything; `scribouille effacer --complet`, or the uninstaller, erases everything it wrote, after showing the list and sizes, except your transcripts.
 - **Watched folder,** off by default. A folder can be watched so that new recordings join the queue on their own, which suits a dictaphone or a meeting recorder that always drops files in the same place.
 - **Speaker separation,** optional, installed from a button (Settings, Transcription). Produces a labelled transcript, `Speaker 1`, `Speaker 2`, which is worth a lot for a meeting summary.
+- **Notify when done:** with the window in the background, the icon flashes and a silent notification appears (can be turned off in the settings). Markdown exports never replace a file edited by hand.
 - **Taskbar progress,** disk usage report, export and import of your data as a single zip file, dark and light theme. Keyboard shortcuts are listed in the help (`?`).
 
 <!-- gif: drop two files, choose Fast quality, start, progress bar filling, a finished line with its Read back button (about 15 s, no sound) -->

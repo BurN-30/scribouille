@@ -410,7 +410,7 @@ class Passerelle:
     """
     Objet exposé à l'interface web sous le nom `pywebview.api`.
 
-    Fonctions du contrat de la version 2.5 (l'écran de l'espace disque et celui
+    Fonctions du contrat de la version 3.0 (l'écran de l'espace disque et celui
     du moteur se construisent contre ces noms ; formes stables, clés ajoutées
     sans changer les anciennes) :
 

@@ -39,6 +39,7 @@ Une clé ajoutée ne change pas la version ; une clé retirée ou un sens chang�
 | Plantage du moteur (pilote graphique, mémoire) | La fenêtre reste. Le fichier repart une fois, au segment près, sans la puce graphique si elle était en jeu (témoin `openvino-chargement-en-cours.txt`). Second plantage : fichier en erreur, reprenable. |
 | Moteur muet 15 min (hors veille) | Arrêté, traité comme un plantage. |
 | Retour de veille | Saut d'horloge reconnu, rien n'est arrêté ; si le pilote n'a pas survécu, repli d'OpenVINO ou plantage géré. |
+| Deux Scribouille en même temps | Une seule fenêtre par dossier de données (mutex) ; ligne de commande libre ; un enregistrement n'est transcrit que par un processus (verrou `reprises\<empreinte>.en-cours`, repris si son PID est mort). |
 | Fenêtre fermée ou tuée | Le moteur meurt avec elle : objet de travail Windows (`KILL_ON_JOB_CLOSE`), surveillance du PID parent, fin de l'entrée standard. |
 
 ## Dossiers et ce qui est écrit où
@@ -46,12 +47,12 @@ Une clé ajoutée ne change pas la version ; une clé retirée ou un sens chang�
 | Emplacement | Contenu |
 |---|---|
 | Dossier du programme | `Scribouille.exe`, `scribouille.com`, `_internal\`. Rien n'y est écrit, sauf `emplacement-modeles.txt` par l'installeur. |
-| `%LOCALAPPDATA%\Scribouille` (données ; `SCRIBOUILLE_DONNEES` l'impose) | `config.json`, `dossier-modeles.txt`, `vocabulaire.toml`, `vocabulaire.txt`, `corrections.txt`, `gabarit-ia.txt`, `calibration.json`, `materiel.json`, `logs\`, `reprises\`, `cache-openvino\`, `extensions-openvino\`, `extensions\`, `cache-pip\`, `paquets-hors-ligne\`, `rapports-banc\`, `comparaisons\`, `campagnes\`, `corpus-campagne\`, `webview\` |
+| `%LOCALAPPDATA%\Scribouille` (données ; `SCRIBOUILLE_DONNEES` l'impose) | `config.json`, `dossier-modeles.txt`, `vocabulaire.toml`, `vocabulaire.txt`, `corrections.txt`, `gabarit-ia.txt`, `calibration.json`, `materiel.json`, `logs\`, `reprises\`, `cache-openvino\`, `extensions-openvino\`, `extensions\`, `cache-pip\`, `paquets-hors-ligne\`, `rapports-banc\`, `comparaisons\`, `campagnes\`, `corpus-campagne\`, `webview\`, `historique-relecture\` (annulations et texte d'origine), `relecture-positions.json`, `exports.json` (empreintes des exports) |
 | Dossier des modèles (`modeles\` par défaut, ou celui choisi) | Un dossier `models--<dépôt>` par modèle (cache Hugging Face), `convertis\` |
 | Dossier de sortie, ou à côté de la source (ligne de commande) | `<date>-<nom>.txt`, `.json` (compagnon : segments, mots, probabilités, remplacements), `.srt`, `.vtt` |
 | Version installée | Raccourcis du menu Démarrer et du bureau, clé `HKCU\...\Uninstall\{4E1B7C86-...}_is1` |
 
-`app/inventaire.py` tient cette liste : `scribouille espace` la mesure, `scribouille effacer` ne supprime que ce qu'elle reconnaît. L'ancien dossier `%LOCALAPPDATA%\WhiScribe` (avant la 2.5) est repris au premier lancement (`app/migration.py`) ; un projet tiers homonyme y range ses modèles, ils ne sont jamais touchés.
+`app/inventaire.py` tient cette liste : `scribouille espace` la mesure, `scribouille effacer` ne supprime que ce qu'elle reconnaît. L'ancien dossier `%LOCALAPPDATA%\WhiScribe` (avant la 3.0) est repris au premier lancement (`app/migration.py`) ; un projet tiers homonyme y range ses modèles, ils ne sont jamais touchés.
 
 ## Repères dans le code
 
@@ -65,3 +66,5 @@ Une clé ajoutée ne change pas la version ; une clé retirée ou un sens chang�
 | `app/processus.py` | Objet de travail Windows, surveillance du parent, mesure mémoire et processeur |
 | `app/cli.py` | Ligne de commande |
 | `app/inventaire.py` | Inventaire, libération, effacement |
+| `app/instance.py` | Fenêtre unique, verrou d'un fichier en cours |
+| `app/lecture.py`, `app/relecture.py` | Relecture : situer, corriger, annuler, exporter |

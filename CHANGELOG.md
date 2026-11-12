@@ -6,402 +6,96 @@ version : la chaîne de publication en extrait la section correspondant au tag.
 
 ---
 
-## 2.6.0
+## 3.0.0
 
-*Non publiée.*
+*12 novembre 2026, non publiée.*
 
-Le calcul quitte la fenêtre, et tout se fait aussi sans fenêtre.
+Le calcul quitte la fenêtre, tout se fait aussi sans fenêtre, et la relecture
+devient un outil de travail. Le texte produit ne change pas : identique au
+caractère près sur les réglages de la campagne de mesure.
 
-- **Moteur dans son propre processus**, supervisé : la fenêtre ne charge
-  plus aucune bibliothèque de calcul et revient à sa mémoire de repos après
-  une file. « Arrêter » est immédiat, pendant un chargement ou une
-  compilation pour la puce graphique compris. Un plantage du moteur (pilote
-  graphique, mémoire) ne ferme plus la fenêtre : le fichier reprend une fois
-  au segment près, sans la puce graphique. Rythme et priorité ne touchent
-  que le moteur. Aucun processus orphelin, retour de veille reconnu. Texte
-  produit identique au caractère près sur les réglages de la campagne.
-- **Ligne de commande** : `scribouille transcrire FICHIER|DOSSIER --json`,
-  `reprendre`, `etat`, `lire`, `reglages`, `diagnostic`, `espace`, `effacer`,
-  `vocabulaire`, `agent`, et les outils de mesure rangés sous `mesurer`.
-  Sortie JSON versionnée, codes de retour 0 à 6, aucun téléchargement,
-  écrasement ni effacement sans drapeau. Par SSH, en tâche planifiée, par un
-  agent de code ; fiche d'usage pour Claude Code et Codex.
-- **Espace occupé et effacement complet** : inventaire de ce que
-  l'application écrit, poste par poste, ce qui se libère sans rien perdre, et
-  un effacement complet (modèles, caches dont celui d'OpenVINO, moteur Intel,
-  journaux, réglages, vocabulaire, mesures, raccourcis, clé de registre) qui
+**Depuis la 2.4.** Au premier lancement, les données passent de
+`%LOCALAPPDATA%\WhiScribe` à `%LOCALAPPDATA%\Scribouille`, par renommage :
+réglages, vocabulaire et modèles suivent, rien n'est retéléchargé, et seuls les
+fichiers de Scribouille sont déplacés (un logiciel homonyme range ses modèles
+au même endroit). Retour à une version antérieure : `scribouille donnees
+revenir-whiscribe`. `scribouille-verifier.exe` devient `scribouille.com` (tapé
+`scribouille`), ses anciennes options marchent toujours. La séparation des
+locuteurs est désormais décochée tant qu'elle n'est pas installée, et l'en-tête
+du `.txt` ne garde que le titre, la durée, la date et les voix.
+
+Le calcul
+
+- **Moteur dans son propre processus**, surveillé : la fenêtre ne charge plus
+  aucune bibliothèque de calcul et revient à sa mémoire de repos après une
+  file. « Arrêter » est immédiat, pendant un chargement compris. Un plantage
+  du moteur (pilote graphique, mémoire) ne ferme plus la fenêtre : le fichier
+  reprend au segment près, sans la puce graphique ; un second plantage le
+  laisse « Reprendre ». Aucun processus orphelin, retour de veille reconnu.
+  L'état du moteur s'affiche au pied de la fenêtre.
+- **Démarrage** deux fois plus rapide, mémoire au repos divisée par huit ; une
+  seule FFmpeg (celle de PyAV), paquet allégé de 84 Mo.
+- **Rythmes** : Vitesse maximale, Équilibré ou Discret, et adaptation
+  automatique (pleine vitesse quand le poste est libre).
+- **Réglage proposé pour le poste** au premier lancement (moteur, qualité,
+  rythme, durée pour une heure, ce que l'on y perd), rien d'appliqué sans un
+  clic.
+- **Progression réelle** du moteur habituel lot par lot ; durées annoncées
+  recalculées après chaque fichier, sans qu'une mesure courte les déplace
+  toutes.
+
+L'écran
+
+- **Écran des réunions** : dépôt, file et transcriptions ; qualité, rythme et
+  une seule durée au-dessus. Une transcription finie rejoint « Transcriptions »
+  en tête (« Terminé à l'instant », Relire, Exporter) ; la liste dit la date de
+  l'enregistrement et où la relecture s'est arrêtée.
+- **Relecture plein cadre** : écoute synchronisée, recherche, points à
+  vérifier, correction d'un endroit ou de plusieurs, passage réécrit ou
+  supprimé, renommage des voix, cinquante niveaux d'annulation gardés après
+  fermeture et retour au texte d'origine, position retrouvée, tout au clavier.
+  L'écran, le `.txt`, le compagnon et les sous-titres restent égaux après
+  chaque écriture ; un fichier retouché dans un éditeur est relu et recalé.
+- **Exports** : un export Markdown intact est remplacé par le suivant ; retouché
+  à la main, il est gardé et l'export part dans une variante numérotée.
+- **Prévenir à la fin** (allumé par défaut) : fin de file, fenêtre en
+  arrière-plan, l'icône clignote et une notification Windows sans son
+  s'affiche.
+- **Réglages** rangés en trois familles ; **Vocabulaire** sur son propre
+  écran ; accessibilité vérifiée (clavier, contrastes, fenêtre étroite).
+
+Sans fenêtre
+
+- **Ligne de commande** `scribouille` : `transcrire`, `reprendre`, `etat`,
+  `lire`, `exporter`, `reglages`, `diagnostic`, `espace`, `effacer`,
+  `vocabulaire`, `agent`, `mesurer`. Sortie JSON versionnée, codes de retour 0
+  à 6, aucun téléchargement, écrasement ni effacement sans drapeau. Par SSH, en
+  tâche planifiée, par un agent de code (fiche pour Claude Code et Codex).
+- **Plusieurs Scribouille en même temps** : une seule fenêtre par dossier de
+  données, la ligne de commande reste libre ; un même enregistrement n'est
+  transcrit que par un processus à la fois ; la fenêtre ne remplace plus un
+  réglage posé en ligne de commande.
+
+Le disque
+
+- **Espace occupé et effacement complet** : poids par poste (programme, chaque
+  modèle, moteurs optionnels, caches, journaux, mesures, vocabulaire,
+  relecture), ce qui se libère sans rien perdre, et un effacement complet qui
   montre la liste et les tailles d'abord, ne touche jamais aux transcriptions
   sans demande, ni à ce qui n'est pas à Scribouille. Proposé aussi par le
   désinstalleur.
-- `scribouille-verifier.exe` devient `scribouille.com` ; ses options gardent
-  leur forme.
 
----
+La justesse
 
-## 2.5.0
-
-*Non publiée.*
-
-Plus léger, plus vite ouvert, sans rien changer à la justesse.
-
-- **Démarrage** : la fenêtre n'attend plus la détection du matériel. Cartes
-  graphiques, NPU, CUDA et périphériques d'OpenVINO sont gardés dans
-  `materiel.json` et relus en arrière-plan après l'affichage, par un
-  processus à part ; plus aucun PowerShell (WMI et SetupAPI dans le
-  processus). numpy, CTranslate2, faster-whisper et PyAV ne sont chargés
-  qu'au lancement d'une transcription. Mesuré sur le paquet, à chaud : page
-  prête en 1,1 s au lieu de 2,2 s, 70 Mo de mémoire engagée au repos au lieu
-  de 612 Mo.
-- **Une seule FFmpeg** : le décodage passe par PyAV, déjà livré avec
-  faster-whisper (mêmes échantillons que la ligne de commande d'avant) ; le
-  paquet perd l'exécutable d'imageio-ffmpeg, 84 Mo. Une réunion d'une heure
-  se décode avec deux fois moins de mémoire.
-- **File** : le modèle reste chargé d'un fichier à l'autre quand le réglage
-  ne change pas ; il est rendu avant la séparation des voix, après un échec,
-  quand la mémoire libre passe sous 2 Go, et à la fin de la file.
-- **Garde-fou des répétitions** : une courte boucle de mots au milieu d'une
-  fenêtre ordinaire est maintenant repérée (elle échappait au taux de
-  compression), la fenêtre refaite en faisceau puis par échantillonnage, puis
-  par CTranslate2 si le même modèle est déjà sur le disque ; en dernier
-  recours, la suite répétée est gardée une fois.
-- **Réglage proposé** : les phrases ne contiennent plus de vitesse fixe, elles
-  reprennent les durées annoncées sur le poste ; l'installation du moteur
-  Intel est proposée sur tout processeur sans carte NVIDIA.
-- **Dossier de données** : `%LOCALAPPDATA%\WhiScribe` devient
-  `%LOCALAPPDATA%\Scribouille` au premier lancement, par renommage, sans rien
-  perdre ni retélécharger ; seuls les fichiers de Scribouille sont déplacés (un
-  projet homonyme range ses modèles au même endroit). Retour arrière :
-  `scribouille-verifier.exe --revenir-whiscribe`. La désinstallation n'efface
-  plus que les entrées de Scribouille.
-- **Vérification continue** : les vérificateurs rapides tournent à chaque
-  envoi (`.github/workflows/verifications.yml`), sans rien publier.
-- **Vocabulaire et relecture** : une correction mémorisée va dans le
-  vocabulaire du format 2 quand le format 1 est vide ou converti ;
-  l'annulation retire aussi la règle ou la proposition ajoutée ; le texte de
-  la relecture reste celui du fichier, mots corrigés marqués ; plus de
-  doublon « Réseaux sociaux sociaux » ni de casse oubliée (« pierre »).
-- **Écran des réunions** : le dépôt, la file et les transcriptions, rien
-  d'autre. Au-dessus, les seuls choix utiles à chaque lancement (qualité,
-  rythme, voix si la séparation est installée) et une seule durée, celle du
-  réglage en service. Le dépôt se réduit à une ligne dès qu'il y a des
-  fichiers ; la file reste visible sans défiler. En cours : phase nommée,
-  pourcentage, temps écoulé, reste et heure de fin, « fichier 2 sur 3 ».
-  Chaque transcription a son bouton **Relire** ; les lignes finies se
-  retirent d'un clic.
-- **Relecture plein cadre** : écoute synchronisée (clic sur un mot, lecture
-  qui suit le texte, vitesses, Espace et flèches), recherche Ctrl+F avec
-  tous les résultats surlignés, points à vérifier de l'un à l'autre (mots
-  douteux, remplacements du vocabulaire, silences, passages longs ; le moteur
-  Intel le dit quand il ne donne pas de mots douteux), correction d'un seul
-  endroit ou de plusieurs cochés dans l'aperçu, renommage des locuteurs,
-  exports (texte du fichier, avec les heures, Markdown). L'heure de chaque
-  paragraphe est affichée, locuteurs séparés ou non. Une réunion de 1 h 45
-  (19 000 mots) s'ouvre en 0,15 s.
-- **Réglages** : un écran rangé en trois familles, usage courant (transcription,
-  fichiers, relecture, application), avancé (moteur et modèles, espace disque),
-  mesures et diagnostic (poste, banc d'essai, comparaison, journal). Le
-  réglage proposé pour le poste n'est dit qu'une fois, dans « Poste ».
-- **Espace disque et effacement complet** : poids par poste, ce qui se libère
-  sans rien perdre, mémoire et processeur pendant l'usage, effacement précédé
-  de la liste exacte et des tailles, transcriptions gardées sauf demande.
-- **Premier lancement** : une fenêtre courte, ce que fait l'application et le
-  réglage proposé en une phrase, avec ce que l'on y perd.
-- **Vocabulaire** : un écran à part, revue par lots au clavier (flèches,
-  Espace, A, R, M).
-- **Accessibilité** : tout au clavier, focus gardé dans les fenêtres, contrastes
-  vérifiés (le vert des messages de succès passe à 4,8:1), cibles de 24 px au
-  moins, disposition étroite qui tient compte du grossissement ; plus aucun
-  accord en « (s) » dans l'interface.
-- **Une seule vérité en relecture** : le compagnon est situé à la lettre dans
-  le fichier ; une correction à cheval sur deux segments change l'écran comme
-  le fichier (elle changeait le fichier seul et rendait ensuite les
-  corrections ciblées impossibles). Chaque écriture est contrôlée sur les
-  fichiers relus (écran, `.txt`, compagnon, sous-titres régénérés) et annulée
-  en cas d'écart ; écritures atomiques. Un `.txt` retouché dans un éditeur est
-  relu, dit, et l'écoute mot à mot recalée dessus.
-- **Corriger en série** : l'endroit sélectionné est situé par sa position (un
-  morceau de mot ne corrige plus ailleurs) ; passage réécrit ou supprimé
-  (touche E, Suppr) ; Ctrl+Z sur cinquante niveaux, gardés après fermeture,
-  et retour au texte d'origine ; N reprend après le point courant ; N puis
-  Entrée corrige au clavier seul ; Espace lit quel que soit le dernier bouton
-  cliqué ; vitesse à la virgule et au point-virgule ; position retrouvée à la
-  réouverture. Une correction ne nourrit le vocabulaire que sur demande.
-- **Ce que l'écran affirme** : OpenVINO dit qu'il ne signale pas de mots
-  douteux, quelle que soit la qualité ; durées recalculées après chaque
-  fichier ; progression estimée, dite « environ », quand le moteur ne rend
-  rien avant la fin d'un lot ; plus d'heure « 0:00 » inventée ; fichier non
-  audio déposé parmi d'autres nommé à l'écran ; heure en tête de chaque
-  paragraphe du `.txt` par défaut.
-
-## 2.4.1
-
-*Non publiée.*
-
-S'adapter au poste, et travailler pendant que la transcription tourne.
-
-- **Vocabulaire, format 2** (`vocabulaire.toml`, écran « Vocabulaire ») : un
-  fichier unique, lisible à la main, versionné, fusionnable (personnel,
-  équipe, projet). Par terme : forme correcte, catégorie, fautes connues
-  (toujours, ou seulement près de mots voisins), prononciation facultative,
-  poids, origine, état (actif, proposé, refusé). Le glossaire et les
-  corrections du format 1 restent lus tels quels ; **Convertir** les intègre
-  sans rien perdre.
-- **Amorce choisie** dans les 224 jetons : termes évoqués par le nom du
-  fichier, puis poids ; refaite à chaque fenêtre d'OpenVINO d'après la
-  fenêtre précédente.
-- **Correction après coup** journalisée : fautes listées, casse, rapprochement
-  phonétique borné, garde-fous contre les mots courants. Chaque remplacement
-  est listé dans la vue de relecture et s'annule d'un clic ; les mots changés
-  y sont marqués.
-- **Apprentissage** : `--apprendre-vocabulaire` tire des propositions de
-  couples transcription brute et relue (et des comptes rendus : Word,
-  Markdown, PDF texte), avec un lexique du français courant (FrequencyWords,
-  CC BY-SA 4.0) ; une correction faite en relecture devient une proposition.
-  Rien ne sert sans validation, le rapport chiffré ne contient aucun terme.
-- **Mesure** : `--mesurer-vocabulaire` chiffre chaque étage (taux d'erreur,
-  rappel et précision des termes par catégorie, fausses corrections) ;
-  `--corpus` valide la mécanique sur le corpus public, par plis.
-
-- **Réglage proposé pour ce poste**, au premier lancement et sur le bouton
-  **Reconnaître ce poste** (ou `scribouille-verifier.exe --reconnaitre`) : une
-  table de décision lisible (`app/adaptation.py`) regarde la carte NVIDIA, la
-  puce graphique Intel vue par OpenVINO, la mémoire, le processeur et
-  l'alimentation, et propose moteur, preset et rythme en une phrase, avec la
-  durée pour une heure. Le verdict d'une campagne ou le conseil d'un banc mené
-  sur le poste passent devant la table, tant qu'ils tiennent sur le matériel
-  du moment ; sinon la proposition le dit. Rien n'est appliqué, téléchargé ni
-  installé sans un clic.
-- **Pendant la transcription** : vitesse maximale (le défaut, comportement
-  inchangé), équilibré ou discret. Fils de calcul, lots, priorité Windows,
-  « mode efficacité » (EcoQoS), priorité des entrées-sorties, cœurs efficaces
-  des processeurs hybrides, priorité et cadence de la file de la puce
-  graphique (propriétés documentées du greffon GPU d'OpenVINO), pauses entre
-  fenêtres. Mémoire libre basse : lots, puis modèle plus léger, et c'est dit.
-- **S'adapter tout seul** : rythme choisi quand le poste sert (clavier et
-  souris, charge des autres programmes, plein écran, micro ouvert, batterie),
-  pleine vitesse au repos. Le temps restant suit la cadence observée.
-- **Banc des rythmes** (`--banc --modes`) : vitesse, mémoire, processeur
-  laissé libre et gêne d'une tâche témoin, pour chaque rythme ; ses rapports
-  de durée remplacent les coefficients de départ des estimations.
-- **Fiabilité** : le poste ne se met plus en veille faute d'activité pendant
-  une file ; fermer la fenêtre en pleine transcription demande confirmation ;
-  un fichier audio abîmé lu en partie est signalé ; l'état de reprise est
-  écrit d'un bloc ; une sauvegarde au fil de l'eau qui ne peut plus écrire
-  (disque plein) est signalée ; le repli sur le processeur quand la puce
-  graphique manque est dit au lancement de la file.
-- **Faisceau sur la puce graphique, voie d'essai** : la campagne accepte
-  `--peripherique HETERO:GPU,CPU` et `--proprietes-ov CLE=VALEUR`, dans un
-  dossier à part, pour mesurer sur un portable Intel si le faisceau y devient
-  possible et juste. L'application ne s'en sert pas.
-
-Corrections issues d'une revue d'usage de l'application réelle (vérifiées par
-`outils/verifier_parcours.py`) :
-
-- **Relecture fidèle au fichier** : la vue n'ajoute plus d'espace devant une
-  apostrophe ou un trait d'union (« c 'est », « peut -être »), garde les mots
-  que le moteur n'a pas détaillés, et « Copier le texte » copie le corps du
-  fichier lui-même. Une expression avec apostrophe se corrige de nouveau.
-- **Corrections de casse** acceptées (« gitlab » vers « GitLab »), et plus
-  aucun doublon quand la forme corrigée prolonge la forme entendue
-  (« réseaux » vers « réseaux sociaux » ne produit plus « réseaux sociaux
-  sociaux ») ; seuls les changements réels sont comptés.
-- **Corriger en confiance** : avant d'appliquer, la fenêtre de correction
-  montre le nombre d'endroits touchés et chacun dans son contexte ; la
-  dernière correction s'annule (bouton ou Ctrl+Z), règle ajoutée comprise ; la
-  règle pour les transcriptions suivantes n'est plus cochée d'office ; une
-  forme déjà juste partout est dite comme telle.
-- **Après « Arrêter »** : les fichiers qui n'ont pas commencé restent en
-  attente ; « Reprendre » remet en file le fichier arrêté même s'il est encore
-  listé, et la carte ne disparaît plus sur un refus ; une ligne arrêtée ou en
-  échec se relance d'un clic ; redéposer un fichier arrêté, en échec ou terminé
-  le remet en attente, et un doublon est dit « déjà dans la file ».
-- **Fichiers produits** : le `.txt` est coupé en paragraphes aux pauses
-  (et non plus seulement aux changements de locuteur : sans séparation des
-  voix, une réunion tenait sur une ligne), l'horodatage facultatif marque
-  chaque paragraphe, et la vue de relecture coupe exactement aux mêmes
-  endroits ; l'en-tête donne le nom de l'enregistrement, plus son chemin
-  complet ; une seconde transcription porte le même suffixe sur le texte,
-  ses sous-titres et son compagnon ; l'onglet « Transcriptions » compte des
-  transcriptions (une ligne avec ses formats) et ne s'arrête plus à 40
-  fichiers.
-- **Écoute pendant la relecture** : le lecteur pointait vers un `file:///`,
-  que le navigateur intégré refuse depuis une page servie en http
-  (« Media load rejected by URL safety check ») ; l'audio passe maintenant
-  par un petit serveur local (`app/ecoute.py`, 127.0.0.1, bibliothèque
-  standard) qui ne sert que l'enregistrement de la transcription ouverte,
-  sous une adresse à jeton, avec les requêtes par plage qui permettent de se
-  placer au début d'un paragraphe.
-- **Moteur Intel et mots douteux** : OpenVINO ne donne pas la confiance des
-  mots ; la légende de la relecture le dit au lieu d'annoncer des mots
-  surlignés qui n'existent pas, et la proposition de réglage dit ce que l'on
-  perd en choisissant ce moteur.
-- **Un seul conseil, un seul chiffre** : la proposition du poste décide
-  seule de la pastille « conseillé ici », de la phrase de la fiche du
-  matériel et de l'encart, qui ne se contredisent plus ; toutes les durées
-  (cartes, rythme, fiche, proposition, file) viennent d'une même fonction,
-  `presets.estimer_annonce`, et suivent le rythme choisi ; la séparation des
-  locuteurs n'allonge plus l'estimation quand elle n'est pas installée ; une
-  mesure prise en rythme équilibré ou discret est rangée ramenée à la vitesse
-  maximale, le coefficient du rythme n'est donc plus compté deux fois.
-- **Séparation des voix cochée mais absente** : c'est dit avant de lancer,
-  dans les avertissements des réglages ; la ligne du fichier et l'état final
-  passent à l'ambre avec « voix non séparées » au lieu d'un « Terminé » tout
-  vert ; l'en-tête du fichier en donne la raison ; plus de phase de
-  séparation ni de barre bloquée à 85 % pour une séparation impossible.
-- **Pendant le calcul** : phases nommées (chargement du modèle, transcription,
-  séparation des locuteurs, écriture des fichiers), barre animée tant
-  qu'aucun pourcentage n'est connu, temps écoulé qui avance chaque seconde,
-  reste à faire qui décompte et se corrige en douceur (heure de fin lissée,
-  cadence mesurée sans le chargement du modèle), pied de page qui ne reste
-  plus sur « Chargement du modèle... ». À la fin, le titre de la fenêtre le
-  dit et son bouton clignote dans la barre des tâches, jusqu'au retour sur la
-  fenêtre.
-- **Accessibilité élémentaire** : texte secondaire à 4,75:1 au moins en
-  thème clair (4,83:1 en sombre) ; les fichiers produits d'une ligne sont des
-  boutons et les lignes de l'historique s'ouvrent au clavier ; les modales
-  sont des dialogues nommés, le focus y entre, la tabulation ne passe plus
-  derrière (arrière-plan inerte) et revient à son point de départ à la
-  fermeture ; boutons de fermeture et boutons à icône nommés ; la ligne
-  d'état est une région annoncée aux lecteurs d'écran et la barre d'un
-  fichier en cours une barre de progression.
-- **Correction depuis la relecture** : l'en-tête du fichier texte reste séparé
-  du corps ; la barre de fin d'en-tête et la première phrase ne se retrouvent
-  plus sur la même ligne.
-
-Choisir le réglage sur des réunions transcrites à la main : la campagne.
-
-La comparaison dit où deux moteurs divergent, pas lequel a raison. La campagne
-de mesure tranche : `scribouille-verifier.exe --campagne` transcrit 22,8
-minutes de réunions publiques en français (vingt extraits du corpus SUMM-RE
-ASRU, trois ou quatre voix, transcription manuelle alignée au mot, licence
-CC BY-SA 4.0) sous sept réglages, à armes égales : CTranslate2 large-v3
-faisceaux 5 et 1, OpenVINO large-v3 faisceaux 1 et 5, OpenVINO large-v3-turbo
-faisceaux 1 et 5, CTranslate2 large-v3-turbo faisceau 5. Pour chacun : taux
-d'erreur de mots avec intervalle à 95 %, substitutions, omissions, insertions,
-mots perdus quand deux personnes parlent en même temps, insertions longues
-(indice d'invention), vitesse, mémoire, segments trop longs, et un témoin de
-parole lue.
-
-- **Verdict**, la fiabilité d'abord : tout réglage plus lent que la réunion est
-  écarté ; parmi ceux dont le taux d'erreur ne se distingue pas du meilleur
-  (moins d'un point, ou écart apparié non significatif et sous deux points),
-  le plus rapide. Le rapport dit pourquoi, et ce que le choix coûte. Rien n'est
-  appliqué sans `--appliquer`, qui écrit moteur, périphérique, faisceau et
-  preset dans le réglage du poste.
-- **Corpus non embarqué** : le dépôt ne contient que la liste des extraits et
-  leurs empreintes. Le programme prend un paquet préparé posé à côté de lui
-  (`corpus-campagne-v1.zip`, 35 Mo, même licence que sa source) ou télécharge
-  les seules secondes utiles depuis Hugging Face, puis ORTOLANG (476 Mo).
-- **Reprise** : chaque réglage terminé est enregistré ; une relance ne refait
-  que ce qui manque. Le rapport donne l'heure de début et de fin de chaque
-  réglage.
-- **Réunion réelle** (`--reunion FICHIER --debut --duree`) : les mêmes
-  réglages sur un extrait confidentiel, l'accord de chacun avec le réglage
-  retenu et les termes du glossaire retrouvés, sans un mot du texte.
-- **Mots douteux** : OpenVINO ne donne aucune probabilité (vérifié : scores à
-  1, `logprobs` ignoré, une seule séquence rendue). La campagne mesure ce que
-  vaudrait une seconde passe d'un autre modèle pour les signaler, et à quel
-  coût, à côté des probabilités de CTranslate2.
-
-- **Épreuve d'endurance** (`--endurance [--passages 30] [--pression]`) : le
-  réglage retenu passé de nombreuses fois d'affilée sur des extraits du corpus,
-  comme dans la file de l'application. Pour chaque passage : réussi ou non,
-  erreur exacte, rejeu, repli, mémoire libre du poste avant l'ouverture du
-  modèle et avant le passage, vitesse ; puis le taux de panne avant et après
-  rejeu, avec sa borne haute à 95 %. `--pression` recrée, un passage sur deux,
-  un poste chargé : CTranslate2 large-v3 en mémoire et 4 Go libres seulement.
-  Rapport de chiffres, sans texte.
-
-Corrigé
-
-- **OpenVINO sur la puce graphique, faisceau** : OpenVINO GenAI 2026.4 ne sait
-  pas décoder Whisper en faisceau sur la puce graphique (erreur « Not
-  Implemented » de `iremote_tensor.hpp`, à chaque fois ; ticket openvino.genai
-  n° 2746). Le garde-fou des répétitions refaisait une fenêtre qui boucle avec
-  un faisceau de 5 : sur la puce graphique, une transcription pourtant
-  gloutonne pouvait donc tomber dès qu'une fenêtre bouclait. Il la refait
-  désormais par échantillonnage à température croissante sur la puce
-  graphique et le NPU (faisceau de 5 sur le processeur, comme avant), et une
-  reprise ratée garde la première version au lieu d'emporter le fichier. Le
-  faisceau n'est jamais appliqué à OpenVINO sur ces deux circuits, et la
-  campagne marque ces réglages « non pris en charge » au lieu d'une panne.
-- **Un raté d'OpenVINO ne coûte plus la vitesse** : à la première erreur, à
-  l'ouverture comme en cours de transcription, le modèle est libéré, rouvert,
-  et la transcription reprend sur la puce graphique à la fin du dernier
-  segment sorti. Si l'erreur revient, CTranslate2 prend le relais au même
-  endroit, comme avant. Une ligne le dit dans l'interface.
-- **Réglage de comparaison des réunions** : le rapport d'une réunion écrivait
-  « pas de verdict public » quand le réglage retenu avait échoué sur cette
-  réunion. Il le dit désormais, et le verdict est lu au lancement.
-- **Veille du poste** : une comparaison lancée en fin de journée ne démarrait
-  qu'au réveil du portable. Comparaison et campagne demandent à Windows de ne
-  pas mettre le système en veille pendant le calcul (`SetThreadExecutionState`,
-  demande propre au processus, relâchée à la fin ; aucun réglage modifié).
-- **Glossaire d'une installation ancienne** : jusqu'à la 2.3, les exemples
-  (« Jean Dupont », « MonEntreprise »...) étaient livrés actifs et le fichier
-  n'est jamais réécrit : ils partaient en amorce de chaque transcription, et la
-  règle « mon entreprise => MonEntreprise » réécrivait une tournure courante.
-  Un glossaire ou une table de corrections resté EXACTEMENT tel que livré est
-  remplacé à l'ouverture de la fenêtre par le modèle actuel (exemples en
-  commentaire), avec une copie de l'ancien. Un fichier retouché n'est pas
-  touché. L'amorce elle-même agit : vérifié sur les trois chemins de calcul.
-
-Comparer les deux moteurs sur ses propres enregistrements.
-
-Le banc d'essai de la 2.4.0 dit quel moteur va le plus vite, sur 44 s de
-phrases lues d'une seule voix. Il ne dit rien de la justesse sur une vraie
-réunion. La nouvelle comparaison transcrit le même extrait d'un de vos
-fichiers avec CTranslate2 et avec OpenVINO, chacun dans son réglage Qualité,
-avec votre langue, votre glossaire et vos corrections, et écrit dans
-`comparaisons\` du dossier de données :
-
-- **une page côte à côte** (`cote-a-cote.html`) : les deux textes horodatés
-  face à face, les passages qui divergent surlignés, les mots dont CTranslate2
-  doute soulignés, un clic sur une heure pour réécouter. Elle contient la
-  transcription et reste sur le poste ;
-- **un rapport de chiffres** (`rapport-chiffres.txt`) sans un mot de la
-  transcription, ni nom, ni chemin : durées de calcul, nombre de mots, taux de
-  désaccord (WER de l'un rapporté à l'autre), passages divergents par nature
-  (un mot, plusieurs mots, morceau entendu par un seul moteur), écarts
-  d'horodatage de plus d'une seconde, longueur des segments (sur lesquels
-  s'appuie la séparation des locuteurs), termes du glossaire retrouvés, mots
-  anglais courants écrits en anglais, mots incertains de CTranslate2 et part de
-  ceux qui tombent là où les moteurs divergent ;
-- **avec une transcription déjà relue** (`--reference`, texte, SRT, VTT, export
-  ou compagnon de Scribouille), le taux d'erreur de chaque moteur et une
-  troisième colonne. Sur un extrait, la référence est recalée par ses
-  horodatages ; sans horodatages, elle ne sert que sur le fichier entier.
-  Normalisation commune : casse, ponctuation, nombres en lettres, élisions,
-  hésitations.
-
-Depuis la section « Vitesse de cette machine », ou en ligne de commande :
-`scribouille-verifier.exe --comparer FICHIER --debut 00:05:00 --duree 600`.
-Les bords de l'extrait sont ramenés sur une pause : une phrase coupée au début
-d'un extrait a fait sauter au faisceau de CTranslate2 tout le début de la
-fenêtre, ce qui n'arrive pas à un enregistrement qui commence normalement.
-
-Mesuré sur trois réunions publiques en français, à trois ou quatre voix
-(corpus SUMM-RE, CC BY-SA 4.0, 10 minutes chacune, pistes mélangées, processeur
-Ryzen 7 7800X3D) : OpenVINO sur processeur n'est pas moins juste que
-CTranslate2 (taux d'erreur cumulé 37,6 % contre 40,3 % avec un glossaire,
-38,1 % contre 38,8 % sans ; à égalité sur la parole d'une seule voix), pour
-1,3 à 1,6 fois moins de calcul. Les deux perdent surtout la parole qui se
-chevauche et les « ouais » d'approbation. Un faisceau de 5 n'apporte rien de
-constant à OpenVINO ; à CTranslate2, passer en glouton coûte 1 à 4 points.
-Rien de tout cela ne vaut pour la puce graphique Intel (calcul en fp16), ni
-pour une réunion donnée : c'est l'objet de la comparaison.
-
-Corrigé
-
-- **OpenVINO, langue détectée** : le moteur lisait un attribut qui n'existe
-  pas (`language` au lieu de `languages`). En détection automatique, la langue
-  était redemandée à chaque fenêtre de 30 s au lieu d'être fixée sur la
-  première, et l'en-tête du fichier produit ne donnait pas la langue
-  trouvée. Sans effet quand la langue est choisie (le français par défaut).
-- OpenVINO compte les fenêtres de 30 s qu'il a dû décoder en deux passes
-  (plafond de jetons, ou phrase annoncée comme continuant au-delà) : la
-  seconde passe se fait sans l'amorce du glossaire. Le rapport de comparaison
-  en donne le nombre.
+- **Vocabulaire, format 2** (`vocabulaire.toml`) : termes, fautes connues,
+  catégories, propositions apprises des transcriptions relues, validées une à
+  une ; amorce choisie dans la limite du modèle ; correction après coup
+  journalisée et annulable.
+- **Campagne de mesure** sur des réunions publiques transcrites à la main, et
+  **comparaison** des deux moteurs sur ses propres enregistrements : le réglage
+  se choisit sur des chiffres.
+- **Garde-fou des répétitions** renforcé ; OpenVINO se relance seul après un
+  raté avant de passer la main à CTranslate2.
 
 ---
 

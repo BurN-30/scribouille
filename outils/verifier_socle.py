@@ -1,5 +1,5 @@
 """
-Vérification du socle allégé de la version 2.5, sans fenêtre ni modèle.
+Vérification du socle allégé de la version 3.0, sans fenêtre ni modèle.
 
 Décodage par PyAV (une seule FFmpeg), démarrage sans détection bloquante,
 modèle gardé d'un fichier à l'autre, garde-fou des répétitions, dossier de

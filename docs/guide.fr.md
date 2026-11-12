@@ -78,7 +78,9 @@ Une transcription s'ouvre **dans l'application**, sur un écran entier, sans pas
 
 **Locuteurs.** Un clic sur « Locuteur 1 » le renomme dans tout le fichier, son compagnon et ses sous-titres ; un nom déjà porté réunit les deux voix, leurs paragraphes restant distincts.
 
-**Exporter.** Copier le texte (à la lettre du fichier), avec les heures (quand elles sont connues), ou en Markdown ; enregistrer un `.md` à côté de la transcription. Tous partent du même texte que l'écran.
+**Exporter.** Copier le texte (à la lettre du fichier), avec les heures (quand elles sont connues), ou en Markdown ; enregistrer un `.md` à côté de la transcription. Tous partent du même texte que l'écran. Le `.txt` n'est jamais écrasé ; un `.md` déjà écrit par Scribouille et resté intact est remplacé par le nouveau, un `.md` retouché à la main est gardé et le nouveau part dans une variante numérotée (`-2.md`), ce que l'écran dit. En ligne de commande : `scribouille exporter`.
+
+**Fin de file.** Une transcription finie quitte la file et rejoint « Transcriptions », en tête, « Terminé à l'instant », avec **Relire** et **Exporter** ; la liste dit aussi la date de l'enregistrement quand elle diffère du jour de transcription, et « relu jusqu'à » l'endroit où la relecture s'est arrêtée. Si la fenêtre est en arrière-plan, son titre et son icône le signalent, avec une notification Windows sans son (**Réglages, Application, Prévenir à la fin**, allumé par défaut).
 
 <!-- capture 2 : vue de lecture, un paragraphe avec deux ou trois mots surlignés en ambre, l'infobulle de confiance visible sur l'un d'eux -->
 
@@ -323,7 +325,7 @@ Où vivent les fichiers, selon la manière dont l'application est lancée :
 | Réglages, journaux, glossaire | `%LOCALAPPDATA%\Scribouille` (`WhiScribe` jusqu'à la 2.4, repris au premier lancement) | à côté du script |
 | Modèles | choisi à l'installation, modifiable dans les réglages | `modeles/`, modifiable dans les réglages |
 
-Le dossier de données porte encore l'ancien nom de l'application, et c'est délibéré : le renommer à la 2.4.0 aurait laissé sur place les réglages, le glossaire et les modèles de toutes les installations existantes.
+Jusqu'à la 2.4, le dossier de données portait l'ancien nom de l'application, `WhiScribe`. La 3.0 le renomme au premier lancement, sans copie ni retéléchargement, en ne déplaçant que les fichiers de Scribouille (un logiciel homonyme range ses modèles au même endroit) ; `scribouille donnees revenir-whiscribe` fait le chemin inverse.
 
 </details>
 

@@ -49,6 +49,7 @@ scribouille transcrire FICHIER|DOSSIER... [options]
 | `--peripherique CPU\|GPU\|NPU` | `CPU` | Périphérique d'OpenVINO (implique `--moteur openvino`). |
 | `--rythme vitesse\|equilibre\|discret\|auto` | réglage `rythme` | Part du poste laissée à l'utilisateur ; `auto` : rythme choisi quand le poste est occupé, vitesse maximale sinon. |
 | `--locuteurs auto\|non\|N` | réglage `diarisation` | Séparation des locuteurs (extension installée). |
+| `--noms Alice,Bob` | | Noms des voix séparées, dans l'ordre (`Locuteur 1`, `Locuteur 2`...), ou `"Locuteur 2=Bob"`. Annulable en relecture. |
 | `--vocabulaire F.toml` | | Vocabulaire d'équipe en plus du personnel ; répétable. |
 | `--sans-vocabulaire` | | Ni amorce ni corrections. |
 | `--recursif` | | Sous-dossiers compris. |
@@ -76,6 +77,14 @@ scribouille lire SORTIE.json|SORTIE.txt [--limite N] [--decalage N] [--depuis S]
 ```
 
 Lecture bornée d'un compagnon : au plus `--limite` mots (2 000 par défaut) à partir du segment `--decalage` ; `pagination.suivant` donne le décalage de la page suivante (`null` à la fin). `--douteux` : seulement les segments qui ont des mots sous le seuil (0,5), avec ces mots. `--texte` : texte lisible horodaté au lieu du JSON.
+
+### exporter
+
+```
+scribouille exporter SORTIE.txt [--format md] [--remplacer | --nouveau]
+```
+
+Export Markdown à côté de la transcription (titre, repères, paragraphes avec heure et voix), le même que la relecture. Le `.txt` n'est jamais touché. Un export déjà là, écrit par Scribouille et resté intact, est remplacé ; retouché à la main ou venu d'ailleurs, il est gardé et l'export part dans une variante numérotée (`-2.md`), ce que la sortie dit (`remplace`, `variante`). `--remplacer` ou `--nouveau` forcent l'un ou l'autre.
 
 ### reglages
 
@@ -141,7 +150,13 @@ Les outils de mesure, sous un même toit ; leurs options sont celles d'origine (
 | `scribouille materiel [detecter]` | `--detecter-materiel` |
 | `scribouille materiel proposer [--appliquer]` | `--reconnaitre [--appliquer]` |
 | `scribouille donnees revenir-whiscribe` | `--revenir-whiscribe` |
-| `scribouille verifier` | `--verifier` (et `scribouille-verifier.exe` seul, avant la 2.5) |
+| `scribouille verifier` | `--verifier` (et `scribouille-verifier.exe` seul, avant la 3.0) |
+
+## Plusieurs Scribouille en même temps
+
+- Une seule **fenêtre** par dossier de données : la seconde ramène la première au premier plan et se ferme.
+- La **ligne de commande** reste libre pendant que la fenêtre est ouverte. Réglages, vocabulaire et reprises sont partagés ; la fenêtre relit les réglages du disque avant d'écrire les siens.
+- Un **même enregistrement** n'est transcrit que par un processus à la fois : le second s'arrête (`fichier_echec`, code 1) avec « Déjà en cours ailleurs ». Le verrou d'un processus disparu est repris.
 
 ## Sortie JSON
 
@@ -185,7 +200,7 @@ Sorties réelles du paquet gelé (turbo par CTranslate2, processeur, extrait FLE
 
 ```
 > scribouille transcrire point-hebdo.wav --preset rapide --json
-{"schema": "scribouille.cli/1", "commande": "transcrire", "evenement": "debut", "fichiers": ["…\\point-hebdo.wav"], "version": "2.4.0", "preset": "rapide", "rythme": "vitesse", "pour_une_heure": "7 min 58"}
+{"schema": "scribouille.cli/1", "commande": "transcrire", "evenement": "debut", "fichiers": ["…\\point-hebdo.wav"], "version": "3.0.0", "preset": "rapide", "rythme": "vitesse", "pour_une_heure": "7 min 58"}
 {"schema": "scribouille.cli/1", "commande": "transcrire", "evenement": "etat", "id": "c1", "etat": "decodage", "message": "Lecture du fichier"}
 {"schema": "scribouille.cli/1", "commande": "transcrire", "evenement": "journal", "niveau": "info", "texte": "Modèle chargé en 2 s, transcription en cours."}
 {"schema": "scribouille.cli/1", "commande": "transcrire", "evenement": "progres", "id": "c1", "fichier": "…\\point-hebdo.wav", "pct": 20, "phase": "Transcription", "ecoule_s": 11.9, "reste_s": 3.2}

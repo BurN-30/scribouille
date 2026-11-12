@@ -7,14 +7,14 @@ sequencee apres la transcription pour limiter le pic memoire, et installable
 depuis l'application elle-meme (voir app/extensions.py).
 """
 
-VERSION = "2.4.0"
+VERSION = "3.0.0"
 
 # Nom d'affichage. L'application s'est appelee WhiScribe jusqu'a la 2.3.3 : le
 # nom collisionnait avec deux autres projets. L'identifiant Inno du programme
 # d'installation NE SUIT PAS le renommage (voir packaging/setup.iss) : c'est lui
 # qui fait qu'une version se pose PAR-DESSUS l'ancienne. Le dossier de donnees,
 # lui, est passe de %LOCALAPPDATA%\WhiScribe a %LOCALAPPDATA%\Scribouille en
-# 2.5, repris au premier lancement (voir app/migration.py).
+# 3.0, repris au premier lancement (voir app/migration.py).
 NOM_APPLICATION = "Scribouille"
 
 # Source unique de l'adresse du depot. A ajuster une seule fois ici si le nom du

@@ -10,7 +10,7 @@ En ligne de commande : `scribouille reglages` (liste), `reglages lire CLE`, `reg
 |---|---|---|
 | `preset` | `qualite` | `qualite` : large-v3, faisceau 5. `rapide` : large-v3-turbo. Avec le moteur OpenVINO, l'équivalent OpenVINO du même modèle. |
 | `langue` | `fr` | Langue parlée (code ISO), ou `auto` pour la détection. |
-| `diarisation` | `true` | Séparer les locuteurs. Sans l'extension installée : ignoré, et dit. |
+| `diarisation` | `false` | Séparer les locuteurs (extension à installer depuis Réglages, Transcription). Sans l'extension : ignoré. |
 | `nb_locuteurs` | `0` | Nombre de locuteurs attendu ; `0` : détection. |
 | `filtres_salle` | `false` | Passe-haut, passe-bas et niveau avant transcription (audio de salle). |
 | `sauvegarde_progressive` | `true` | Chaque segment écrit au fil de l'eau dans `reprises\` : reprise au segment près après une coupure ou un plantage. |
@@ -41,7 +41,7 @@ En ligne de commande : `scribouille reglages` (liste), `reglages lire CLE`, `reg
 | Clé | Défaut | Effet |
 |---|---|---|
 | `dossier_sortie` | `Documents\Transcriptions` | Dossier des transcriptions de la fenêtre. La ligne de commande écrit à côté de la source, ou dans `--sortie`. |
-| `formats` | `txt` seul | `txt`, `srt`, `vtt` ; `horodatage` ajoute l'heure de chaque paragraphe au `.txt`. |
+| `formats` | `txt`, avec `horodatage` | `txt`, `srt`, `vtt` ; `horodatage` met l'heure en tête de chaque paragraphe du `.txt`. L'en-tête du `.txt` : titre, durée, date, voix séparées ; le reste est dans le compagnon. |
 | `compagnon_confiance` | `true` | Écrire le `.json` compagnon : segments, mots horodatés, probabilités, remplacements. Nécessaire à la relecture et à `scribouille lire`. |
 | `motif_sortie` | vide | Nom des fichiers : `{nom}`, `{date}`, `{heure}`, `{modele}`. Vide : `{date}-{nom}`. |
 
@@ -64,7 +64,6 @@ Sans `mode_avance`, les quatre clés suivantes sont ignorées.
 | `langue_interface` | vide | `fr` ou `en` ; vide : celle de Windows au premier lancement. Vaut aussi pour les en-têtes des fichiers produits. |
 | `surveillance` | `false` | Transcrire ce qui arrive dans `dossier_surveille`. |
 | `dossier_surveille` | vide | Dossier scruté. |
-| `lecture_audio` | `false` | Écouter l'extrait depuis la vue de lecture (serveur local). |
 | `barre_taches` | `true` | Progression sur l'icône de la barre des tâches. |
 | `prevenir_fin` | `true` | Fin de file, fenêtre en arrière-plan : clignotement, titre, notification Windows sans son. |
 | `maj_verifier` | `false` | Vérifier les nouvelles versions sur GitHub, une fois par jour au plus. Seul appel réseau hors téléchargement d'un modèle. |

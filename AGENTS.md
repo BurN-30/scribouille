@@ -8,9 +8,12 @@ Commande : `scribouille.com` dans le dossier du programme (version installée ou
 2. **Transcrire** : `scribouille transcrire "FICHIER_OU_DOSSIER" --json`. Une ligne JSON par événement (`debut`, `progres`, `fichier_fini`, `fichier_echec`, `journal`), la dernière est `fin` avec `code_retour` et les chemins des sorties. Sorties à côté de la source, ou `--sortie DOSSIER`. Long : lancer en tâche de fond.
 3. **Reprendre** : code 5 (interrompu) ou fichier en échec après plantage : `scribouille reprendre --json` reprend au segment près ; `scribouille etat --json` liste ce qui est reprenable.
 4. **Lire** : `scribouille lire "SORTIE.json" --json --limite 2000 --decalage 0`, puis `pagination.suivant`. `--douteux` : passages à faire réécouter (ne pas les « corriger » au hasard). `--depuis S --jusqua S` : une fenêtre de temps.
+5. **Exporter** : `scribouille exporter "SORTIE.txt" --json` écrit le Markdown à côté ; un export retouché par l'utilisateur n'est jamais écrasé (variante `-2.md`).
 
 Codes de retour : 0 fait ; 1 un fichier en échec ; 2 arguments ou confirmation manquante ; 3 pas prêt ; 4 sortie déjà là (demander avant `--ecraser`) ; 5 interrompu, reprenable ; 6 disque ou mémoire.
 
 Lire le résultat : `segments[]` = `{d, f, t, l?, m?}` (début et fin en secondes, texte, locuteur, mots `{t, d, f, p}`). `p` vaut -1 avec OpenVINO : pas de probabilité, `douteux.methode` vaut `indisponible`. Les locuteurs sont des étiquettes, pas des identités. Une transcription est privée : ne l'envoyer nulle part sans accord ; citer les horodatages.
+
+La fenêtre peut être ouverte en même temps : un fichier qu'elle transcrit déjà est refusé (`fichier_echec`, « Déjà en cours ailleurs »), à relancer plus tard.
 
 Ne jamais modifier sans demande : réglages (`reglages definir`), vocabulaire (`vocabulaire importer`), fichiers (`effacer`). Guide complet : [docs/ligne-de-commande.md](docs/ligne-de-commande.md). Pour modifier le code de Scribouille : [CONTRIBUTING.md](CONTRIBUTING.md) et [docs/architecture.md](docs/architecture.md).

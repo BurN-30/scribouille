@@ -78,7 +78,9 @@ A transcript opens **in the app**, full screen, no editor needed: the **Review**
 
 **Speakers.** Clicking "Speaker 1" renames it throughout the file, its companion and its subtitles; a name already in use merges the two voices, their paragraphs staying separate.
 
-**Export.** Copy the text (exactly as in the file), with timestamps (when they are known), or as Markdown; save a `.md` next to the transcript. All of them start from the same text as the screen.
+**Export.** Copy the text (exactly as in the file), with timestamps (when they are known), or as Markdown; save a `.md` next to the transcript. All of them start from the same text as the screen. The `.txt` is never overwritten; a `.md` written by Scribouille and left untouched is replaced by the new one, a `.md` edited by hand is kept and the new one goes to a numbered variant (`-2.md`), which the screen says. From the command line: `scribouille exporter`.
+
+**End of the queue.** A finished transcript leaves the queue and joins "Transcripts" at the top, "Finished just now", with **Review** and **Export**; the list also gives the recording date when it differs from the transcription day, and "reviewed up to" where the review stopped. If the window is in the background, its title and icon say so, with a silent Windows notification (**Settings, Application, Notify when done**, on by default).
 
 <!-- screenshot 2: reading view, a paragraph with two or three amber highlighted words, the confidence tooltip visible on one of them -->
 
@@ -325,7 +327,7 @@ Where files live, depending on how the app was started:
 | Settings, logs, glossary | `%LOCALAPPDATA%\Scribouille` (`WhiScribe` up to 2.4, taken over on first launch) | next to the script |
 | Models | chosen at install time, changeable in the settings | `modeles/`, changeable in the settings |
 
-The data folder still carries the old application name, on purpose: renaming it in 2.4.0 would have left the settings, the glossary and the models of every existing installation behind.
+Up to 2.4, the data folder carried the application's old name, `WhiScribe`. Version 3.0 renames it on first launch, without copying or downloading anything again, moving only Scribouille's own files (a namesake program keeps its models in the same place); `scribouille donnees revenir-whiscribe` goes back.
 
 </details>
 

@@ -172,7 +172,7 @@ var
   Emplacements partagés avec l'application, voir app/chemins.py
   -------------------------------------------------------------------------- }
 
-{ Le dossier de données est à notre nom depuis la 2.5, comme dans
+{ Le dossier de données est à notre nom depuis la 3.0, comme dans
   app/chemins.py. L'ancien, « WhiScribe », est repris par l'application à son
   premier lancement (app/migration.py) : un projet tiers homonyme range ses
   modèles dans le même dossier sous Windows, rien de lui n'est jamais touché. }
@@ -450,7 +450,7 @@ end;
   -------------------------------------------------------------------------- }
 
 { Efface les données personnelles de Scribouille, ENTRÉE PAR ENTRÉE : jamais
-  un dossier entier à l'aveugle. Le dossier « WhiScribe » d'avant la 2.5 est
+  un dossier entier à l'aveugle. Le dossier « WhiScribe » d'avant la 3.0 est
   partagé avec un projet tiers homonyme (ses modèles, « models ») : un
   DelTree du dossier les effaçait. Même liste que app/migration.py. Les modèles
   (« modeles ») ne partent que si l'utilisateur l'a demandé juste avant. }
