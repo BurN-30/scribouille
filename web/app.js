@@ -1777,7 +1777,17 @@ async function majCompteurVocabulaire() {
     const d = await pywebview.api.vocabulaire_etat();
     voc.donnees = d;
     afficherCompteurVocabulaire(d.resume.proposes);
+    majSousLibellesVocabulaire(d.resume);
   } catch (e) { console.error(e); }
+}
+
+/* Sous les deux bascules du vocabulaire : ce que le vocabulaire effectif
+   contient vraiment (format 2, equipe et format 1 compris), pas le seul
+   glossaire du format 1, qui disait « Aucun terme » avec des termes actifs. */
+function majSousLibellesVocabulaire(resume) {
+  if (!resume) return;
+  $('#etat-glossaire').textContent = resume.actifs ? tn('ui.voc.termes', resume.actifs) : t('ui.voc.aucun_terme');
+  $('#etat-corrections').textContent = resume.fautes ? tn('ui.voc.regles', resume.fautes) : t('ui.voc.aucune_regle');
 }
 
 function afficherCompteurVocabulaire(n) {
@@ -1797,6 +1807,7 @@ function ouvrirVocabulaire() {
 
 async function chargerVocabulaire() {
   voc.donnees = await pywebview.api.vocabulaire_etat();
+  majSousLibellesVocabulaire(voc.donnees.resume);
   if (voc.onglet === 'propose' && !voc.donnees.resume.proposes && voc.donnees.resume.actifs) voc.onglet = 'actif';
   dessinerVocabulaire();
   afficherCompteurVocabulaire(voc.donnees.resume.proposes);

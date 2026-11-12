@@ -1236,6 +1236,11 @@ def essai_heures_et_avis(base: Path) -> None:
     verifier("Math.floor(valeur || 0)" in formater, "heure en marge tronquée comme celle du .txt (60,6 s : 1:00)")
     verifier(js.count("selectionAChevalDeParagraphes()") >= 3 and "ui.rl.cheval_paragraphes" in js,
              "sélection à cheval sur deux paragraphes : dite, au survol comme à Entrée")
+    appjs = (RACINE / "web" / "app.js").read_text(encoding="utf-8")
+    chargement = appjs[appjs.index("async function chargerVocabulaire()"):][:200]
+    verifier("majSousLibellesVocabulaire(voc.donnees.resume)" in chargement
+             and "majSousLibellesVocabulaire(d.resume)" in appjs,
+             "vocabulaire : les sous-libellés comptent le vocabulaire effectif (plus de « Aucun terme » à tort)")
 
 
 def essai_depot_mele() -> None:
