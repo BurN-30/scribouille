@@ -238,6 +238,7 @@ class Sonde:
             with p.oneshot():
                 memoire = p.memory_info()
                 temps = p.cpu_times()
+            propre = memoire_propre(p)
             maintenant = time.monotonic()
             cumul = float(temps.user + temps.system)
             pct = None
@@ -251,11 +252,23 @@ class Sonde:
                 "memoire_octets": int(memoire.rss),
                 # Mémoire privée engagée (Windows) : ce que le processus a réservé pour lui.
                 "prive_octets": int(getattr(memoire, "private", 0) or getattr(memoire, "vms", 0)),
+                # Mémoire qu'il occupe vraiment, à lui seul (USS) : ce que l'écran
+                # montre. La mémoire engagée la dépasse de loin (590 Mo engagés
+                # pour 79 Mo occupés, relevé de la recette du 12/11).
+                "propre_octets": propre,
                 "processeur_pct": None if pct is None else round(pct, 1),
                 "processeur_poste_pct": None if pct is None else round(pct / coeurs, 1),
             }
         except Exception:
             return None
+
+
+def memoire_propre(processus) -> int:
+    """Mémoire occupée par ce processus seul (USS), 0 si Windows la refuse."""
+    try:
+        return int(processus.memory_full_info().uss)
+    except Exception:
+        return 0
 
 
 def vivant(pid: int) -> bool:

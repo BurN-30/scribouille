@@ -553,6 +553,15 @@ def essai_instances(base: Path) -> None:
         verifier(reprise.lire_etat("essai-sortie").get("sortie") == str(base / "ailleurs"),
                  "une reprise garde le dossier de sortie demandé (scribouille reprendre y écrit)")
         session.effacer()
+        from app import processus as processus_module
+
+        tampon = bytearray(64 * 1024 * 1024)  # 64 Mo occupés pour de bon
+        releve = processus_module.Sonde().releve() or {}
+        verifier(0 < releve.get("propre_octets", 0) <= releve.get("prive_octets", 0)
+                 and releve["propre_octets"] > 60 * 1024 * 1024,
+                 "mémoire montrée : celle que le processus occupe seul (USS), pas la mémoire engagée",
+                 str({k: releve.get(k) for k in ("propre_octets", "prive_octets", "memoire_octets")}))
+        del tampon
         from app import cli, langues
 
         langues.definir("fr")

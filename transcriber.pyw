@@ -1068,7 +1068,7 @@ class Passerelle:
     def usage_instantane(self) -> dict:
         fenetre = self._sonde_fenetre.releve()
         moteur_releve = self.moteur.usage()
-        affichage = {"processus": 0, "memoire_octets": 0, "prive_octets": 0}
+        affichage = {"processus": 0, "memoire_octets": 0, "prive_octets": 0, "propre_octets": 0}
         try:
             import psutil  # type: ignore
 
@@ -1081,6 +1081,7 @@ class Passerelle:
                     infos = enfant.memory_info()
                     affichage["memoire_octets"] += int(infos.rss)
                     affichage["prive_octets"] += int(getattr(infos, "private", 0) or 0)
+                    affichage["propre_octets"] += processus.memoire_propre(enfant)
         except Exception:
             pass
         total = sum(int((r or {}).get("memoire_octets") or 0) for r in (fenetre, moteur_releve))
