@@ -747,6 +747,10 @@ def essai_ecrans() -> None:
                           ("point à vérifier suivant par N", "touche === 'n' || touche === 'N'"),
                           ("clic sur un mot : l'écoute s'y place", "placerA(Math.max(0, lect.mots[i].d")):
         verifier(preuve in js, f"relecture : {geste}")
+    piege = re.search(r"function pieger.*?querySelectorAll\(\s*'([^']*)'", js, re.S)
+    verifier(piege and "a[href]" in piege.group(1) and ", [href]" not in piege.group(1),
+             "piège du focus : une icône (<use href>) ne compte pas parmi les éléments focalisables",
+             piege.group(1) if piege else "")
     verifier("'occurrences_correction'" in js and "'corriger_occurrences'" in js and "data-rang" in js,
              "une correction vise les endroits cochés, pas tout le fichier d'office")
     verifier(html.count("doublure-passerelle.js") == 1 and "DOUBLURE_PASSERELLE" in js

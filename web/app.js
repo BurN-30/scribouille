@@ -2315,7 +2315,7 @@ function pieger(e) {
   const voile = ouvertes[ouvertes.length - 1];
   if (!voile || e.key !== 'Tab') return;
   const focusables = Array.from(voile.querySelectorAll(
-    'button, input, select, textarea, [href], [tabindex]:not([tabindex="-1"])'))
+    'button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])'))
     .filter((x) => !x.disabled && !x.hidden && x.offsetParent !== null);
   if (!focusables.length) return;
   const premier = focusables[0];
