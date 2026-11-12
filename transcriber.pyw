@@ -1246,7 +1246,9 @@ class Passerelle:
         if lus is None:
             config_module.sauver(self.config)
         else:
-            disque = config_module.charger()
+            # Sans toucher à la langue de l'interface : celle du disque est
+            # peut-être l'ancienne, quand l'utilisateur vient d'en changer.
+            disque = config_module.charger(definir_langue=False)
             for cle, valeur in self.config.items():
                 if lus.get(cle) != valeur:
                     disque[cle] = valeur

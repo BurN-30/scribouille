@@ -64,7 +64,12 @@ def _fusionner(base: dict, ajout: dict) -> dict:
     return resultat
 
 
-def charger() -> dict:
+def charger(definir_langue: bool = True) -> dict:
+    """
+    La configuration du disque, défauts compris. `definir_langue=False` : la
+    langue de l'interface du processus n'est pas touchée (la fenêtre qui relit
+    le disque pour fusionner ses réglages vient peut-être d'en changer).
+    """
     donnees: dict = {}
     if chemins.FICHIER_CONFIG.exists():
         try:
@@ -86,7 +91,8 @@ def charger() -> dict:
         config["langue_interface"] = langues.detecter_systeme()
         journal.info("Langue d'interface détectée : %s", config["langue_interface"])
         sauver(config)
-    langues.definir(config["langue_interface"])
+    if definir_langue:
+        langues.definir(config["langue_interface"])
 
     # Le dossier des modèles n'est pas rangé ici : il est partagé avec le
     # programme d'installation et le désinstallateur, voir `app/chemins.py`.

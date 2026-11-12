@@ -553,6 +553,25 @@ def essai_instances(base: Path) -> None:
         verifier(reprise.lire_etat("essai-sortie").get("sortie") == str(base / "ailleurs"),
                  "une reprise garde le dossier de sortie demandé (scribouille reprendre y écrit)")
         session.effacer()
+        from app import config as config_module
+
+        from app import langues as langues_module
+
+        fichier_config = chemins.FICHIER_CONFIG
+        chemins.FICHIER_CONFIG = base / "config-langue.json"   # jamais celui de l'utilisateur
+        try:
+            config_module.sauver({**config_module.DEFAUTS, "langue_interface": "fr"})
+            langues_module.definir("en")
+            config_module.charger(definir_langue=False)
+            garde = langues_module.courante()
+            config_module.charger()
+        finally:
+            chemins.FICHIER_CONFIG = fichier_config
+        passerelle = (RACINE / "transcriber.pyw").read_text(encoding="utf-8")
+        verifier(garde == "en" and langues_module.courante() == "fr"
+                 and "disque = config_module.charger(definir_langue=False)" in passerelle,
+                 "changer de langue : la fenêtre qui relit le disque ne remet pas l'ancienne langue",
+                 f"{garde} {langues_module.courante()}")
         from app import processus as processus_module
 
         tampon = bytearray(64 * 1024 * 1024)  # 64 Mo occupés pour de bon
