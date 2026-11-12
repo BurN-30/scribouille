@@ -18,7 +18,7 @@ scribouille COMMANDE [options] [--json]
 - `transcrire` ne modifie jamais les réglages : ses options valent pour la commande seule.
 - `espace`, `effacer --apercu`, `etat`, `lire` et `agent` n'écrivent rien dans le dossier de données.
 - Chemins absolus dans les sorties JSON ; aucun texte transcrit dans les journaux.
-- Ctrl+C, fermeture de la session SSH ou arrêt de la tâche : le moteur s'arrête avec la commande, le travail fait reste sur le disque, `reprendre` le poursuit.
+- Ctrl+C ou Ctrl+Pause : arrêt propre, code 5, le travail fait reste sur le disque, `reprendre` le poursuit. Fermeture de la session SSH ou arrêt de la tâche : le moteur s'arrête avec la commande, le travail fait reste aussi sur le disque.
 
 ## Codes de retour
 

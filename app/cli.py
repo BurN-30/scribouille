@@ -559,6 +559,7 @@ def principal(arguments: list[str]) -> int:
         _controler_options(commande, options)
     except ErreurUsage as erreur:
         return _usage(commande, en_json, erreur.message, erreur.suggestion or f"scribouille {commande} --aide")
+    _interruption_comme_ctrl_c()
     if commande in SANS_ECRITURE:
         journal.sans_fichier()
     else:
@@ -579,6 +580,23 @@ def principal(arguments: list[str]) -> int:
         journal.exception(f"Commande {commande} en échec", exc)
         sortie.erreur(Echec("erreur", f"{type(exc).__name__}: {exc}", ECHEC_PARTIEL))
         return ECHEC_PARTIEL
+
+
+def _interruption_comme_ctrl_c() -> None:
+    """
+    Ctrl+Pause (et l'arrêt d'une tâche ou d'une session qui l'envoie) vaut
+    Ctrl+C : le travail fait est gardé, code 5, `reprendre` le poursuit. Sans
+    cela, Windows tue le processus sur-le-champ, code quelconque.
+    """
+    import signal
+
+    def interrompre(_signal, _cadre):
+        raise KeyboardInterrupt
+
+    try:
+        signal.signal(signal.SIGBREAK, interrompre)  # type: ignore[attr-defined]
+    except (AttributeError, ValueError, OSError):
+        pass
 
 
 def _flux_en_utf8() -> None:

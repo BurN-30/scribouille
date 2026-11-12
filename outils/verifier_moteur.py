@@ -619,9 +619,12 @@ def essai_ligne_de_commande() -> None:
 
     p.send_signal(signal.CTRL_BREAK_EVENT)
     try:
-        p.wait(30)
+        code_interruption = p.wait(30)
     except subprocess.TimeoutExpired:
         p.kill()
+        code_interruption = None
+    verifier(code_interruption == 5, "Ctrl+C (Ctrl+Pause) : code 5, documenté « interrompu, reprenable »",
+             str(code_interruption))
     code, lignes, _ = cli("etat", "--json")
     taches = lignes[-1]["donnees"]["taches"] if lignes else []
     verifier(any(Path(t["chemin"]).name == "longue.ogg" for t in taches),
