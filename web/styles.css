@@ -451,6 +451,8 @@ kbd {
 .bouton-danger-plein { background: var(--rouge); border-color: var(--rouge); color: #fff; }
 :root[data-theme="sombre"] .bouton-danger-plein { color: #1a0d0e; }
 .bouton-danger-plein:hover { filter: brightness(1.08); }
+/* Grise sous la souris, il garde son fond : le texte blanc restait sur fond de carte. */
+.bouton-danger-plein:disabled:hover { background: var(--rouge); border-color: var(--rouge); filter: none; }
 
 .bouton-discret { border-color: transparent; background: none; color: var(--texte-doux); font-weight: 550; }
 .bouton-discret:hover { background: var(--carte-creuse); border-color: var(--bordure); color: var(--texte); }
