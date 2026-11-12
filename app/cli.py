@@ -69,6 +69,7 @@ REGLAGES: dict[str, str] = {
     "dossier_surveille": "Dossier scruté par la surveillance.",
     "surveillance": "Transcrire ce qui arrive dans le dossier surveillé.",
     "maj_verifier": "Vérifier les mises à jour (seul appel réseau hors modèles).",
+    "theme": "Thème de la fenêtre : auto (celui de Windows), clair ou sombre.",
     "barre_taches": "Progression sur l'icône de la barre des tâches.",
     "prevenir_fin": "Fin de file, fenêtre en arrière-plan : clignotement, titre, notification Windows sans son.",
     "filtres_salle": "Filtres de salle avant transcription (passe-haut, passe-bas, niveau).",
@@ -85,6 +86,11 @@ REGLAGES: dict[str, str] = {
 }
 
 PSEUDO_CLES = ("moteur", "peripherique", "dossier_modeles")
+
+#: Clés de config.json tenues par l'application elle-même, hors de `reglages` :
+#: état de la fenêtre, et réglage du poste (écrit par les pseudo-clés moteur
+#: et peripherique, ou par le banc et la campagne).
+INTERNES = ("reglage_machine", "zoom", "journal_ouvert", "proposition_ecartee")
 
 #: Commandes qui n'écrivent rien dans le dossier de données, ni journal ni
 #: réglages : regarder l'espace occupé, ou l'effacer, ne recrée rien.
@@ -1330,7 +1336,8 @@ def _valider(cle: str, valeur) -> None:
     from . import presets, rythme
 
     fermes = {"preset": tuple(presets.PRESETS), "rythme": rythme.RYTHMES,
-              "langue_interface": ("", *langues.LANGUES), "theme": ("auto", "clair", "sombre")}
+              "langue_interface": ("", *langues.LANGUES), "theme": ("auto", "clair", "sombre"),
+              "langue": (*LANGUES_PAROLE, "auto")}
     if cle in fermes and valeur not in fermes[cle]:
         raise Echec("valeur", f"{cle} : parmi {', '.join(v or '(vide)' for v in fermes[cle])}", ARGUMENTS)
 
@@ -1349,9 +1356,11 @@ def cmd_reglages(options, sortie: Sortie) -> int:
             if cle == "moteur":
                 valeur, defaut = machine.get("moteur") or "auto", "auto"
             elif cle == "peripherique":
-                valeur, defaut = machine.get("peripherique") or "", ""
+                valeur, defaut = machine.get("peripherique") or "CPU", "CPU"
             elif cle == "dossier_modeles":
                 valeur, defaut = str(chemins.DOSSIER_MODELES), str(chemins.dossier_modeles_defaut())
+            elif cle == "dossier_sortie":
+                valeur, defaut = config.get(cle), str(chemins.dossier_sortie_defaut())
             else:
                 valeur, defaut = config.get(cle), config_module.DEFAUTS.get(cle)
             liste.append({"cle": cle, "valeur": valeur, "defaut": defaut, "effet": effet})
@@ -1368,7 +1377,9 @@ def cmd_reglages(options, sortie: Sortie) -> int:
     if options.action == "lire":
         par_cle = {r["cle"]: r for r in valeurs()}
         if options.valeurs[0] not in par_cle:
-            raise Echec("cle_inconnue", f"réglage inconnu : {options.valeurs[0]}", ARGUMENTS)
+            raise Echec("cle_inconnue", f"réglage inconnu : {options.valeurs[0]}"
+                        + (" (tenu par la fenêtre, pas par la ligne de commande)" if options.valeurs[0] in INTERNES
+                           else ""), ARGUMENTS, "scribouille reglages : la liste des clés")
         r = par_cle[options.valeurs[0]]
         sortie.donnees(r, f"{r['cle']} = {json.dumps(r['valeur'], ensure_ascii=False)}\n  {r['effet']}")
         return OK
@@ -1379,7 +1390,9 @@ def cmd_reglages(options, sortie: Sortie) -> int:
         if options.action == "definir" and not egal:
             raise Echec("arguments", f"forme CLE=VALEUR attendue : {brut}", ARGUMENTS)
         if cle not in REGLAGES:
-            raise Echec("cle_inconnue", f"réglage inconnu : {cle} (scribouille reglages)", ARGUMENTS)
+            raise Echec("cle_inconnue", f"réglage inconnu : {cle} ; rien n'a été changé"
+                        + (" (tenu par la fenêtre, pas par la ligne de commande)" if cle in INTERNES else ""),
+                        ARGUMENTS, "scribouille reglages : la liste des clés")
         if cle in PSEUDO_CLES:
             changes[cle] = texte.strip() if options.action == "definir" else ""
             continue
@@ -1415,8 +1428,12 @@ def cmd_reglages(options, sortie: Sortie) -> int:
     if "langue_interface" in changes:
         config["langue_interface"] = langues.definir(config.get("langue_interface"))
     config_module.sauver(config)
-    sortie.donnees({"modifies": sorted(changes), "fichier": str(chemins.FICHIER_CONFIG)},
-                   f"Enregistré : {', '.join(sorted(changes))}")
+    # Chaque valeur telle qu'elle est désormais : « formats=txt,srt » coupe
+    # aussi vtt et horodatage, et la sortie le montre.
+    par_cle = {r["cle"]: r for r in valeurs()}
+    lignes = [f"  {c} = {json.dumps(par_cle[c]['valeur'], ensure_ascii=False)}" for c in sorted(changes)]
+    sortie.donnees({"modifies": sorted(changes), "valeurs": {c: par_cle[c]["valeur"] for c in sorted(changes)},
+                    "fichier": str(chemins.FICHIER_CONFIG)}, "Enregistré :\n" + "\n".join(lignes))
     return OK
 
 

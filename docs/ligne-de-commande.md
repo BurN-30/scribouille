@@ -64,14 +64,14 @@ Un fichier est « déjà transcrit » quand le dossier de sortie contient un com
 ### reprendre
 
 ```
-scribouille reprendre [CLE|FICHIER] [--sortie D] [--formats LISTE] [--rythme R] [--telecharger]
+scribouille reprendre [CLE|FICHIER] [--sortie D] [--formats LISTE] [--rythme vitesse|equilibre|discret|auto] [--telecharger]
 ```
 
-Sans argument, la plus récente. La reprise rétablit tout ce que la demande de départ prévoyait : modèle (le texte ne mêle jamais deux modèles), formats, dossier de sortie, langue, vocabulaire, voix et `--noms`, rythme, moteur. `--sortie`, `--formats` et `--rythme` remplacent la valeur de départ. Une reprise laissée par la 3.0.0, qui ne gardait pas la demande, repart des réglages actuels, et le dit (`journal`, niveau `attention`).
+Sans argument, la plus récente. La reprise rétablit tout ce que la demande de départ prévoyait : modèle (le texte ne mêle jamais deux modèles), formats, dossier de sortie, langue, vocabulaire, voix et leurs noms, rythme, moteur. `--sortie`, `--formats` et `--rythme` remplacent la valeur de départ. Une reprise laissée par la 3.0.0, qui ne gardait pas la demande, repart des réglages actuels, et le dit (`journal`, niveau `attention`).
 
 ### etat
 
-Transcriptions reprenables (`interrompue`, ou `en_cours` si un moteur tourne et que la sauvegarde a bougé dans la minute), avec position, pourcentage et clé ; processus moteurs actifs (PID, mémoire).
+`scribouille etat` : transcriptions reprenables (`interrompue`, ou `en_cours` si un moteur tourne et que la sauvegarde a bougé dans la minute), avec position, pourcentage et clé ; processus moteurs actifs (PID, mémoire).
 
 ### lire
 
@@ -98,6 +98,8 @@ scribouille reglages definir CLE=VALEUR [CLE=VALEUR...]
 scribouille reglages defaut CLE [CLE...]
 ```
 
+Actions : `liste` (défaut), `lire`, `definir`, `defaut`. Une clé inconnue fait tout refuser, rien n'est changé.
+
 Chaque réglage, sa valeur par défaut et son effet : [reglages.md](reglages.md). Pseudo-clés : `moteur`, `peripherique`, `dossier_modeles`.
 
 ### diagnostic
@@ -106,25 +108,26 @@ Chaque réglage, sa valeur par défaut et son effet : [reglages.md](reglages.md)
 
 ### espace
 
-Ce que Scribouille occupe, poste par poste : programme, chaque modèle, moteur Intel, locuteurs, caches (OpenVINO, pip), profil d'affichage, journaux, reprises, mesures, vocabulaire, réglages, sauvegardes, reste de l'ancien dossier `WhiScribe`, raccourcis et clé de la version installée. `liberable` : se libère sans rien perdre (caches, journaux, modèles que le réglage n'utilise pas, retéléchargés au besoin). Les transcriptions sont comptées à part (`transcriptions_octets`), jamais dans le total. `non_reconnus` : ce qui est dans nos dossiers sans être à nous, jamais touché.
+`scribouille espace` : ce que Scribouille occupe, poste par poste : programme, chaque modèle, moteur Intel, locuteurs, caches (OpenVINO, pip), profil d'affichage, journaux, reprises, mesures, vocabulaire, réglages, sauvegardes, reste de l'ancien dossier `WhiScribe`, raccourcis et clé de la version installée. `liberable` : se libère sans rien perdre (caches, journaux, modèles que le réglage n'utilise pas, retéléchargés au besoin). Les transcriptions sont comptées à part (`transcriptions_octets`), jamais dans le total. `non_reconnus` : ce qui est dans nos dossiers sans être à nous, jamais touché.
 
 ### effacer
 
 ```
 scribouille effacer CLE [CLE...] [--apercu] [--oui]
 scribouille effacer --liberable [--apercu] [--oui]
-scribouille effacer --complet [--avec-transcriptions] [--garder-programme] [--apercu] [--oui]
+scribouille effacer --complet [--avec-transcriptions] [--garder-programme] [--resume F] [--apercu] [--oui]
 ```
 
 - `CLE` : clés de `espace` (`cache_openvino`, `journaux`, `modele:OpenVINO/whisper-large-v3-int8-ov`...).
 - `--complet` : tout ce que Scribouille a écrit, sauf les transcriptions. Version installée : une fois la commande finie, le désinstalleur retire en silence le programme, ses raccourcis et sa clé de registre (`--garder-programme` l'évite). Version portable : le dossier du programme reste, à supprimer à la main.
 - `--avec-transcriptions` : les transcriptions reconnues du dossier de sortie aussi (jamais les autres fichiers de ce dossier). Confirmation exigée comme le reste.
+- `--resume F` : écrit dans `F` le résumé que le désinstalleur montre avant sa question (usage interne de `setup.iss`).
 - Liste et tailles d'abord ; rien n'est fait sans `--oui` ou « oui » tapé dans un terminal. `--apercu` montre seulement.
 
 ### vocabulaire
 
 ```
-scribouille vocabulaire etat
+scribouille vocabulaire [etat]
 scribouille vocabulaire importer F.toml          propositions ou vocabulaire d'équipe, versés « à relire »
 scribouille vocabulaire exporter F.toml [--ecraser]
 scribouille vocabulaire appliquer TEXTE.txt (--sortie F.txt | --ecraser)
@@ -135,25 +138,54 @@ scribouille vocabulaire apprendre --brut B.txt --propre RELUE.txt [--cr CR] [--s
 
 ### agent
 
-`scribouille agent afficher` : la fiche d'usage pour Claude Code ou Codex, avec les chemins du poste. `agent installer --cible claude|codex [--ecraser]` l'écrit dans `~/.claude/skills/scribouille/SKILL.md` ou `~/.codex/skills/scribouille/SKILL.md`.
+`scribouille agent [afficher]` : la fiche d'usage pour Claude Code ou Codex, avec les chemins du poste. `agent installer --cible claude|codex [--dossier D] [--ecraser]` l'écrit dans `~/.claude/skills/scribouille/SKILL.md` ou `~/.codex/skills/scribouille/SKILL.md` ; `--dossier` remplace le dossier personnel `~`.
 
-### mesurer, materiel, donnees, verifier
+### mesurer
 
-Les outils de mesure, sous un même toit ; leurs options sont celles d'origine ([guide.fr.md](guide.fr.md)).
+`scribouille mesurer campagne|banc|rythmes|endurance|comparer|vocabulaire [options]` : les outils de mesure, sous un même toit ; leurs options sont celles d'origine, détaillées dans [guide.fr.md](guide.fr.md). Une option qu'un outil ne connaît pas est refusée (code 2). Avec `--json`, le texte de l'outil part sur la sortie d'erreur et l'enveloppe donne son code (`code_retour`).
 
-| Commande | Ancienne forme, toujours acceptée |
+| Outil | Options |
 |---|---|
-| `scribouille mesurer campagne [--appliquer] ...` | `--campagne ...` |
-| `scribouille mesurer banc ...` | `--banc ...` |
-| `scribouille mesurer rythmes ...` | `--banc --modes ...` |
-| `scribouille mesurer endurance ...` | `--endurance ...` |
-| `scribouille mesurer comparer FICHIER ...` | `--comparer FICHIER ...` |
-| `scribouille mesurer vocabulaire ...` | `--mesurer-vocabulaire ...` |
-| `scribouille vocabulaire apprendre ...` | `--apprendre-vocabulaire ...` |
-| `scribouille materiel [detecter]` | `--detecter-materiel` |
-| `scribouille materiel proposer [--appliquer]` | `--reconnaitre [--appliquer]` |
-| `scribouille donnees revenir-whiscribe` | `--revenir-whiscribe` |
-| `scribouille verifier` | `--verifier` (et `scribouille-verifier.exe` seul, avant la 3.0) |
+| `campagne` | `--appliquer`, `--corpus`, `--debut`, `--duree`, `--limite-extraits`, `--peripherique`, `--proprietes-ov`, `--recommencer`, `--reglages`, `--reunion`, `--sans-temoin`, `--telecharger` |
+| `banc` | `--appliquer`, `--npu`, `--telecharger` |
+| `rythmes` | `--moteur`, `--peripherique`, `--repetitions`, `--rythmes`, `--sans-enregistrer`, `--sans-temoin-passif`, `--variantes-ov` |
+| `endurance` | `--corpus`, `--memoire-libre`, `--passages`, `--peripherique`, `--pression`, `--recommencer`, `--reglage`, `--sans-diagnostic` |
+| `comparer FICHIER` | `--debut`, `--duree`, `--faisceau-ctranslate2`, `--faisceau-openvino`, `--glossaire`, `--ouvrir`, `--peripherique`, `--preset`, `--reference`, `--sans-corrections`, `--sans-glossaire`, `--sortie` |
+| `vocabulaire` | `--corpus`, `--corpus-paquet`, `--peripherique`, `--recommencer`, `--reference`, `--reglage`, `--reunion`, `--vocabulaire` |
+
+### materiel
+
+`scribouille materiel [detecter]` : relance la détection lente (cartes, NPU, OpenVINO) et l'écrit dans `materiel.json`. `scribouille materiel proposer [--appliquer]` : le poste, le réglage proposé et pourquoi ; `--appliquer` l'enregistre.
+
+### donnees
+
+`scribouille donnees revenir-whiscribe` : remet les données dans l'ancien dossier `WhiScribe`, pour revenir à une version antérieure à la 2.4.
+
+### verifier
+
+`scribouille verifier` : bilan de l'installation (imports, décodeur, écriture des dossiers) ; code 3 si quelque chose manque.
+
+### aide, version
+
+`scribouille aide [COMMANDE]` ; `scribouille version`.
+
+### Anciennes formes
+
+Toujours acceptées, telles quelles, par `scribouille.com` :
+
+| Commande | Ancienne forme |
+|---|---|
+| `mesurer campagne [--appliquer] ...` | `--campagne ...` |
+| `mesurer banc ...` | `--banc ...` |
+| `mesurer rythmes ...` | `--banc --modes ...` |
+| `mesurer endurance ...` | `--endurance ...` |
+| `mesurer comparer FICHIER ...` | `--comparer FICHIER ...` |
+| `mesurer vocabulaire ...` | `--mesurer-vocabulaire ...` |
+| `vocabulaire apprendre ...` | `--apprendre-vocabulaire ...` |
+| `materiel [detecter]` | `--detecter-materiel` |
+| `materiel proposer [--appliquer]` | `--reconnaitre [--appliquer]` |
+| `donnees revenir-whiscribe` | `--revenir-whiscribe` |
+| `verifier` | `--verifier` (et `scribouille-verifier.exe` seul, avant la 3.0) |
 
 ## Plusieurs Scribouille en même temps
 

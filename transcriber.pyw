@@ -2204,16 +2204,10 @@ class Passerelle:
         # Un fichier retouché dans un éditeur est relu tel quel, et son
         # compagnon recalé dessus une fois pour toutes.
         retour = lecture.charger(chemin, persister=True)
-        retour["lecture_audio"] = bool(self.config.get("lecture_audio"))
         retour["niveaux"] = lecture.niveaux_annulables(chemin)
         retour["annulable"] = retour["niveaux"] > 0
         retour["original"] = lecture.original_disponible(chemin)
         retour["position"] = lecture.position(chemin)
-        # L'audio passe par le serveur local, jamais par un « file:// » que le
-        # navigateur intégré refuse depuis une page servie en http.
-        meta = retour.get("meta") or {}
-        if retour["lecture_audio"] and meta.get("source_presente"):
-            retour["audio_url"] = self._ecoute.adresse_pour(meta.get("source_chemin", ""))
         return retour
 
     def empreinte_transcription(self, chemin: str) -> str:

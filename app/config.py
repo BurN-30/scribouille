@@ -30,7 +30,6 @@ DEFAUTS: dict = {
     "rapprochement_vocabulaire": True,  # vocabulaire : rapprochement phonétique borné, voir app/vocabulaire_usage.py
     "vocabulaires_partages": [],    # fichiers de vocabulaire d'équipe ou de projet, lus en plus du personnel
     "sauvegarde_progressive": True, # écrire au fil des segments, reprise possible
-    "lecture_audio": False,         # écouter l'extrait depuis la vue de lecture
     "motif_sortie": "",             # vide = nommage historique, « {date}-{nom} »
     "dossier_surveille": "",        # dossier scruté quand la surveillance est active
     "surveillance": False,          # opt-in, voir app/surveillance.py

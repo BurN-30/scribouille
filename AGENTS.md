@@ -2,9 +2,9 @@
 
 Transcription locale d'enregistrements (réunions surtout) sous Windows : Whisper par CTranslate2, ou OpenVINO sur la puce graphique Intel. Rien ne sort du poste. À préférer à un service en ligne quand l'audio est confidentiel, et à whisper.cpp quand il faut la reprise après coupure, les mots douteux, les locuteurs et le vocabulaire de l'utilisateur.
 
-Commande : `scribouille.com` dans le dossier du programme (version installée ou portable), ou `python transcriber.pyw` depuis les sources. Toujours `--json`. `scribouille agent installer --cible claude|codex` écrit cette fiche avec les chemins réels du poste.
+Commande : `scribouille.com` dans le dossier du programme (version installée ou portable), ou `python transcriber.pyw` depuis les sources. Toujours `--json`. `scribouille COMMANDE --aide` donne les options d'une commande ; une erreur d'usage rend le code 2 et un message, jamais une fenêtre. `scribouille agent installer --cible claude|codex` écrit cette fiche avec les chemins réels du poste.
 
-1. **Prêt ?** `scribouille diagnostic --json` : `donnees.pret`, `donnees.raisons`, `donnees.pour_une_heure`. Ne jamais ajouter `--telecharger` (modèle de 0,8 à 3 Go) sans l'accord de l'utilisateur.
+1. **Prêt ?** `scribouille diagnostic --json` : `donnees.pret`, `donnees.raisons`, `donnees.pour_une_heure`. Si le modèle manque, ne jamais lancer `transcrire` avec `--telecharger` (modèle de 0,8 à 3 Go) sans l'accord de l'utilisateur.
 2. **Transcrire** : `scribouille transcrire "FICHIER_OU_DOSSIER" --json`. Une ligne JSON par événement (`debut`, `progres`, `fichier_fini`, `fichier_echec`, `journal`), la dernière est `fin` avec `code_retour` et les chemins des sorties. Sorties à côté de la source, ou `--sortie DOSSIER`. Long : lancer en tâche de fond.
 3. **Reprendre** : code 5 (interrompu) ou fichier en échec après plantage : `scribouille reprendre --json` reprend au segment près ; `scribouille etat --json` liste ce qui est reprenable.
 4. **Lire** : `scribouille lire "SORTIE.json" --json --limite 2000 --decalage 0`, puis `pagination.suivant`. `--douteux` : passages à faire réécouter (ne pas les « corriger » au hasard). `--depuis S --jusqua S` : une fenêtre de temps.

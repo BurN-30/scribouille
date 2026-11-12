@@ -43,9 +43,25 @@ from app import cli, langues  # noqa: E402
 
 langues.definir("fr")
 PYTHON = sys.executable
+# Aucun processus lancé par les vérifications n'ouvre de console visible.
+SANS_FENETRE = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 _reussites = 0
 _echecs: list[str] = []
+
+
+def interprete_sans_lanceur() -> tuple[str, dict]:
+    """
+    Le vrai python.exe, et les paquets de l'environnement virtuel en
+    PYTHONPATH. Le lanceur d'un venv (`.venv\\Scripts\\python.exe`) relance
+    l'interpréteur dans un processus fils : lancé sans console (tâche
+    planifiée simulée), ce fils en ouvrirait une, visible à l'écran.
+    """
+    base = getattr(sys, "_base_executable", sys.executable) or sys.executable
+    if os.path.normcase(os.path.abspath(base)) == os.path.normcase(os.path.abspath(sys.executable)):
+        return sys.executable, {}
+    paquets = os.pathsep.join(p for p in sys.path if p.lower().endswith("site-packages"))
+    return base, {"PYTHONPATH": paquets}
 
 
 def verifier(condition: bool, libelle: str, detail: str = "") -> None:
@@ -83,7 +99,7 @@ def lancer(*arguments: str, delai: float = 30.0) -> tuple[int, str, str, list[st
     try:
         p = subprocess.run([PYTHON, "-c", _AUDIT, str(audit), str(RACINE / "transcriber.pyw"), *arguments],
                            capture_output=True, timeout=delai, cwd=str(TEMPORAIRE),
-                           env={**os.environ, "PYTHONIOENCODING": "cp1252"})
+                           env={**os.environ, "PYTHONIOENCODING": "cp1252"}, creationflags=SANS_FENETRE)
     except subprocess.TimeoutExpired:
         return -1, "", "délai dépassé : processus encore vivant", ["?"], delai
     charges = json.loads(audit.read_text(encoding="utf-8")) if audit.exists() else ["?"]
@@ -255,7 +271,9 @@ def _lancer_sans_bureau(commande: list[str], sortie: Path, delai_s: float) -> tu
     si.dwFlags = 0x100
     si.hStdOutput = si.hStdError = poignee
     pi = PROCESS_INFORMATION()
-    bloc = "".join(f"{k}={v}\0" for k, v in os.environ.items()) + "\0"
+    interprete, en_plus = interprete_sans_lanceur()
+    commande = [interprete if c == PYTHON else c for c in commande]
+    bloc = "".join(f"{k}={v}\0" for k, v in {**os.environ, **en_plus}.items()) + "\0"
     k32.CreateProcessW.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, ctypes.c_void_p, ctypes.c_void_p,
                                    wintypes.BOOL, wintypes.DWORD, ctypes.c_wchar_p, wintypes.LPCWSTR,
                                    ctypes.POINTER(STARTUPINFO), ctypes.POINTER(PROCESS_INFORMATION)]
@@ -446,6 +464,219 @@ def essai_json_partout() -> None:
              "dictionnaire brut", sortie[:160])
 
 
+# ---------------------------------------------------------------------------
+# 8. Documentation et comportement accordés
+# ---------------------------------------------------------------------------
+
+def _sections_commandes(texte: str) -> dict[str, str]:
+    """Sections « ### commande » (ou « ### a, b ») du guide de la ligne de commande."""
+    import re
+
+    sections: dict[str, str] = {}
+    morceaux = re.split(r"(?m)^### (.+)$", texte)
+    for titre_section, corps in zip(morceaux[1::2], morceaux[2::2]):
+        corps = corps.split("\n## ")[0]
+        for nom in (n.strip() for n in titre_section.split(",")):
+            sections[nom] = corps
+    return sections
+
+
+def essai_documentation() -> None:
+    import re
+
+    from app import config as config_module
+
+    titre("8. Documentation et comportement accordés (aide générée, guides, réglages)")
+    guide = (RACINE / "docs" / "ligne-de-commande.md").read_text(encoding="utf-8")
+    sections = _sections_commandes(guide)
+    for commande in cli.COMMANDES:
+        corps = sections.get(commande)
+        if corps is None:
+            verifier(False, f"{commande} : une section dans docs/ligne-de-commande.md")
+            continue
+        documentees = set(re.findall(r"(?<![\w-])--[a-z][a-z0-9-]*", corps)) - {"--json"}
+        if commande == "mesurer":
+            documentees -= {"--modes"}  # forme d'origine citée en regard
+        existantes = set(cli.options_de(commande))
+        verifier(documentees == existantes,
+                 f"{commande} : options documentées = options de l'analyseur",
+                 f"documentées en trop {sorted(documentees - existantes)}, absentes du guide {sorted(existantes - documentees)}")
+        parseur = cli._sous_commandes(cli._analyseur())[commande]
+        manquants = [f"{a.option_strings or a.dest}:{c}" for a in parseur._actions if a.choices and a.dest != "commande"
+                     for c in a.choices if not c.islower() or c == c.lower() if f"{c}" not in corps]
+        manquants = [m for m in manquants if not m.endswith((":cpu", ":gpu", ":npu"))]
+        verifier(not manquants, f"{commande} : chaque valeur possible est dans le guide", str(manquants))
+
+    # Toute option citée dans les guides, la fiche pour agents et les README existe.
+    citees = []
+    for fichier in [RACINE / "AGENTS.md", RACINE / "README.md", RACINE / "README.fr.md",
+                    *sorted((RACINE / "docs").glob("*.md"))]:
+        texte = fichier.read_text(encoding="utf-8")
+        for trouve in re.finditer(r"scribouille(?:\.com)? ([a-z][a-z-]*)([^`\n]*)", texte):
+            commande, reste = trouve.group(1), trouve.group(2)
+            if commande not in cli.COMMANDES:
+                continue
+            for option in re.findall(r"(?<![\w-])--[a-z][a-z0-9-]*", reste):
+                if option not in (*cli.options_de(commande), "--json", "--aide", "--help"):
+                    citees.append(f"{fichier.name} : scribouille {commande} {option}")
+    verifier(not citees, "toute option citée dans les guides, AGENTS.md et les README existe", "; ".join(citees[:8]))
+
+    # Réglages : chaque clé documentée existe, chaque clé existante est documentée.
+    reglages = (RACINE / "docs" / "reglages.md").read_text(encoding="utf-8")
+    documentees = set()
+    for ligne in reglages.splitlines():
+        if ligne.startswith("| `") and not ligne.startswith("| `SCRIBOUILLE") and not ligne.startswith("| `TRANSCRIPTEUR"):
+            documentees |= set(re.findall(r"`([a-z_]+)`", ligne.split("|")[1]))
+    internes = set()
+    for ligne in reglages.splitlines():
+        if ligne.startswith("Clés internes"):
+            internes = set(re.findall(r"`([a-z_]+)`", ligne.split(":")[0] + ":" + ligne))
+    internes &= set(cli.INTERNES) | {"moteur", "peripherique"}
+    attendues = (set(config_module.DEFAUTS) | set(cli.PSEUDO_CLES)) - set(cli.INTERNES)
+    verifier(documentees == attendues, "reglages.md : une ligne par réglage, ni plus ni moins",
+             f"en trop {sorted(documentees - attendues)}, absentes {sorted(attendues - documentees)}")
+    verifier(set(cli.REGLAGES) == attendues, "chaque réglage documenté est accessible par « reglages »",
+             f"{sorted(attendues ^ set(cli.REGLAGES))}")
+    verifier(set(cli.INTERNES) <= internes, "les clés internes sont nommées comme telles", str(sorted(internes)))
+    ecarts = []
+    for ligne in reglages.splitlines():
+        cellules = [c.strip() for c in ligne.split("|")]
+        if len(cellules) < 4 or not cellules[1].startswith("`"):
+            continue
+        cles = re.findall(r"`([a-z_]+)`", cellules[1])
+        if not cles:
+            continue
+        defaut = config_module.DEFAUTS.get(cles[0])
+        cle = cles[0]
+        if isinstance(defaut, bool) and cellules[2] != f"`{str(defaut).lower()}`":
+            ecarts.append(f"{cle} : {cellules[2]} au lieu de {str(defaut).lower()}")
+        elif isinstance(defaut, int) and not isinstance(defaut, bool) and cellules[2] != f"`{defaut}`":
+            ecarts.append(f"{cle} : {cellules[2]} au lieu de {defaut}")
+        elif isinstance(defaut, str) and defaut and cellules[2] != f"`{defaut}`":
+            ecarts.append(f"{cle} : {cellules[2]} au lieu de {defaut}")
+    verifier(not ecarts, "reglages.md : chaque valeur par défaut est la vraie", "; ".join(ecarts))
+    code, sortie, _, _, _ = lancer("reglages", "--json")
+    liste = {r["cle"]: r for r in (_json(sortie) or [{}])[-1].get("donnees", {}).get("reglages", [])}
+    verifier(code == 0 and liste.get("peripherique", {}).get("defaut") == "CPU"
+             and liste.get("dossier_sortie", {}).get("defaut") and liste.get("theme"),
+             "reglages : défauts de peripherique et dossier_sortie affichés comme documentés, theme présent",
+             str({k: liste.get(k, {}).get("defaut") for k in ("peripherique", "dossier_sortie", "theme")}))
+    code, sortie, _, _, _ = lancer("reglages", "definir", "formats=txt,srt")
+    verifier(code == 0 and '"horodatage": false' in sortie and '"srt": true' in sortie,
+             "definir formats=txt,srt : la sortie montre horodatage coupé", sortie[-200:])
+    code, _, erreur, _, _ = lancer("reglages", "lire", "zoom")
+    verifier(code == 2 and "fenêtre" in erreur, "clé interne : refusée, et dite comme telle", erreur[:120])
+    lancer("reglages", "defaut", "formats")
+
+
+# ---------------------------------------------------------------------------
+# 9. Aucune fenêtre de console, jamais
+# ---------------------------------------------------------------------------
+
+_LANCEMENTS = ("Popen", "run", "call", "check_call", "check_output")
+
+
+def lancements_sans_drapeau() -> list[str]:
+    """Chaque lancement de processus du dépôt qui n'interdit pas la console (CREATE_NO_WINDOW)."""
+    import ast
+
+    fautifs = []
+    fichiers = [*sorted((RACINE / "app").glob("*.py")), RACINE / "transcriber.pyw",
+                *sorted((RACINE / "outils").glob("*.py"))]
+    for fichier in fichiers:
+        arbre = ast.parse(fichier.read_text(encoding="utf-8"))
+        for noeud in ast.walk(arbre):
+            if not (isinstance(noeud, ast.Call) and isinstance(noeud.func, ast.Attribute)
+                    and noeud.func.attr in _LANCEMENTS and isinstance(noeud.func.value, ast.Name)
+                    and noeud.func.value.id == "subprocess"):
+                continue
+            premier = noeud.args[0] if noeud.args else None
+            if isinstance(premier, ast.List) and premier.elts and isinstance(premier.elts[0], ast.Constant) \
+                    and premier.elts[0].value in ("open", "xdg-open"):
+                continue  # macOS et Linux seulement
+            if not any(k.arg == "creationflags" for k in noeud.keywords):
+                fautifs.append(f"{fichier.name}:{noeud.lineno}")
+    return fautifs
+
+
+def _fenetres_pendant(commande: list[str], delai_s: float) -> tuple[int, list[str]]:
+    """
+    Lance `commande` sans console (DETACHED_PROCESS, comme une tâche
+    planifiée ou un service) et relève toute fenêtre qui paraît pendant
+    l'exécution : fenêtre d'un processus de son arbre, ou console nouvelle
+    où qu'elle soit (Windows Terminal héberge les consoles hors de l'arbre).
+    Il ne doit y en avoir aucune.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    import psutil
+
+    u32 = ctypes.WinDLL("user32", use_last_error=True)
+    RAPPEL = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    consoles = ("ConsoleWindowClass", "CASCADIA_HOSTING_WINDOW_CLASS", "PseudoConsoleWindow")
+
+    def fenetres() -> dict:
+        trouvees = {}
+
+        def noter(hwnd, _):
+            pid = wintypes.DWORD()
+            u32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            classe = ctypes.create_unicode_buffer(128)
+            u32.GetClassNameW(hwnd, classe, 128)
+            trouvees[hwnd] = (pid.value, classe.value, bool(u32.IsWindowVisible(hwnd)))
+            return True
+
+        u32.EnumWindows(RAPPEL(noter), 0)
+        return trouvees
+
+    avant = set(fenetres())
+    interprete, en_plus = interprete_sans_lanceur()
+    commande = [interprete if c == PYTHON else c for c in commande]
+    p = subprocess.Popen(commande, cwd=str(TEMPORAIRE), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, creationflags=0x00000008, env={**os.environ, **en_plus})
+    arbre: set[int] = {p.pid}
+    vues: list[str] = []
+    limite = time.monotonic() + delai_s
+    while p.poll() is None and time.monotonic() < limite:
+        try:
+            arbre |= {c.pid for c in psutil.Process(p.pid).children(recursive=True)}
+        except psutil.Error:
+            pass
+        for hwnd, (pid, classe, visible) in fenetres().items():
+            if hwnd in avant:
+                continue
+            if (pid in arbre and (visible or classe in consoles)) or classe in consoles[:2]:
+                if classe not in vues:
+                    vues.append(classe)
+        time.sleep(0.01)
+    if p.poll() is None:
+        p.kill()
+        vues.append("(délai dépassé)")
+    return p.wait(), vues
+
+
+def essai_aucune_console() -> None:
+    titre("9. Aucune fenêtre de console : ni la ligne de commande, ni le moteur, ni la détection")
+    fautifs = lancements_sans_drapeau()
+    verifier(not fautifs, "chaque lancement de processus du dépôt interdit la console (CREATE_NO_WINDOW)",
+             ", ".join(fautifs))
+    source = TEMPORAIRE / "console.ogg"
+    source.write_bytes((RACINE / "banc" / "extrait_fr.ogg").read_bytes())
+    os.environ["SCRIBOUILLE_MOTEUR_ESSAI"] = json.dumps({"segments": 6, "pause_s": 0.05})
+    try:
+        for arguments, libelle in (
+                (["transcrire", str(source), "--json", "--telecharger", "--sortie", str(TEMPORAIRE / "console")],
+                 "transcription (processus moteur)"),
+                (["verifier", "--json"], "verifier (bilan dans un processus fils)"),
+                (["materiel", "--json"], "détection lente du matériel (processus de fond, PowerShell)")):
+            code, vues = _fenetres_pendant([PYTHON, str(RACINE / "transcriber.pyw"), *arguments], 180)
+            verifier(code in (0, 1, 3) and not vues, f"{libelle}, lancée sans console : aucune fenêtre ne paraît",
+                     f"code {code}, fenêtres {vues}")
+    finally:
+        os.environ.pop("SCRIBOUILLE_MOTEUR_ESSAI", None)
+
+
 def principal() -> int:
     print(f"Vérification de la ligne de commande\n{'=' * 40}\n(dossier temporaire : {TEMPORAIRE})")
     try:
@@ -456,6 +687,7 @@ def principal() -> int:
         essai_options_honorees()
         essai_sortie_par_defaut()
         essai_json_partout()
+        essai_documentation()
     finally:
         import shutil
 

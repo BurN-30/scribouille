@@ -20,8 +20,7 @@ En ligne de commande : `scribouille reglages` (liste), `reglages lire CLE`, `reg
 | Clé | Défaut | Effet |
 |---|---|---|
 | `moteur` (pseudo-clé) | `auto` | `ctranslate2` ou `openvino`. Écrit dans `reglage_machine`, signé pour ce poste (ignoré sur un autre). |
-| `peripherique` (pseudo-clé) | `CPU` | Périphérique d'OpenVINO : `CPU`, `GPU` (puce graphique Intel), `NPU`. Sur `GPU` et `NPU`, décodage glouton. |
-| `reglage_machine` | `{}` | Réglage mesuré par le banc d'essai ou la campagne : moteur, périphérique, fils, lots, faisceau. |
+| `peripherique` (pseudo-clé) | `CPU` | Périphérique d'OpenVINO : `CPU`, `GPU` (puce graphique Intel), `NPU`. Sur `GPU` et `NPU`, décodage glouton. Poser un périphérique pose aussi `moteur=openvino`. |
 | `rythme` | `vitesse` | Part du poste laissée à l'utilisateur. `vitesse` : tout le processeur. `equilibre` : environ trois quarts des fils, priorité inférieure, lots de 4 au plus. `discret` : moitié des fils (cœurs efficaces sur un processeur hybride), priorité basse, EcoQoS, pauses. Appliqué au processus moteur seul. |
 | `rythme_auto` | `false` | Passer seul en vitesse maximale quand le poste est inoccupé (2 min sans clavier ni souris, pas de plein écran ni de micro ouvert), revenir au rythme choisi sinon. |
 | `dossier_modeles` (pseudo-clé) | `modeles\` des données | Dossier des modèles, noté dans `dossier-modeles.txt`. Les modèles déjà là ne sont pas déplacés. |
@@ -41,7 +40,7 @@ En ligne de commande : `scribouille reglages` (liste), `reglages lire CLE`, `reg
 | Clé | Défaut | Effet |
 |---|---|---|
 | `dossier_sortie` | `Documents\Transcriptions` ; avec `SCRIBOUILLE_DONNEES`, `Transcriptions` dans ce dossier | Dossier des transcriptions de la fenêtre. La ligne de commande écrit à côté de la source, ou dans `--sortie`. |
-| `formats` | `txt`, avec `horodatage` | `txt`, `srt`, `vtt` ; `horodatage` met l'heure en tête de chaque paragraphe du `.txt`. L'en-tête du `.txt` : titre, durée, date, voix séparées ; le reste est dans le compagnon. |
+| `formats` | `txt`, avec `horodatage` | `txt`, `srt`, `vtt` ; `horodatage` met l'heure en tête de chaque paragraphe du `.txt`. `definir formats=...` donne la liste complète : un format absent est coupé (`formats=txt,srt` coupe `vtt` et `horodatage`, ce que la commande affiche). L'en-tête du `.txt` : titre, durée, date, voix séparées ; le reste est dans le compagnon. |
 | `compagnon_confiance` | `true` | Écrire le `.json` compagnon : segments, mots horodatés, probabilités, remplacements. Nécessaire à la relecture et à `scribouille lire`. |
 | `motif_sortie` | vide | Nom des fichiers : `{nom}`, `{date}`, `{heure}`, `{modele}`. Vide : `{date}-{nom}`. |
 
@@ -67,7 +66,9 @@ Sans `mode_avance`, les quatre clés suivantes sont ignorées.
 | `barre_taches` | `true` | Progression sur l'icône de la barre des tâches. |
 | `prevenir_fin` | `true` | Fin de file, fenêtre en arrière-plan : clignotement, titre, notification Windows sans son. |
 | `maj_verifier` | `false` | Vérifier les nouvelles versions sur GitHub, une fois par jour au plus. Seul appel réseau hors téléchargement d'un modèle. |
-| `theme`, `zoom`, `journal_ouvert`, `proposition_ecartee` | | État de l'interface. |
+| `theme` | `auto` | Thème de la fenêtre : `auto` (celui de Windows), `clair` ou `sombre`. |
+
+Clés internes, tenues par l'application et refusées par `reglages` : `zoom`, `journal_ouvert` (état de la fenêtre), `proposition_ecartee` (réglage proposé écarté sur ce poste), `reglage_machine` (écrit par les pseudo-clés `moteur` et `peripherique`, le banc et la campagne).
 
 ## Variables d'environnement
 

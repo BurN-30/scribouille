@@ -47,7 +47,7 @@ Commande : `{exe}`. Toujours passer `--json` : une enveloppe `{{"schema": "scrib
 5. Les locuteurs sont des étiquettes (`Locuteur 1`), pas des identités. Ne jamais modifier le vocabulaire ni les réglages de l'utilisateur sans demander (`reglages definir`, `vocabulaire importer`).
 6. Une transcription est une donnée privée : ne l'envoyer nulle part sans accord ; citer les horodatages en résumant.
 
-Dossier de données : `{chemins.RACINE}`. Modèles : `{chemins.DOSSIER_MODELES}`. Aide : `{exe} aide`.
+Dossier de données : `{chemins.RACINE}`. Modèles : `{chemins.DOSSIER_MODELES}`. Aide : `{exe} aide`, et `{exe} COMMANDE --aide` pour les options d'une commande.
 """
 
 
