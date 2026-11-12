@@ -207,7 +207,7 @@ function dessinerTexte() {
 }
 
 function formaterSecondes(valeur) {
-  const total = Math.max(0, Math.round(valeur || 0));
+  const total = Math.max(0, Math.floor(valeur || 0));  // comme le .txt : 60,6 s = 1:00
   const h = Math.floor(total / 3600);
   const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
@@ -666,6 +666,18 @@ function lireSelection(longue) {
   };
 }
 
+/* Une selection qui traverse deux paragraphes ne se corrige pas d'un geste :
+   on le dit, au lieu de ne rien proposer en silence. */
+function selectionAChevalDeParagraphes() {
+  const selection = window.getSelection();
+  const zone = $('#rl-texte');
+  if (!selection || selection.isCollapsed || !selection.rangeCount) return false;
+  const plage = selection.getRangeAt(0);
+  if (!zone.contains(plage.startContainer) || !zone.contains(plage.endContainer)) return false;
+  const corps = (n) => (n.nodeType === 3 ? n.parentElement : n).closest('.rl-para');
+  return corps(plage.startContainer) !== corps(plage.endContainer);
+}
+
 /* Sous une selection : « Corriger » (une forme courte, avec ses autres
    endroits) et « Modifier » (reecrire ou supprimer le passage, de toute
    longueur). Au-dela de 80 caracteres, seul « Modifier » reste. */
@@ -673,7 +685,12 @@ function positionnerBoutonCorrection() {
   const bouton = $('#btn-corriger-selection');
   const second = $('#btn-modifier-selection');
   const sel = lireSelection(true);
-  if (!sel) { masquerBoutonCorrection(); lect.selection = null; return; }
+  if (!sel) {
+    masquerBoutonCorrection();
+    lect.selection = null;
+    if (selectionAChevalDeParagraphes()) statutRelecture(t('ui.rl.cheval_paragraphes'), 'attention');
+    return;
+  }
   lect.selection = sel.longue ? null : sel;
   const largeur = window.innerWidth / (etat.config.zoom || 1);
   const gauche = Math.max(8, Math.min(largeur - 250, sel.rect.left));
@@ -1120,6 +1137,11 @@ function clavierRelecture(e) {
     if (lireSelection()) {
       e.preventDefault();
       ouvrirCorrection();
+      return;
+    }
+    if (selectionAChevalDeParagraphes()) {
+      e.preventDefault();
+      statutRelecture(t('ui.rl.cheval_paragraphes'), 'attention');
       return;
     }
   }

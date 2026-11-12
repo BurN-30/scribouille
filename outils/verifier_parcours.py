@@ -1232,6 +1232,10 @@ def essai_heures_et_avis(base: Path) -> None:
              and "lect.apercuPour !== champ.value.trim()" in valider and "await majApercuCorrection();" in valider
              and "champ.readOnly = true;" in valider,
              "« Corriger » : Entrée pressée avant la fin de l'aperçu attend l'aperçu puis valide, sans perdre la frappe")
+    formater = js[js.index("function formaterSecondes"):][:200]
+    verifier("Math.floor(valeur || 0)" in formater, "heure en marge tronquée comme celle du .txt (60,6 s : 1:00)")
+    verifier(js.count("selectionAChevalDeParagraphes()") >= 3 and "ui.rl.cheval_paragraphes" in js,
+             "sélection à cheval sur deux paragraphes : dite, au survol comme à Entrée")
 
 
 def essai_depot_mele() -> None:
