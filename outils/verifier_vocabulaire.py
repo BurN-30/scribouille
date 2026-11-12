@@ -540,6 +540,49 @@ def essai_mesure() -> None:
     verifier("fausses corrections 1" in rapport and "rappel" in rapport, "le rapport porte les chiffres attendus")
 
 
+def essai_mesure_reunions(base: Path) -> None:
+    titre("8 bis. Mesure sur une réunion : chaîne complète, moteur simulé")
+    from app import audio
+
+    if not audio.ffmpeg_present():
+        print("         FFmpeg absent : essai sauté")
+        return
+    reference = base / "reference.txt"
+    reference.write_text((RACINE / "banc" / "extrait_fr.txt").read_text(encoding="utf-8"), encoding="utf-8")
+    voc = v2.lire_texte('[[terme]]\nforme = "Auckland"\n[[terme]]\nforme = "Jamie Siminoff"\ncategorie = "personne"'
+                        '\n[[terme]]\nforme = "Ring"\ncategorie = "societe"')[0]
+    chemin_voc = base / "voc.toml"
+    v2.ecrire(voc, chemin_voc)
+    appels = []
+
+    def faux_transcrire(cle, entrees, sortie, peripherique, vocabulaire="", contexte="", dire=print):
+        appels.append((sortie.name, bool(vocabulaire)))
+        texte = ("Les plages sont nombreuses car Aokland est à cheval sur deux ports. Le PDG de Ring, Jamy Siminov, "
+                 "a fait remarquer qu'il a lancé l'entreprise.") if not vocabulaire else (
+                 "Les plages sont nombreuses car Auckland est à cheval sur deux ports. Le PDG de Ring, Jamie Siminov, "
+                 "a fait remarquer qu'il a lancé l'entreprise.")
+        sortie.write_text(json.dumps({"reunion": {"segments": [{"d": 0, "f": 40, "t": texte}]}}), encoding="utf-8")
+        return {"etat": "ok", "facteur": 0.1, "termes_amorce": 3, "jetons_amorce": 20, "peripherique": "CPU"}
+
+    vrai, ancien_dossier = mv._transcrire, mv.DOSSIER
+    try:
+        mv._transcrire = faux_transcrire
+        mv.DOSSIER = base / "mesures"
+        retour = mv.executer_reunions(str(chemin_voc), [(str(RACINE / "banc" / "extrait_fr.ogg"), str(reference))],
+                                      peripherique="CPU", dire=lambda m: None)
+    finally:
+        mv._transcrire, mv.DOSSIER = vrai, ancien_dossier
+    rapport = retour["rapport"]
+    verifier([a[1] for a in appels] == [False, True] and appels[1][0].startswith("amorce-"),
+             "deux passes : sans, puis avec amorce (fichier propre au vocabulaire)")
+    verifier("amorce et correction" in rapport and "rappel" in rapport, "quatre conditions dans le rapport")
+    verifier(not any(m in rapport.lower() for m in ("auckland", "siminoff", "plages", "extrait_fr")),
+             "rapport : ni terme, ni phrase, ni nom de fichier")
+    lignes = {l.split(":")[0].strip(" -"): l for l in rapport.splitlines() if "termes : rappel" in l}
+    verifier("1 sur 3" not in lignes.get("amorce et correction", "") and "3 sur 3" in lignes.get(
+        "amorce et correction", ""), "amorce puis correction : les trois termes retrouvés", str(lignes))
+
+
 # ---------------------------------------------------------------------------
 # 9. Écran de revue et vue de relecture
 # ---------------------------------------------------------------------------
@@ -644,6 +687,8 @@ def principal() -> int:
         essai_apprentissage(base / "apprentissage")
         essai_documents(base / "documents")
         essai_mesure()
+        (base / "reunions").mkdir()
+        essai_mesure_reunions(base / "reunions")
         essai_interface(base / "interface")
     print(f"\n{'=' * 52}")
     if _echecs:
