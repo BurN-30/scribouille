@@ -33,8 +33,9 @@ Le calcul
   reprend au segment près, sans la puce graphique ; un second plantage le
   laisse « Reprendre ». Aucun processus orphelin, retour de veille reconnu.
   L'état du moteur s'affiche au pied de la fenêtre.
-- **Démarrage** deux fois plus rapide, mémoire au repos divisée par huit ; une
-  seule FFmpeg (celle de PyAV), paquet allégé de 84 Mo.
+- **Démarrage** : interface prête en 1,3 s au lieu de 2,2 s, 72 Mo de mémoire
+  privée au repos au lieu de 612 Mo, et la fenêtre y revient après une file ;
+  une seule FFmpeg (celle de PyAV), paquet allégé de 84 Mo.
 - **Rythmes** : Vitesse maximale, Équilibré ou Discret, et adaptation
   automatique (pleine vitesse quand le poste est libre).
 - **Réglage proposé pour le poste** au premier lancement (moteur, qualité,
