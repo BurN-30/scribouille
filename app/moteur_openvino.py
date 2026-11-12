@@ -78,7 +78,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Callable
 
-from . import chemins, journal, langues, moteur, presets
+from . import chemins, journal, langues, moteur, presets, repetitions
 from .journal import ErreurLisible
 from .materiel import Materiel
 from .moteur import Interruption, Mot, Segment
@@ -113,6 +113,15 @@ TEMPERATURES_REPRISE = (0.2, 0.4, 0.6)
 #: Graine de l'échantillonnage : la même fenêtre donne le même texte d'un
 #: passage à l'autre.
 GRAINE = 20261112
+
+#: Mémoire libre nécessaire pour ouvrir l'autre moteur (CTranslate2) sur une
+#: fenêtre qui boucle encore, à côté du modèle d'OpenVINO déjà chargé.
+MEMOIRE_AUTRE_MOTEUR_GO = 4.0
+
+
+def _boucle(texte: str) -> bool:
+    """Fenêtre qui boucle : taux de compression trop haut, ou suite de mots répétée."""
+    return _taux_compression(texte) > SEUIL_COMPRESSION or repetitions.boucle_repetee(texte) is not None
 
 
 def faisceau_pris_en_charge(peripherique: str, faisceau: int) -> bool:
@@ -340,6 +349,8 @@ class MoteurOpenVINO:
         self._tokeniseur = None
         self._nom_modele = ""
         self._mots = True
+        #: CTranslate2, ouvert seulement pour une fenêtre qui boucle encore.
+        self._autre = None
         #: Témoin d'ouverture : posé par l'application, pas par le banc d'essai,
         #: dont chaque essai tourne déjà dans un processus à part.
         self.temoin = False
@@ -433,7 +444,13 @@ class MoteurOpenVINO:
             self._pipeline = ov_genai.WhisperPipeline(dossier, self.peripherique_ov, **proprietes)
             self._mots = False
 
+    def _liberer_autre(self) -> None:
+        if self._autre is not None:
+            self._autre.liberer()
+            self._autre = None
+
     def liberer(self) -> None:
+        self._liberer_autre()
         if self._pipeline is None:
             return
         journal.info("Libération du modèle OpenVINO %s", self._nom_modele)
@@ -465,37 +482,90 @@ class MoteurOpenVINO:
         return config
 
     def _garde_repetition(self, morceau, resultat, texte: str, langue: str | None, amorce: str,
-                          flux, mode: str, bilan: dict):
+                          flux, mode: str, bilan: dict, faisceau_fait: int = 1):
         """
-        Refait une fenêtre qui boucle ; garde la version qui se compresse le moins.
+        Refait une fenêtre qui boucle ; garde la version qui boucle le moins
+        (mots pris dans une suite répétée, puis taux de compression).
 
         `mode` : « faisceau » ou « temperature », « auto » choisit selon le
-        périphérique. Un échec de la reprise n'emporte pas la transcription :
-        la première version est gardée, et l'échec est compté.
+        périphérique : faisceau de 5 si le périphérique le permet et que la
+        fenêtre n'a pas déjà été décodée ainsi, puis l'échantillonnage à
+        température croissante. Un échec de la reprise n'emporte pas la
+        transcription : la meilleure version obtenue est gardée, et l'échec
+        est compté.
         """
         bilan["fenetres_repetitives"] += 1
-        if mode == "auto":
-            mode = "faisceau" if faisceau_pris_en_charge(self.peripherique_ov, 5) else "temperature"
         taux = _taux_compression(texte)
-        essais = [(5, 0.0)] if mode == "faisceau" else [(1, t) for t in TEMPERATURES_REPRISE]
-        journal.attention("Fenêtre répétitive (taux %.2f), refaite (%s)", taux,
-                          "faisceau de 5" if mode == "faisceau" else "température")
-        meilleur, meilleur_taux = resultat, taux
+        boucle = repetitions.boucle_repetee(texte)
+        if boucle is not None and taux <= SEUIL_COMPRESSION:
+            bilan["boucles_mots"] += 1
+        essais = [(1, t) for t in TEMPERATURES_REPRISE]
+        if mode == "faisceau" or (mode == "auto" and faisceau_fait < 5
+                                  and faisceau_pris_en_charge(self.peripherique_ov, 5)):
+            essais = [(5, 0.0)] + ([] if mode == "faisceau" else essais)
+        journal.attention("Fenêtre répétitive (taux %.2f%s), refaite (%s)", taux,
+                          f", {boucle['fois']} fois une suite de {boucle['n']} mot(s)" if boucle else "",
+                          " puis ".join("faisceau de 5" if f > 1 else f"température {t}" for f, t in essais))
+        meilleur, meilleure_gravite = resultat, repetitions.gravite(texte, taux)
         try:
             for faisceau, temperature in essais:
                 second = self._pipeline.generate(
                     morceau, self._config(langue, faisceau, amorce, temperature), streamer=flux)
                 bilan["reprises"] += 1
-                taux_second = _taux_compression((second.texts[0] if second.texts else "") or "")
-                if taux_second < meilleur_taux:
-                    meilleur, meilleur_taux = second, taux_second
-                if meilleur_taux <= SEUIL_COMPRESSION:
+                texte_second = (second.texts[0] if second.texts else "") or ""
+                gravite_second = repetitions.gravite(texte_second, _taux_compression(texte_second))
+                if gravite_second < meilleure_gravite:
+                    meilleur, meilleure_gravite = second, gravite_second
+                if meilleure_gravite[0] == 0 and meilleure_gravite[1] <= SEUIL_COMPRESSION:
                     break
         except Exception as exc:
             bilan["echecs_garde"] += 1
             bilan["erreur_garde"] = f"{type(exc).__name__}: {exc}"[:300]
-            journal.exception("Reprise d'une fenêtre répétitive impossible, première version gardée", exc)
+            journal.exception("Reprise d'une fenêtre répétitive impossible, meilleure version gardée", exc)
         return meilleur
+
+    def _depot_autre_moteur(self) -> str:
+        """Le même modèle au format de CTranslate2, s'il existe au catalogue."""
+        return next((ct2 for ct2, ov in presets.DEPOTS_OPENVINO.items() if ov == self._nom_modele), "")
+
+    def _fenetre_par_autre_moteur(self, morceau, correspondance: "Correspondance", decalage: float,
+                                  langue: str | None, amorce: str, bilan: dict) -> list[Segment] | None:
+        """
+        Dernier essai sur une fenêtre qui boucle encore : CTranslate2 (faisceau
+        de 5, repli de température de faster-whisper), seulement si le même
+        modèle est déjà sur le disque à son format et que la mémoire le permet.
+        Jamais de téléchargement ici. Renvoie les segments, ou None.
+        """
+        depot = self._depot_autre_moteur()
+        if not depot:
+            return None
+        try:
+            if moteur.etat_modele(depot)["etat"] != "complet":
+                return None
+            if self._autre is None:
+                import psutil  # type: ignore
+
+                if psutil.virtual_memory().available / 1024 ** 3 < MEMOIRE_AUTRE_MOTEUR_GO:
+                    journal.attention("Mémoire trop juste pour reprendre la fenêtre avec CTranslate2")
+                    return None
+                self._autre = moteur.MoteurTranscription(self.materiel)
+                self._autre.charger(depot, None)
+            reglages = {"beam_size": 5, "best_of": 5, "temperature": 0.0, "vad": False, "lot": 0,
+                        "condition_on_previous_text": False}
+            segments, _details = self._autre.transcrire(morceau, morceau.size / FREQUENCE, langue or "fr",
+                                                        reglages, amorce=str(amorce or ""))
+        except Exception as exc:
+            journal.exception("Reprise de la fenêtre par CTranslate2 impossible", exc)
+            return None
+        bilan["fenetres_autre_moteur"] += 1
+        rendus = []
+        for s in segments:
+            rang = correspondance.index((s.debut + s.fin) / 2)
+            mots = [Mot(m.texte, correspondance.origine(m.debut, rang) + decalage,
+                        correspondance.origine(m.fin, rang) + decalage, m.probabilite) for m in s.mots]
+            rendus.append(Segment(correspondance.origine(s.debut, rang) + decalage,
+                                  correspondance.origine(s.fin, rang) + decalage, s.texte, s.locuteur, mots))
+        return rendus
 
     def transcrire(
         self,
@@ -525,7 +595,8 @@ class MoteurOpenVINO:
         # « auto » en temps normal ; l'épreuve d'endurance force l'ancien
         # comportement pour le diagnostic (voir `app/endurance.py`).
         mode_garde = str(reglages.get("garde_repetition") or "auto")
-        bilan = {"fenetres_repetitives": 0, "reprises": 0, "echecs_garde": 0, "erreur_garde": ""}
+        bilan = {"fenetres_repetitives": 0, "reprises": 0, "echecs_garde": 0, "erreur_garde": "",
+                 "boucles_mots": 0, "fenetres_autre_moteur": 0, "boucles_coupees": 0}
         langue_fixee = None if (not langue or langue == "auto") else langue
         fenetres = decouper(signal) if signal.size else []
         journal.info(
@@ -570,12 +641,20 @@ class MoteurOpenVINO:
                 # sans l'amorce du glossaire : plafond de jetons atteint, ou
                 # dernière phrase annoncée comme continuant au-delà de la fenêtre.
                 plafond += 1
-            if faisceau == 1 and _taux_compression(texte) > SEUIL_COMPRESSION:
+            de_secours: list[Segment] | None = None
+            reste_boucle = False
+            if _boucle(texte):
                 resultat = self._garde_repetition(morceau, resultat, texte, langue_fixee, amorce_fenetre,
-                                                  flux, mode_garde, bilan)
+                                                  flux, mode_garde, bilan, faisceau)
                 if arret():
                     journal.attention("Transcription interrompue à la demande de l'utilisateur")
                     raise Interruption()
+                reste_boucle = _boucle((resultat.texts[0] if resultat.texts else "") or "")
+                if reste_boucle:
+                    de_secours = self._fenetre_par_autre_moteur(
+                        morceau, correspondance, decalage, langue_fixee, amorce_fenetre, bilan)
+                    if de_secours is not None:
+                        reste_boucle = _boucle(" ".join(s.texte for s in de_secours))
             if not langue_fixee:
                 # Langue détectée sur la première fenêtre, puis gardée : une
                 # réunion ne change pas de langue d'une fenêtre à l'autre, et
@@ -587,7 +666,17 @@ class MoteurOpenVINO:
                 langue_fixee = str(brute or "").strip("<|>") or None
                 langue_detectee = langue_fixee or ""
             texte_precedent = ""
-            for segment in self._segments(resultat, correspondance, decalage):
+            fenetre_segments = de_secours if de_secours is not None else self._segments(
+                resultat, correspondance, decalage)
+            if reste_boucle:
+                # Rien n'a fait disparaître la boucle : la suite répétée est
+                # gardée une fois, le reste retiré (c'est une invention du
+                # modèle, pas de la parole), et c'est compté.
+                for segment in fenetre_segments:
+                    segment.texte, coupees = repetitions.couper_boucles(segment.texte)
+                    bilan["boucles_coupees"] += coupees
+                fenetre_segments = [s for s in fenetre_segments if s.texte.strip()]
+            for segment in fenetre_segments:
                 segments.append(segment)
                 texte_precedent += " " + segment.texte
                 if sur_segment is not None:
@@ -612,6 +701,11 @@ class MoteurOpenVINO:
             "faisceau": faisceau,
             **bilan,
         }
+        self._liberer_autre()
+        if bilan["boucles_mots"] or bilan["fenetres_autre_moteur"] or bilan["boucles_coupees"]:
+            journal.info("Garde-fou des répétitions : %s fenêtre(s) en boucle de mots, %s reprise(s) par "
+                         "CTranslate2, %s boucle(s) coupée(s)", bilan["boucles_mots"],
+                         bilan["fenetres_autre_moteur"], bilan["boucles_coupees"])
         journal.info("Transcription OpenVINO terminée : %s segments", len(segments))
         return segments, details
 

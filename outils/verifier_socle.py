@@ -326,6 +326,112 @@ def essai_reglage_propose() -> None:
              "installation neuve sans moteur Intel : « Qualité maximale » reste le défaut")
 
 
+# ---------------------------------------------------------------------------
+# 5. Garde-fou des répétitions
+# ---------------------------------------------------------------------------
+
+def essai_repetitions() -> None:
+    titre("5. Garde-fou des répétitions : boucles de mots, reprise, autre moteur, coupe")
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from app import materiel, moteur, moteur_openvino as mo, repetitions
+    from app.moteur import Segment
+
+    naturels = ["oui oui oui oui", "non non non non non non", "c'est ça, c'est ça, c'est ça, c'est ça",
+                "un, deux, trois, quatre, cinq, six, sept, huit, neuf, dix, onze, douze, treize, quatorze",
+                "Merci. Merci. Merci. Merci. Merci. Merci.", "on y va, on y va, on y va",
+                "Très très très bien, vraiment très très bien."]
+    verifier(not any(repetitions.boucle_repetee(t) for t in naturels),
+             "parole normalement répétitive : rien de signalé",
+             str([t for t in naturels if repetitions.boucle_repetee(t)]))
+    # Le cas de la réunion réelle : une fenêtre de 30 s ordinaire, avec au
+    # milieu trois mots répétés huit fois. Le taux de compression reste sous 2,4.
+    debut = ("Bon, pour la suite du projet, il faudrait que chacun regarde les retours du client avant jeudi, "
+             "parce que la livraison de la deuxième version dépend surtout des tests sur les postes du service "
+             "comptable, et que personne n'a encore validé la procédure de sauvegarde. ")
+    fin = (" Ensuite nous reprendrons le planning de décembre avec la direction, puis le budget des licences, "
+           "et enfin la formation des nouveaux arrivants prévue au printemps.")
+    boucle = debut + "on va voir " * 8 + fin
+    trouve = repetitions.boucle_repetee(boucle)
+    verifier(trouve and (trouve["n"], trouve["fois"]) == (3, 8) and mo._taux_compression(boucle) < mo.SEUIL_COMPRESSION,
+             "boucle de trois mots répétés huit fois, sous le seuil de compression : repérée par les mots",
+             f"{trouve} {mo._taux_compression(boucle):.2f}")
+    coupe, nombre = repetitions.couper_boucles(boucle)
+    verifier(nombre == 1 and coupe == debut + "on va voir " + fin,
+             "coupe : la suite gardée une fois, le reste du texte intact", coupe)
+
+    class Tube:
+        """Pipeline d'OpenVINO simulé : rend les textes donnés, dans l'ordre."""
+
+        def __init__(self, textes):
+            self.textes, self.configs = list(textes), []
+
+        def get_generation_config(self):
+            return SimpleNamespace()
+
+        def generate(self, morceau, config, streamer=None):
+            self.configs.append(dict(vars(config)))
+            texte = self.textes.pop(0) if len(self.textes) > 1 else self.textes[0]
+            return SimpleNamespace(texts=[texte], words=[], languages=["<|fr|>"], perf_metrics=None,
+                                   chunks=[SimpleNamespace(start_ts=0.0, end_ts=2.0, text=texte)])
+
+    decouper, etat_modele, transcription = mo.decouper, moteur.etat_modele, moteur.MoteurTranscription
+    mo.decouper = lambda signal: [[{"start": 0, "end": 32000}]]
+    signal = np.zeros(32000, dtype=np.float32)
+    mat = materiel.detecter_au_demarrage()[0]
+
+    def sur(peripherique, tube, modele="turbo"):
+        instance = mo.MoteurOpenVINO(mat, peripherique)
+        instance._pipeline, instance._mots, instance._nom_modele = tube, False, modele
+        return instance
+
+    propre = "Bonjour à tous, on commence la réunion."
+    try:
+        tube = Tube([boucle, propre])
+        segments, details = sur("GPU", tube).transcrire(signal, 2.0, "fr", {"faisceau_openvino": 1})
+        verifier(details["boucles_mots"] == 1 and details["reprises"] == 1 and tube.configs[1].get("do_sample")
+                 and segments[0].texte == propre,
+                 "puce graphique : la boucle de mots est refaite par échantillonnage, la version propre gardée")
+        tube = Tube([boucle, propre])
+        segments, details = sur("CPU", tube).transcrire(signal, 2.0, "fr", {"faisceau_openvino": 5})
+        verifier(tube.configs[1].get("do_sample") and details["reprises"] == 1 and segments[0].texte == propre,
+                 "déjà en faisceau de 5 : la reprise passe directement à l'échantillonnage")
+
+        class AutreMoteur:
+            charges: list[str] = []
+
+            def __init__(self, _mat):
+                pass
+
+            def charger(self, depot, _signaler):
+                AutreMoteur.charges.append(depot)
+
+            def transcrire(self, morceau, duree, langue, reglages, amorce=""):
+                return [Segment(0.5, 1.5, "Texte repris par l'autre moteur.")], {}
+
+            def liberer(self):
+                pass
+
+        moteur.MoteurTranscription = AutreMoteur
+        moteur.etat_modele = lambda depot: {"etat": "complet"}
+        segments, details = sur("GPU", Tube([boucle]), "OpenVINO/whisper-large-v3-turbo-int8-ov").transcrire(
+            signal, 2.0, "fr", {"faisceau_openvino": 1})
+        verifier(details["fenetres_autre_moteur"] == 1 and AutreMoteur.charges == [mo.presets.MODELE_TURBO]
+                 and [s.texte for s in segments] == ["Texte repris par l'autre moteur."] and segments[0].debut == 0.5,
+                 "boucle tenace : la fenêtre est refaite par CTranslate2, même modèle déjà sur le disque",
+                 str(details))
+        moteur.etat_modele = lambda depot: {"etat": "absent"}
+        segments, details = sur("GPU", Tube([boucle]), "OpenVINO/whisper-large-v3-turbo-int8-ov").transcrire(
+            signal, 2.0, "fr", {"faisceau_openvino": 1})
+        verifier(details["fenetres_autre_moteur"] == 0 and details["boucles_coupees"] == 1
+                 and segments[0].texte == (debut + "on va voir " + fin).strip(),
+                 "autre moteur absent du disque : jamais téléchargé, la boucle est coupée et comptée")
+    finally:
+        mo.decouper, moteur.etat_modele, moteur.MoteurTranscription = decouper, etat_modele, transcription
+
+
 def principal() -> int:
     print(f"Vérification du socle de Scribouille\n{'=' * 40}")
     with tempfile.TemporaryDirectory(prefix="scribouille-socle-") as brut:
@@ -334,6 +440,7 @@ def principal() -> int:
         essai_demarrage(base)
         essai_modele_garde(base)
         essai_reglage_propose()
+        essai_repetitions()
     print(f"\n{'=' * 40}")
     if _echecs:
         print(f"{_reussites} vérifications passées, {len(_echecs)} en échec :")

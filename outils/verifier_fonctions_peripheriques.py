@@ -2344,10 +2344,12 @@ def essai_openvino_faisceau() -> None:
         tube = FauxPipeline([boucle], lever_si_faisceau=True)
         segments, details = moteur_sur("GPU", tube).transcrire(
             signal, 2.0, "fr", {"faisceau_openvino": 1, "garde_repetition": "faisceau"})
+        # Depuis la 2.5, la boucle restée est coupée en dernier recours (la
+        # suite répétée gardée une fois) au lieu d'être gardée telle quelle.
         verifier(details["echecs_garde"] == 1 and "Not Implemented" in details["erreur_garde"]
-                 and segments and segments[0].texte == boucle.strip(),
+                 and segments and segments[0].texte == "bonjour" and details["boucles_coupees"] == 1,
                  "ancien garde-fou forcé sur la puce graphique : l'erreur de la 2.4.0 est relevée, "
-                 "la fenêtre garde sa première version au lieu de faire tomber la transcription")
+                 "la fenêtre est gardée, boucle coupée, au lieu de faire tomber la transcription")
     finally:
         mo.decouper = decouper_reel
 

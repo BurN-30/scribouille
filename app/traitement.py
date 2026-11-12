@@ -24,7 +24,7 @@ from . import audio as audio_module
 from . import calibration
 from . import config as config_module
 from . import diarisation, energie, journal, langues, moteur, presets, reprise as reprise_module
-from . import reglage_machine, rythme, sorties, vocabulaire, vocabulaire_usage, vocabulaire_v2
+from . import reglage_machine, repetitions, rythme, sorties, vocabulaire, vocabulaire_usage, vocabulaire_v2
 from .journal import ErreurLisible
 from .materiel import Materiel
 
@@ -599,7 +599,17 @@ class FileTraitement:
             sur_segment=lambda seg: session.ajouter(seg, time.time() - depart),
         )
         temps_transcription = time.time() - debut_transcription
-        segments = deja_transcrits + segments
+        # Filet commun aux deux moteurs : une boucle de mots restée dans un
+        # segment (CTranslate2 n'a pas ce garde-fou-là) est coupée et comptée.
+        # OpenVINO a déjà repris ses fenêtres en boucle : rien à couper ici.
+        coupees = 0
+        for segment in segments:
+            segment.texte, nombre = repetitions.couper_boucles(segment.texte)
+            coupees += nombre
+        if coupees:
+            journal.attention("Boucle(s) de répétition coupée(s) après transcription : %s", coupees)
+            details["boucles_coupees"] = int(details.get("boucles_coupees") or 0) + coupees
+        segments = deja_transcrits + [s for s in segments if s.texte.strip()]
         session.fermer()
 
         # 2 bis. Recalibration à chaud des annonces de durée.
