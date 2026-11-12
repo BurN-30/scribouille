@@ -591,6 +591,38 @@ def essai_instances(base: Path) -> None:
         chemins.RACINE = racine
 
 
+def essai_documentation_livree() -> None:
+    """Le paquet livre la documentation à côté de l'exécutable, et chacun de ses liens y mène."""
+    import re
+
+    titre("Documentation livrée : à côté de l'exécutable, aucun lien cassé")
+    recette = (RACINE / "packaging" / "scribouille.spec").read_text(encoding="utf-8")
+    a_cote = re.search(r"LIVRES_A_COTE = \(([^)]*)\)", recette)
+    docs = re.search(r"DOCS_LIVRES = \(([^)]*)\)", recette)
+    livres = set(re.findall(r'"([^"]+)"', a_cote.group(1))) if a_cote else set()
+    livres |= {f"docs/{n}" for n in re.findall(r'"([^"]+)"', docs.group(1))} if docs else set()
+    verifier({"README.md", "README.fr.md", "docs/guide.md", "docs/ligne-de-commande.md"} <= livres,
+             "README et guides copiés à côté de l'exécutable", str(sorted(livres)))
+    casses = []
+    for nom in sorted(n for n in livres if n.endswith(".md")):
+        texte = (RACINE / nom).read_text(encoding="utf-8")
+        for lien in re.findall(r"\]\(([^)#\s]+)(?:#[^)]*)?\)", texte):
+            if lien.startswith(("http:", "https:", "mailto:", "../../")):
+                continue
+            cible = (Path(nom).parent / lien).as_posix()
+            cible = str(Path(cible)).replace("\\", "/")
+            normal = []
+            for morceau in cible.split("/"):
+                if morceau == "..":
+                    normal = normal[:-1]
+                elif morceau not in ("", "."):
+                    normal.append(morceau)
+            cible = "/".join(normal)
+            if cible not in livres:
+                casses.append(f"{nom} -> {lien}")
+    verifier(not casses, "chaque lien relatif des documents livrés mène à un document livré", "; ".join(casses))
+
+
 def principal() -> int:
     print(f"Vérification du socle de Scribouille\n{'=' * 40}")
     with tempfile.TemporaryDirectory(prefix="scribouille-socle-") as brut:
@@ -602,6 +634,7 @@ def principal() -> int:
         essai_repetitions()
         essai_migration(base)
         essai_instances(base)
+    essai_documentation_livree()
     print(f"\n{'=' * 40}")
     if _echecs:
         print(f"{_reussites} vérifications passées, {len(_echecs)} en échec :")

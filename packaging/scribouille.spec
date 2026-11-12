@@ -99,7 +99,6 @@ donnees = [
     (str(RACINE / "vocabulaire.txt"), "."),
     (str(RACINE / "corrections.txt"), "."),
     (str(RACINE / "LICENSE"), "."),
-    (str(RACINE / "README.md"), "."),
     # Extrait du banc d'essai de vitesse et son texte de référence (app/banc.py).
     (str(RACINE / "banc"), "banc"),
     # Lexique du français courant (CC BY-SA 4.0), garde-fou des corrections du
@@ -323,6 +322,20 @@ coll = COLLECT(
     upx_exclude=[],
     name=NOM_APPLICATION,
 )
+
+# Documentation à côté de l'exécutable, là où on la cherche, et où les liens
+# relatifs des README (docs/guide.md, AGENTS.md...) trouvent leur cible. Les
+# notes internes (publication) restent dans le dépôt.
+LIVRES_A_COTE = ("README.md", "README.fr.md", "LICENSE", "AGENTS.md", "CHANGELOG.md", "CONTRIBUTING.md")
+DOCS_LIVRES = ("guide.md", "guide.fr.md", "ligne-de-commande.md", "reglages.md", "architecture.md")
+_dossier_paquet = Path(DISTPATH) / NOM_APPLICATION
+import shutil as _shutil  # noqa: E402
+
+for _nom in LIVRES_A_COTE:
+    _shutil.copy2(RACINE / _nom, _dossier_paquet / _nom)
+(_dossier_paquet / "docs").mkdir(exist_ok=True)
+for _nom in DOCS_LIVRES:
+    _shutil.copy2(RACINE / "docs" / _nom, _dossier_paquet / "docs" / _nom)
 
 # L'exécutable console prend son nom définitif : « scribouille.com ».
 _console = Path(DISTPATH) / NOM_APPLICATION / "scribouille-console.exe"

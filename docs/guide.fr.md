@@ -332,7 +332,7 @@ Jusqu'à la 2.4, le dossier de données portait l'ancien nom de l'application, `
 <details>
 <summary>Fabriquer le programme d'installation</summary>
 
-La publication est automatisée : poser un tag `vX.Y.Z` déclenche `.github/workflows/release.yml`, qui construit, vérifie, fabrique le programme d'installation et crée la Release avec le fichier en pièce jointe. Les notes de version sont la section correspondante de [CHANGELOG.md](CHANGELOG.md). Le même workflow se lance à la main depuis l'onglet Actions, sans tag : il construit et vérifie tout, mais ne publie rien.
+La publication est automatisée : poser un tag `vX.Y.Z` déclenche `.github/workflows/release.yml`, qui construit, vérifie, fabrique le programme d'installation et crée la Release avec le fichier en pièce jointe. Les notes de version sont la section correspondante de [CHANGELOG.md](../CHANGELOG.md). Le même workflow se lance à la main depuis l'onglet Actions, sans tag : il construit et vérifie tout, mais ne publie rien.
 
 ```bat
 pip install -r requirements.txt -r requirements-build.txt
