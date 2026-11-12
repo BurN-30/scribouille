@@ -47,6 +47,10 @@ S'adapter au poste, et travailler pendant que la transcription tourne.
 Corrections issues d'une revue d'usage de l'application réelle (vérifiées par
 `outils/verifier_parcours.py`) :
 
+- **Relecture fidèle au fichier** : la vue n'ajoute plus d'espace devant une
+  apostrophe ou un trait d'union (« c 'est », « peut -être »), garde les mots
+  que le moteur n'a pas détaillés, et « Copier le texte » copie le corps du
+  fichier lui-même. Une expression avec apostrophe se corrige de nouveau.
 - **Correction depuis la relecture** : l'en-tête du fichier texte reste séparé
   du corps ; la barre de fin d'en-tête et la première phrase ne se retrouvent
   plus sur la même ligne.

@@ -97,6 +97,44 @@ def essai_entete_apres_correction(base: Path) -> None:
              repr(apres[apres.rfind("=" * 20) - 5:][:120]))
 
 
+def texte_affiche(paragraphe: dict) -> str:
+    """Ce que la vue affiche d'un paragraphe : chaque mot précédé de ce qui le précède."""
+    return "".join(m.get("e", " " if i else "") + m["t"] for i, m in enumerate(paragraphe["mots"]))
+
+
+def essai_vue_egale_fichier(base: Path) -> None:
+    titre("La vue de relecture affiche et copie exactement le texte du fichier")
+    dossier = base / "vue"
+    dossier.mkdir()
+    premier = segment(0.0, 5.0, jetons("C'est peut-être L'Amazon qui gagne, qu'est-ce que j'en sais ?"))
+    # Mots que le moteur n'a pas détaillés (cas relevé avec OpenVINO) : le
+    # texte du segment les porte, la liste des mots non.
+    second = segment(5.5, 9.0, jetons("Et bien. Comment ça va aujourd'hui ?"))
+    second.mots = [m for m in second.mots if m.texte not in ("Et", "Comment")]
+    txt = ecrire(dossier, [premier, second])
+    corps = lecture.separer_entete(txt.read_text(encoding="utf-8"))[1].strip()
+
+    vue = lecture.charger(txt)
+    affiche = "\n\n".join(texte_affiche(p) for p in vue["paragraphes"])
+    verifier(all(texte_affiche(p) == p["texte"] for p in vue["paragraphes"]),
+             "chaque paragraphe affiché est le texte de ses segments, caractère pour caractère",
+             repr(affiche[:90]))
+    verifier(affiche == corps, "le texte affiché est celui du fichier", f"{affiche!r} / {corps!r}")
+    verifier(" '" not in affiche and " -" not in affiche,
+             "aucune espace devant une apostrophe ou un trait d'union")
+    verifier("Et bien. Comment" in affiche, "les mots sans détail du moteur restent affichés")
+    verifier(vue.get("corps") == corps, "« Copier le texte » copie le corps du fichier")
+    verifier(vue["statistiques"]["mots"] == len(premier.mots) + len(second.mots),
+             "toutes les confiances restent comptées", str(vue["statistiques"]))
+
+    retour = lecture.appliquer_correction(txt, "C'est peut-être", "C'était peut-être", ajouter_regle=False)
+    verifier(retour.get("ok") is True, "une expression avec apostrophe et trait d'union se corrige",
+             str(retour))
+    apres = lecture.charger(txt)
+    verifier("\n\n".join(texte_affiche(p) for p in apres["paragraphes"]) == apres["corps"],
+             "après correction, la vue suit toujours le fichier")
+
+
 def principal() -> int:
     print(f"Vérification du parcours de l'utilisateur\n{'=' * 42}")
     with tempfile.TemporaryDirectory(prefix="scribouille-parcours-") as brut:
@@ -105,6 +143,7 @@ def principal() -> int:
         # de l'utilisateur.
         chemins.FICHIER_CORRECTIONS = base / "corrections.txt"
         essai_entete_apres_correction(base)
+        essai_vue_egale_fichier(base)
 
     print(f"\n{'=' * 42}")
     if _echecs:

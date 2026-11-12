@@ -1420,7 +1420,8 @@ function dessinerLecture() {
     <div class="lecture-para ${ecoutable ? 'ecoutable' : ''}" data-debut="${p.debut || 0}">
       ${p.locuteur ? `<span class="locuteur">${ech(p.locuteur)}
         ${ecoutable || p.debut ? `<span class="horodatage">${formaterSecondes(p.debut)}</span>` : ''}</span>` : ''}
-      ${p.mots.map((mot) => motHTML(mot, seuils)).join(' ')}
+      ${p.mots.map((mot, i) => ech(mot.e !== undefined ? mot.e : (i ? ' ' : ''))
+        + motHTML(mot, seuils)).join('')}
     </div>`).join('')
     || `<p style="color:var(--texte-faible)">${ech(t('ui.lecture.sans_texte'))}</p>`;
 }
@@ -1443,12 +1444,14 @@ function infobulleMot(evenement) {
   cible.setAttribute('title', t('ui.lecture.confiance', { pct: cible.dataset.p }));
 }
 
+/* Le texte copie est celui du fichier, en-tete retire, jamais une reconstruction
+   mot a mot : ce qui part dans le presse-papiers est ce que l'on relira. */
 function texteLecture() {
   const d = etat.lecture;
   if (!d) return '';
+  if (typeof d.corps === 'string') return d.corps;
   return (d.paragraphes || []).map((p) =>
-    (p.locuteur ? p.locuteur + ' : ' : '') + p.mots.map((m) => m.t).join(' ')
-  ).join('\n\n');
+    (p.locuteur ? p.locuteur + ' : ' : '') + p.texte).join('\n\n');
 }
 
 function retourLecture(texte, classe) {

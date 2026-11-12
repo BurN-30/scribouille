@@ -271,13 +271,20 @@ def principal() -> int:
                  f"{stats['signales']} signalés sous {vue['seuils']['faible']}")
         verifier(vue["seuils"]["faible"] == compagnon.SEUIL_FAIBLE, "seuil faible transmis")
 
-        # Le texte reconstruit doit dire la même chose que le fichier écrit.
+        # Le texte reconstruit doit être celui du fichier écrit, à la lettre :
+        # seule la disposition des blancs peut différer, pas une apostrophe.
         corps_fichier = lecture.separer_entete(txt.read_text(encoding="utf-8"))[1]
-        normaliser = lambda t: re.sub(r"[^\w]+", "", t, flags=re.UNICODE).lower()  # noqa: E731
+        normaliser = lambda t: " ".join(t.split())  # noqa: E731
         verifier(
             normaliser(lecture.texte_complet(vue["paragraphes"])) == normaliser(corps_fichier),
             "le texte affiché est celui du fichier",
         )
+        affiche = " ".join(
+            "".join(m.get("e", " ") + m["t"] for m in p["mots"]) for p in vue["paragraphes"])
+        verifier(normaliser(affiche) == normaliser(lecture.texte_complet(
+            [{**p, "locuteur": ""} for p in vue["paragraphes"]])),
+                 "les mots affichés recomposent le texte, sans espace ajoutée")
+        verifier(vue.get("corps") == corps_fichier.strip(), "« Copier le texte » copie le fichier")
         verifier(vue["meta"]["source_presente"] is True, "fichier audio d'origine retrouvé")
 
         print("\n[4] Repli sans compagnon, comme une transcription ancienne")

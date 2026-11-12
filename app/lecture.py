@@ -133,7 +133,7 @@ def _paragraphes_du_compagnon(donnees: dict) -> list[dict]:
     courant: dict | None = None
 
     for segment in donnees.get("segments") or []:
-        if not isinstance(segment, dict) or not segment.get("t"):
+        if not isinstance(segment, dict) or not str(segment.get("t") or "").strip():
             continue
         locuteur = str(segment.get("l") or "")
         if courant is None or locuteur != courant["locuteur"] or _doit_couper(courant, segment):
@@ -147,25 +147,74 @@ def _paragraphes_du_compagnon(donnees: dict) -> list[dict]:
             paragraphes.append(courant)
         courant["fin"] = float(segment.get("f", courant["fin"]) or courant["fin"])
         texte = str(segment.get("t", "")).strip()
-        courant["texte"] = (courant["texte"] + " " + texte).strip()
+        separateur = " " if courant["texte"] else ""
+        courant["texte"] = courant["texte"] + separateur + texte
 
-        mots = segment.get("m") or []
-        if mots:
-            for mot in mots:
-                if not isinstance(mot, dict) or not mot.get("t"):
-                    continue
-                courant["mots"].append({
-                    "t": str(mot["t"]),
-                    "p": round(float(mot.get("p", 1) or 0), 3),
-                    "d": round(float(mot.get("d", 0) or 0), 2),
-                })
+        mots = [
+            {
+                "t": str(mot["t"]),
+                "p": round(float(mot.get("p", 1) or 0), 3),
+                "d": round(float(mot.get("d", 0) or 0), 2),
+            }
+            for mot in segment.get("m") or []
+            if isinstance(mot, dict) and mot.get("t")
+        ]
+        # Segment sans mots : le paragraphe reste lisible, simplement sans
+        # confiance affichée pour cette portion.
+        places, reste = _placer_mots(texte, mots)
+        if places:
+            places[0]["e"] = separateur + places[0]["e"]
         else:
-            # Segment sans mots : le paragraphe reste lisible, simplement sans
-            # confiance affichée pour cette portion.
-            for morceau in texte.split():
-                courant["mots"].append({"t": morceau, "p": -1.0, "d": courant["debut"]})
+            reste = separateur + reste
+        courant["mots"].extend(places)
+        if reste:
+            debut = float(segment.get("d", 0) or 0)
+            courant["mots"].append({"t": "", "e": reste, "p": -1.0, "d": round(debut, 2)})
 
     return paragraphes
+
+
+#: Écart maximal, en caractères, entre deux mots consécutifs rattachés au
+#: texte : au-delà, le mot cherché est tenu pour absent du texte plutôt que
+#: rattaché à une occurrence lointaine.
+_ECART_MAXIMAL = 80
+
+
+def _chercher_mot(texte: str, jeton: str, depart: int) -> int:
+    """Position du jeton dans le texte à partir de `depart`, entre deux frontières de mot."""
+    position = texte.find(jeton, depart)
+    while 0 <= position <= depart + _ECART_MAXIMAL:
+        avant = texte[position - 1] if position > 0 else ""
+        apres = texte[position + len(jeton):position + len(jeton) + 1]
+        colle_avant = jeton[:1].isalnum() and avant.isalnum()
+        colle_apres = jeton[-1:].isalnum() and apres.isalnum()
+        if not colle_avant and not colle_apres:
+            return position
+        position = texte.find(jeton, position + 1)
+    return -1
+
+
+def _placer_mots(texte: str, mots: list[dict]) -> tuple[list[dict], str]:
+    """
+    Rattache chaque mot à sa place dans le texte du segment.
+
+    Le texte du segment fait foi : c'est lui que le fichier contient. Chaque mot
+    reçoit dans « e » ce qui le précède exactement dans ce texte (rien devant
+    l'apostrophe de « l'Amazon » ni devant le trait d'union de « peut-être »,
+    une espace ailleurs, ou un mot que le moteur n'a pas détaillé). Un mot qui
+    n'est plus dans le texte, après une correction par exemple, n'est pas
+    affiché : sa confiance portait sur une forme qui n'existe plus. Renvoie les
+    mots placés et le texte restant après le dernier.
+    """
+    places: list[dict] = []
+    position = 0
+    for mot in mots:
+        trouve = _chercher_mot(texte, mot["t"], position)
+        if trouve < 0:
+            continue
+        places.append({**mot, "e": texte[position:trouve]})
+        position = trouve + len(mot["t"])
+    return places, texte[position:]
 
 
 def _couper_long(texte: str) -> list[str]:
@@ -207,7 +256,8 @@ def _paragraphes_du_texte(corps: str) -> list[dict]:
             texte = texte[trouve.end():]
         paragraphes.append({
             "debut": debut, "fin": debut, "locuteur": locuteur, "texte": texte,
-            "mots": [{"t": mot, "p": -1.0, "d": debut} for mot in texte.split()],
+            "mots": [{"t": mot, "e": " " if rang else "", "p": -1.0, "d": debut}
+                     for rang, mot in enumerate(texte.split())],
         })
     return paragraphes
 
@@ -263,6 +313,9 @@ def charger(chemin: str | Path) -> dict:
         },
         "paragraphes": paragraphes,
         "entete": entete,
+        # Texte du fichier, en-tête retiré : c'est lui que « Copier le texte »
+        # met dans le presse-papiers, jamais une reconstruction.
+        "corps": corps.strip(),
         "statistiques": _statistiques(paragraphes, seuils),
     }
 
