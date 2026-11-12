@@ -2,6 +2,8 @@
 
 [Back to the README](../README.md)
 
+Without a window: [the command line](ligne-de-commande.md). Every setting: [reglages.md](reglages.md). Processes and folders: [architecture.md](architecture.md). These three pages are in French.
+
 ---
 
 ## Vocabulary and corrections
@@ -54,11 +56,11 @@ What the app does with it, in three stages:
 
 **Several files.** A team or project vocabulary is added under **Shared files**: it is read on top of yours, which has the last word. **Export** writes a file to share; **Import suggestions** pours a file into your vocabulary as suggestions.
 
-**Learning from your corrections.** A correction made in the reading view without remembering a rule becomes a suggestion. And `scribouille-verifier.exe --apprendre-vocabulaire --brut RAW.txt --propre REVIEWED.docx [--cr MINUTES.docx] [--importer]` compares raw transcripts with their reviewed versions (text, Word, Markdown, text PDF) and suggests systematic errors (with their counts of occurrences and meetings), plus the proper nouns and acronyms of the clean documents. Nothing is used before it is accepted in the Vocabulary screen. The numbers-only report that comes with it contains no term.
+**Learning from your corrections.** A correction made in the reading view without remembering a rule becomes a suggestion. And `scribouille.com --apprendre-vocabulaire --brut RAW.txt --propre REVIEWED.docx [--cr MINUTES.docx] [--importer]` compares raw transcripts with their reviewed versions (text, Word, Markdown, text PDF) and suggests systematic errors (with their counts of occurrences and meetings), plus the proper nouns and acronyms of the clean documents. Nothing is used before it is accepted in the Vocabulary screen. The numbers-only report that comes with it contains no term.
 
 **The old format is still read.** As long as `vocabulaire.txt` and `corrections.txt` contain terms, they are used as they are. **Convert** moves them into `vocabulaire.toml` without losing anything and keeps a copy of the old files.
 
-**Measuring.** `scribouille-verifier.exe --mesurer-vocabulaire --vocabulaire V.toml --reunion AUDIO --reference REVIEWED` transcribes each meeting without, then with the prompt, applies the correction, and reports the word error rate, recall and precision of the terms by category, and the number of wrong corrections. Measure on meetings that were not used to learn the vocabulary.
+**Measuring.** `scribouille.com --mesurer-vocabulaire --vocabulaire V.toml --reunion AUDIO --reference REVIEWED` transcribes each meeting without, then with the prompt, applies the correction, and reports the word error rate, recall and precision of the terms by category, and the number of wrong corrections. Measure on meetings that were not used to learn the vocabulary.
 
 The two format 1 files are plain text. Edit them by hand or from the panels in the app. The **My data** panel exports them, with your settings and your AI template if you have one, as a single `scribouille-donnees-YYYY-MM-DD.zip` you can put on a USB stick or in a company backup. An import shows a preview of what would change and writes nothing before you confirm, and the previous state is saved next to it first.
 
@@ -112,7 +114,7 @@ On a 15 W laptop without a dedicated card, the CPU alone can take longer to tran
 - **The OpenVINO engine** (Intel, Apache 2.0 licence, about 90 MB from PyPI) transcribes on the integrated graphics. The only published measurement on a processor of the same family (Core Ultra 7 265U): 0.12 x with the Fast model on the integrated graphics, against 1.04 x on its CPU, identical text. Models in OpenVINO format (0.8 GB for Fast, 1.6 GB for Quality) are downloaded on first use. What you lose: the probability of each word, which this engine does not give (the review view then highlights no uncertain word). Everything else is kept: timestamped segments, word timestamps for speakers, glossary, resume after interruption, stop. If OpenVINO fails, the usual engine takes over without losing what is already transcribed.
 - **The benchmark** transcribes a 44 s clip shipped with the app under several settings (compute threads, batches, Fast and Quality models, every available engine and device), compares the text with the reference, then recommends the fastest one that stays accurate. It takes five to ten minutes. Nothing changes until you click **Apply the recommended setting**; **Back to the automatic setting** undoes it all. The report (`rapports-banc\` in the data folder) contains no user name, machine name or path: it can be sent as is. Plug the laptop in before running it.
 
-From the command line, without a window: `scribouille-verifier.exe --banc` in the installation folder (or `.venv\Scripts\python transcriber.pyw --banc` from source); add `--telecharger` to fetch missing models, `--npu` to try the NPU, `--appliquer` to apply the recommendation.
+From the command line, without a window: `scribouille.com --banc` in the installation folder (or `.venv\Scripts\python transcriber.pyw --banc` from source); add `--telecharger` to fetch missing models, `--npu` to try the NPU, `--appliquer` to apply the recommendation.
 
 **Compare both engines on your own recordings.** The benchmark measures speed on 44 s of sentences read by a single voice: it says nothing about accuracy on a real meeting (several voices, broken sentences, swallowed words, English words, team vocabulary). The comparison transcribes the same excerpt of one of your files with CTranslate2 and with OpenVINO, each in its Quality setting, with your language, glossary and corrections, then writes into `comparaisons\` in the data folder:
 
@@ -122,7 +124,7 @@ From the command line, without a window: `scribouille-verifier.exe --banc` in th
 From the window: **Speed of this machine** section, **Compare both engines** block (shown once OpenVINO is installed). From the command line:
 
 ```
-scribouille-verifier.exe --comparer "D:\Meetings\weekly.m4a" --debut 00:05:00 --duree 600 --ouvrir
+scribouille.com --comparer "D:\Meetings\weekly.m4a" --debut 00:05:00 --duree 600 --ouvrir
 ```
 
 `--debut` and `--duree` (seconds, or `hh:mm:ss`) choose the excerpt; its edges are moved to the nearest pause so that no sentence is cut. `--reference FILE` adds an already reviewed transcript of the same recording (text, SRT, VTT, Scribouille text export or `.json` companion; timestamps and speaker names are ignored): the report then gives each engine's error rate, and the page a third column. On an excerpt, the reference must be timestamped (SRT, or an export with timestamps): without timestamps, comparing with the reference is only possible on the whole file. A reference produced by Scribouille and lightly corrected favours CTranslate2, which wrote it. Other options: `--peripherique GPU|CPU|NPU` (by default the Intel integrated graphics if OpenVINO sees it), `--preset rapide`, `--sans-glossaire`, `--sans-corrections`, `--faisceau-openvino 5`. Expect two to three times the excerpt length on a laptop, much less on the integrated graphics.
@@ -132,18 +134,18 @@ What is already known, measured on three public meetings with three or four voic
 **Choosing the setting on hand-transcribed meetings: the campaign.** The comparison shows where two engines diverge, without saying which is right. The campaign measures it, on 22.8 minutes of public French meetings with three or four voices, transcribed by hand (SUMM-RE ASRU corpus, Laboratoire Parole et Langage and LINAGORA, CC BY-SA 4.0 licence):
 
 ```
-scribouille-verifier.exe --campagne
+scribouille.com --campagne
 ```
 
 Seven settings run one after the other (CTranslate2 and OpenVINO, large-v3 and turbo, beams 1 and 5), glossary and corrections off. The report, without a transcribed word or path, gives for each the word error rate with its confidence interval, the words lost when two people speak at once, long insertions, speed, then the verdict: among the settings faster than the meeting and as accurate as the best, the fastest. `--appliquer` saves it as this computer's setting; without it, nothing changes. The corpus is read from `corpus-campagne-v1.zip` placed next to the program, or downloaded (476 MB, Hugging Face then ORTOLANG). An interrupted campaign resumes where it stopped; the computer does not go to sleep while it computes. Allow an hour and a half on a Core Ultra laptop with the graphics chip. `--reunion FILE --debut 00:05:00 --duree 600` then runs the same settings on one of your meetings and gives their agreement with the chosen setting, still without a word of the text. Other options: `--reglages ov-v3-f1,ct2-v3-f5`, `--limite-extraits 3`, `--recommencer`, `--corpus PACK.zip`, `--telecharger`.
 
-**Checking that the setting holds: the endurance test.** `scribouille-verifier.exe --endurance` runs the setting chosen by the campaign thirty times in a row, on extracts of about two minutes from the same corpus, like the app's queue. The report, still without any text, gives the failure rate before and after the automatic replay, the exact error of each incident and the computer's free memory each time the model opens. `--pression` also loads, every other run, the CTranslate2 large-v3 model and leaves only 4 GB free (`--memoire-libre 4`), to test a busy computer. Allow half an hour to three quarters of an hour on a Core Ultra laptop. Other options: `--passages 30`, `--reglage ov-turbo-f1`, `--recommencer`, `--sans-diagnostic`.
+**Checking that the setting holds: the endurance test.** `scribouille.com --endurance` runs the setting chosen by the campaign thirty times in a row, on extracts of about two minutes from the same corpus, like the app's queue. The report, still without any text, gives the failure rate before and after the automatic replay, the exact error of each incident and the computer's free memory each time the model opens. `--pression` also loads, every other run, the CTranslate2 large-v3 model and leaves only 4 GB free (`--memoire-libre 4`), to test a busy computer. Allow half an hour to three quarters of an hour on a Core Ultra laptop. Other options: `--passages 30`, `--reglage ov-turbo-f1`, `--recommencer`, `--sans-diagnostic`.
 
 On Intel integrated graphics, OpenVINO only decodes greedily (beam 1): this is a limit of OpenVINO GenAI 2026.4, and the app never applies a wider beam on that chip. If OpenVINO fails on a window, the app reopens the model and carries on on the graphics chip; if it happens again, it finishes the transcription with the usual engine, losing nothing already transcribed.
 
 ### Setting proposed for this computer
 
-On first start, and each time you click **Recognise this computer** (section **Speed of this computer**), the application looks at the computer (processor and core families, memory, Intel graphics chip seen or not by OpenVINO, NVIDIA card, NPU, battery or mains, Windows power mode) and proposes a setting, explained in one sentence, with the expected duration for an hour of meeting. If a campaign or a benchmark was run on the computer, its result comes before the table; if it no longer fits (graphics chip missing, broken driver, OpenVINO removed), the proposal says so and starts again from the hardware. Nothing changes without **Apply**, nothing is downloaded or installed on its own: a missing model is announced with its size and only downloaded when a transcription starts; the Intel engine keeps its own install button. From the command line: `scribouille-verifier.exe --reconnaitre`, then `--reconnaitre --appliquer`.
+On first start, and each time you click **Recognise this computer** (section **Speed of this computer**), the application looks at the computer (processor and core families, memory, Intel graphics chip seen or not by OpenVINO, NVIDIA card, NPU, battery or mains, Windows power mode) and proposes a setting, explained in one sentence, with the expected duration for an hour of meeting. If a campaign or a benchmark was run on the computer, its result comes before the table; if it no longer fits (graphics chip missing, broken driver, OpenVINO removed), the proposal says so and starts again from the hardware. Nothing changes without **Apply**, nothing is downloaded or installed on its own: a missing model is announced with its size and only downloaded when a transcription starts; the Intel engine keeps its own install button. From the command line: `scribouille.com --reconnaitre`, then `--reconnaitre --appliquer`.
 
 The table, read from top to bottom: NVIDIA card, Maximum quality on the card; Intel graphics chip seen by OpenVINO, Fast on the chip (an hour in about 7 minutes, as accurate as Maximum quality on the processor according to the campaign on the test laptop); Intel chip present but unusable, Fast with OpenVINO on the processor; under 10 GB of memory, Fast; processor only, OpenVINO if installed, otherwise Fast on a modest processor (under 12 threads or U series) and Maximum quality on a desktop processor. The proposed pace is **Balanced, adapting automatically**.
 
@@ -162,7 +164,7 @@ The **While transcribing** section of the settings bounds what the transcription
 
 **Adapt automatically**: the transcription takes the chosen pace while you use the computer (keyboard or mouse touched less than two minutes ago, other programs using more than 30 % of the processor, full screen or presentation, microphone open for a call, laptop on battery) and maximum speed when it is idle. Threads and batches are fixed when the model loads: they are then those of maximum speed, and switching goes through priority, quality of service and pauses. On battery, the chosen pace is kept until the laptop is plugged in. The remaining time shown follows the pace actually observed, switches included. The choice applies from the next transcription.
 
-Measuring each pace on the computer: `scribouille-verifier.exe --banc --modes` (add `--peripherique GPU` for the graphics chip). For each pace: speed, memory, processor left free, and impact measured on a small probe task standing in for your applications. The measured duration ratios then replace the starting coefficients of the estimates.
+Measuring each pace on the computer: `scribouille.com --banc --modes` (add `--peripherique GPU` for the graphics chip). For each pace: speed, memory, processor left free, and impact measured on a small probe task standing in for your applications. The measured duration ratios then replace the starting coefficients of the estimates.
 
 During a transcription, the computer no longer goes to sleep for lack of activity (closing the lid keeps its effect), and closing the window asks for confirmation: what is already transcribed is kept and offered for resuming.
 
@@ -327,7 +329,7 @@ Publication is automated: pushing a `vX.Y.Z` tag triggers `.github/workflows/rel
 ```bat
 pip install -r requirements.txt -r requirements-build.txt
 pyinstaller --noconfirm --clean --distpath dist --workpath build packaging\scribouille.spec
-dist\Scribouille\scribouille-verifier.exe
+dist\Scribouille\scribouille.com --verifier
 iscc /DVersionApp=2.3.0 packaging\setup.iss
 ```
 
@@ -351,13 +353,13 @@ Three more modes cover speaker separation, again without a window. They are what
 
 ```bat
 REM Install the components, here into a scratch folder rather than the real one
-dist\Scribouille\scribouille-verifier.exe --installer-locuteurs --cible D:\scratch --cpu
+dist\Scribouille\scribouille.com --installer-locuteurs --cible D:\scratch --cpu
 
 REM Actually import torch and pyannote. Exit code 0 when both answer.
-dist\Scribouille\scribouille-verifier.exe --verifier-locuteurs --cible D:\scratch
+dist\Scribouille\scribouille.com --verifier-locuteurs --cible D:\scratch
 
 REM Wipe it
-dist\Scribouille\scribouille-verifier.exe --retirer-locuteurs --cible D:\scratch
+dist\Scribouille\scribouille.com --retirer-locuteurs --cible D:\scratch
 ```
 
 `--paquets` replaces the list with your own, which proves the mechanism with a light package instead of several gigabytes. Without `--cible`, the real extensions folder is used. From source, the same options live on `python -m app.extensions`.

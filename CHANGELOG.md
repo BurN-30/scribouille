@@ -6,6 +6,38 @@ version : la chaîne de publication en extrait la section correspondant au tag.
 
 ---
 
+## 2.6.0
+
+*Non publiée.*
+
+Le calcul quitte la fenêtre, et tout se fait aussi sans fenêtre.
+
+- **Moteur dans son propre processus**, supervisé : la fenêtre ne charge
+  plus aucune bibliothèque de calcul et revient à sa mémoire de repos après
+  une file. « Arrêter » est immédiat, pendant un chargement ou une
+  compilation pour la puce graphique compris. Un plantage du moteur (pilote
+  graphique, mémoire) ne ferme plus la fenêtre : le fichier reprend une fois
+  au segment près, sans la puce graphique. Rythme et priorité ne touchent
+  que le moteur. Aucun processus orphelin, retour de veille reconnu. Texte
+  produit identique au caractère près sur les réglages de la campagne.
+- **Ligne de commande** : `scribouille transcrire FICHIER|DOSSIER --json`,
+  `reprendre`, `etat`, `lire`, `reglages`, `diagnostic`, `espace`, `effacer`,
+  `vocabulaire`, `agent`, et les outils de mesure rangés sous `mesurer`.
+  Sortie JSON versionnée, codes de retour 0 à 6, aucun téléchargement,
+  écrasement ni effacement sans drapeau. Par SSH, en tâche planifiée, par un
+  agent de code ; fiche d'usage pour Claude Code et Codex.
+- **Espace occupé et effacement complet** : inventaire de ce que
+  l'application écrit, poste par poste, ce qui se libère sans rien perdre, et
+  un effacement complet (modèles, caches dont celui d'OpenVINO, moteur Intel,
+  journaux, réglages, vocabulaire, mesures, raccourcis, clé de registre) qui
+  montre la liste et les tailles d'abord, ne touche jamais aux transcriptions
+  sans demande, ni à ce qui n'est pas à Scribouille. Proposé aussi par le
+  désinstalleur.
+- `scribouille-verifier.exe` devient `scribouille.com` ; ses options gardent
+  leur forme.
+
+---
+
 ## 2.5.0
 
 *Non publiée.*
