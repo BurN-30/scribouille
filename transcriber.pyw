@@ -1973,6 +1973,67 @@ class Passerelle:
         """Défait un remplacement du vocabulaire dans une transcription relue."""
         return lecture.annuler_remplacement(chemin, int(rang))
 
+    # -- relecture plein cadre (voir app/relecture.py) ----------------------
+    # Ajouts de la refonte d'interface : aucune méthode existante n'est changée.
+
+    def accueil(self) -> dict:
+        """Premier lancement : l'interface montre l'accueil et le réglage proposé."""
+        return {"premier_lancement": bool(self._premier_lancement)}
+
+    def audio_relecture(self, chemin: str) -> dict:
+        """
+        Adresse locale de l'enregistrement d'une transcription. L'écoute fait
+        partie de la relecture : elle ne dépend plus d'une option.
+        """
+        from app import compagnon
+
+        fichier = Path(chemin or "")
+        donnees = compagnon.lire(fichier) if fichier.is_file() else None
+        if donnees:
+            source = str((donnees.get("source") or {}).get("chemin") or "")
+        else:
+            try:
+                entete = lecture.separer_entete(fichier.read_text(encoding="utf-8", errors="replace"))[0]
+            except OSError:
+                entete = ""
+            source = lecture._meta_de_lentete(entete, fichier).get("source_chemin", "")
+        if not source or not Path(source).is_file():
+            return {"ok": False, "code": "audio_absent" if source else "audio_inconnu"}
+        url = self._ecoute.adresse_pour(source)
+        return {"ok": bool(url), "url": url, "code": "" if url else "audio_illisible"}
+
+    def occurrences_correction(self, chemin: str, source: str, cible: str,
+                               avant: str = "", apres: str = "") -> dict:
+        from app import relecture
+
+        return relecture.occurrences(chemin, source, cible, avant, apres)
+
+    def corriger_occurrences(self, chemin: str, source: str, cible: str, rangs,
+                             ajouter_regle: bool = False) -> dict:
+        from app import relecture
+
+        if not self.config.get("corrections_apprises", True):
+            ajouter_regle = False
+        retour = relecture.corriger(chemin, source, cible, rangs, bool(ajouter_regle))
+        if retour.get("regle_ajoutee"):
+            regles, _ = vocabulaire.analyser_corrections()
+            retour["nb_corrections"] = len(regles)
+        return retour
+
+    def renommer_locuteur(self, chemin: str, ancien: str, nouveau: str) -> dict:
+        from app import relecture
+
+        return relecture.renommer_locuteur(chemin, ancien, nouveau)
+
+    def enregistrer_export(self, chemin: str, extension: str, contenu: str) -> dict:
+        from app import relecture
+
+        return relecture.enregistrer_export(chemin, extension, contenu)
+
+    def ouvrir_dossier_de(self, chemin: str) -> None:
+        """Ouvre le dossier qui contient ce fichier."""
+        self.ouvrir(str(Path(chemin or "").parent))
+
     # -- vocabulaire, format 2 (voir app/vocabulaire_interface.py) ----------
 
     def vocabulaire_etat(self) -> dict:
