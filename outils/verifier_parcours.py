@@ -698,9 +698,12 @@ def principal() -> int:
     print(f"Vérification du parcours de l'utilisateur\n{'=' * 42}")
     with tempfile.TemporaryDirectory(prefix="scribouille-parcours-") as brut:
         base = Path(brut)
-        # Les règles apprises vont dans un fichier jetable, jamais dans celui
-        # de l'utilisateur.
+        # Les règles apprises et les propositions du vocabulaire vont dans des
+        # fichiers jetables, jamais dans ceux de l'utilisateur.
+        from app import vocabulaire_v2
+
         chemins.FICHIER_CORRECTIONS = base / "corrections.txt"
+        vocabulaire_v2.FICHIER_PERSONNEL = base / "vocabulaire.toml"
         essai_entete_apres_correction(base)
         essai_vue_egale_fichier(base)
         essai_casse_et_doublons(base)
