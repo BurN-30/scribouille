@@ -215,6 +215,68 @@ def essai_apercu_et_annulation(base: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Fichiers produits
+# ---------------------------------------------------------------------------
+
+def reunion_sans_locuteurs() -> list[Segment]:
+    """Quatre minutes de parole d'une seule voix, avec des pauses franches."""
+    phrases = [
+        "On commence par le point sur le budget de l'année prochaine, qui reste serré.",
+        "Les dépenses de formation ont augmenté, surtout pour les nouveaux arrivants.",
+        "Il faudra en reparler avec la direction avant la fin du mois, c'est certain.",
+        "Deuxième sujet, le déménagement du service, prévu pour le printemps.",
+        "Les cartons arrivent la semaine du quinze, chacun prépare son bureau.",
+        "Dernier point, les congés d'été : envoyez vos dates avant vendredi.",
+    ]
+    segments = []
+    debut = 0.0
+    for rang, phrase in enumerate(phrases):
+        fin = debut + 6.0
+        segments.append(segment(debut, fin, jetons(phrase)))
+        # Pause franche après la troisième et la cinquième phrase.
+        debut = fin + (3.0 if rang in (2, 4) else 0.4)
+    return segments
+
+
+def essai_fichiers_produits(base: Path) -> None:
+    titre("Fichiers produits : paragraphes, en-tête, suffixe commun, historique")
+    dossier = base / "produits"
+    dossier.mkdir()
+    segments = reunion_sans_locuteurs()
+    formats = {"txt": True, "srt": True, "vtt": True, "horodatage": True}
+    txt = ecrire(dossier, segments, formats)
+    contenu = txt.read_text(encoding="utf-8")
+    entete, corps = lecture.separer_entete(contenu)
+    paragraphes = [p for p in corps.strip().split("\n\n") if p]
+    verifier(len(paragraphes) == 3, "le texte est coupé en paragraphes aux pauses",
+             f"{len(paragraphes)} paragraphe(s)")
+    verifier(all(p.startswith("[00:") for p in paragraphes)
+             and paragraphes[1].startswith("[00:00:21]"),
+             "l'horodatage, demandé, marque chaque paragraphe", repr(paragraphes[1][:20]))
+    ligne_source = next(ligne for ligne in entete.splitlines() if ligne.startswith("Source"))
+    verifier(ligne_source.endswith(": reunion equipe.m4a") and str(base) not in entete,
+             "l'en-tête donne le nom de l'enregistrement, pas son chemin", ligne_source)
+
+    vue = lecture.charger(txt)
+    verifier([p["texte"] for p in vue["paragraphes"]] == [p.split("] ", 1)[1] for p in paragraphes],
+             "la vue coupe ses paragraphes exactement comme le fichier")
+
+    second = ecrire(dossier, segments, formats)
+    noms = sorted(f.name for f in (dossier / "sorties").iterdir())
+    attendus = {second.stem + ext for ext in (".txt", ".json", ".srt", ".vtt")}
+    verifier(second.stem.endswith("-2") and attendus <= set(noms),
+             "la seconde transcription porte le même suffixe sur tous ses fichiers", str(noms))
+
+    historique = sorties.historique(dossier / "sorties")
+    verifier(len(historique) == 2 and all(len(h["formats"]) == 3 for h in historique),
+             "l'historique compte des transcriptions, chacune avec ses formats",
+             str([(h["nom"], [f["format"] for f in h["formats"]]) for h in historique]))
+    for rang in range(45):
+        (dossier / "sorties" / f"ancienne-{rang:02d}.txt").write_text("x", encoding="utf-8")
+    verifier(len(sorties.historique(dossier / "sorties")) == 47, "plus de coupure à 40 fichiers")
+
+
+# ---------------------------------------------------------------------------
 # File d'attente
 # ---------------------------------------------------------------------------
 
@@ -298,6 +360,7 @@ def principal() -> int:
         essai_vue_egale_fichier(base)
         essai_casse_et_doublons(base)
         essai_apercu_et_annulation(base)
+        essai_fichiers_produits(base)
         essai_file_apres_arret(base)
 
     print(f"\n{'=' * 42}")

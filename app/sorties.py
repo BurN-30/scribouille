@@ -75,6 +75,22 @@ def chemin_libre(dossier: Path, base: str, extension: str) -> Path:
     return candidat
 
 
+def base_libre(dossier: Path, base: str, extensions: list[str]) -> str:
+    """
+    Nom de base libre pour TOUS les fichiers d'une même transcription.
+
+    Chaque format cherchait son propre suffixe : à la seconde transcription
+    d'un enregistrement, le texte prenait « -2 » mais pas les sous-titres, qui
+    écrasaient la paire de la première. Le suffixe est maintenant commun.
+    """
+    candidat = base
+    compteur = 2
+    while any((dossier / f"{candidat}{ext}").exists() for ext in extensions):
+        candidat = f"{base}-{compteur}"
+        compteur += 1
+    return candidat
+
+
 def construire_entete(source: Path, details: dict) -> str:
     """
     En-tête encadré du fichier texte, dans la langue de l'interface.
@@ -82,8 +98,11 @@ def construire_entete(source: Path, details: dict) -> str:
     Les étiquettes sont alignées sur la plus longue de la langue courante, ce
     qui évite d'avoir à recompter les espaces à chaque traduction.
     """
+    # Le nom du fichier seulement : le chemin complet disait l'arborescence du
+    # poste à quiconque recevait la transcription. Le compagnon le garde, pour
+    # retrouver l'audio pendant la relecture.
     entrees: list[tuple[str, str]] = [
-        (langues.t("ent.source"), str(source)),
+        (langues.t("ent.source"), source.name),
         (langues.t("ent.duree"), _duree_lisible(details.get("duree", 0))),
         (langues.t("ent.modele"), langues.t(
             "ent.valeur.modele",
@@ -128,11 +147,41 @@ def construire_entete(source: Path, details: dict) -> str:
     return "\n".join(lignes)
 
 
+#: Découpe en paragraphes, la même pour le fichier texte et pour la vue de
+#: relecture (`app/lecture.py`) : ce que l'on relit est ce que l'on a écrit.
+#:
+#: Un paragraphe change de locuteur, ou se ferme sur une fin de phrase suivie
+#: d'un silence marqué, ou sur une fin de phrase passé une longueur
+#: confortable, et de force au-delà d'une longueur maximale. Sans cela, une
+#: heure de réunion sans locuteurs séparés tenait sur une seule ligne.
+LONGUEUR_CONFORTABLE = 450
+LONGUEUR_MAXIMALE = 900
+SILENCE_PARAGRAPHE = 1.5
+#: Un silence ne coupe pas un paragraphe plus court que ceci : pas de lignes
+#: de trois mots à chaque respiration.
+LONGUEUR_MINIMALE = 120
+FINS_DE_PHRASE = (".", "!", "?", "…", ":")
+
+
+def doit_couper(texte_courant: str, fin_courante: float, debut_suivant: float) -> bool:
+    """Faut-il ouvrir un nouveau paragraphe avant le segment qui commence à `debut_suivant` ?"""
+    longueur = len(texte_courant)
+    if longueur >= LONGUEUR_MAXIMALE:
+        return True
+    if not texte_courant.rstrip().endswith(FINS_DE_PHRASE):
+        return False
+    if longueur >= LONGUEUR_CONFORTABLE:
+        return True
+    return longueur >= LONGUEUR_MINIMALE and debut_suivant - fin_courante >= SILENCE_PARAGRAPHE
+
+
 def corps_texte(segments, avec_locuteurs: bool, avec_horodatage: bool = False) -> str:
     """
     Texte lisible. Les répliques consécutives d'un même locuteur sont regroupées,
-    ce qui donne un rendu de compte rendu plutôt qu'une liste de sous-titres.
+    ce qui donne un rendu de compte rendu plutôt qu'une liste de sous-titres, et
+    un long passage est coupé en paragraphes aux pauses (voir `doit_couper`).
     """
+    segments = [s for s in segments if (s.texte or "").strip()]
     if not segments:
         return langues.t("sortie.aucune_parole") + "\n"
 
@@ -140,11 +189,12 @@ def corps_texte(segments, avec_locuteurs: bool, avec_horodatage: bool = False) -
     locuteur_courant = None
     tampon: list[str] = []
     debut_bloc = segments[0].debut
+    fin_bloc = segments[0].fin
 
     def vider():
         if not tampon:
             return
-        texte = " ".join(tampon).strip()
+        texte = " ".join(tampon)
         prefixe = ""
         if avec_horodatage:
             prefixe += f"[{_horodatage_vtt(debut_bloc)[:-4]}] "
@@ -154,12 +204,14 @@ def corps_texte(segments, avec_locuteurs: bool, avec_horodatage: bool = False) -
 
     for segment in segments:
         etiquette = segment.locuteur if avec_locuteurs else None
-        if etiquette != locuteur_courant and tampon:
+        if tampon and (etiquette != locuteur_courant
+                       or doit_couper(" ".join(tampon), fin_bloc, segment.debut)):
             vider()
             tampon = []
             debut_bloc = segment.debut
         locuteur_courant = etiquette
-        tampon.append(segment.texte)
+        tampon.append(segment.texte.strip())
+        fin_bloc = segment.fin
 
     vider()
     return "\n\n".join(blocs) + "\n"
@@ -217,6 +269,9 @@ def ecrire_tout(dossier: Path, source: Path, segments, details: dict, formats: d
     )
     avec_locuteurs = bool(details.get("nb_locuteurs"))
     produits: list[dict] = []
+    # Toutes les extensions qu'une transcription peut poser, compagnon compris :
+    # un seul suffixe pour l'ensemble, libre pour chacune.
+    base = base_libre(dossier, base, [".txt", ".json", ".srt", ".vtt"])
 
     if formats.get("txt", True):
         chemin = chemin_libre(dossier, base, ".txt")
@@ -240,3 +295,53 @@ def ecrire_tout(dossier: Path, source: Path, segments, details: dict, formats: d
         produits.append({"format": "VTT", "nom": chemin.name, "chemin": str(chemin)})
 
     return produits
+
+
+#: Formats listés dans l'onglet « Transcriptions », dans l'ordre d'affichage.
+FORMATS_HISTORIQUE = (".txt", ".srt", ".vtt")
+
+#: Garde-fou pour un dossier de sortie démesuré ; l'ancienne limite de 40
+#: fichiers coupait l'historique après une dizaine de réunions.
+LIMITE_HISTORIQUE = 1000
+
+
+def historique(dossier: Path, limite: int = LIMITE_HISTORIQUE) -> list[dict]:
+    """
+    Les transcriptions d'un dossier de sortie, une entrée par transcription.
+
+    Le texte et ses sous-titres portent le même nom de base : ils forment une
+    seule entrée, avec la liste de ses formats, au lieu d'une ligne par fichier.
+    Plus récente d'abord.
+    """
+    groupes: dict[str, dict] = {}
+    if not dossier.is_dir():
+        return []
+    for fichier in dossier.iterdir():
+        extension = fichier.suffix.lower()
+        if extension not in FORMATS_HISTORIQUE or not fichier.is_file():
+            continue
+        try:
+            infos = fichier.stat()
+        except OSError:
+            continue
+        groupe = groupes.setdefault(fichier.stem.lower(), {
+            "nom": fichier.stem, "date": 0.0, "fichiers": {}})
+        groupe["fichiers"][extension] = (fichier, infos.st_size)
+        groupe["date"] = max(groupe["date"], infos.st_mtime)
+
+    elements: list[dict] = []
+    for groupe in sorted(groupes.values(), key=lambda g: g["date"], reverse=True)[:limite]:
+        formats = [
+            {"format": ext.lstrip(".").upper(), "chemin": str(groupe["fichiers"][ext][0])}
+            for ext in FORMATS_HISTORIQUE if ext in groupe["fichiers"]
+        ]
+        principal, taille = groupe["fichiers"].get(".txt") or next(iter(groupe["fichiers"].values()))
+        elements.append({
+            "nom": groupe["nom"],
+            "chemin": str(principal),
+            "formats": formats,
+            "format": formats[0]["format"],
+            "date": datetime.fromtimestamp(groupe["date"]).strftime(langues.t("format.date_heure")),
+            "taille": taille,
+        })
+    return elements

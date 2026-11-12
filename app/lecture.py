@@ -24,7 +24,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from . import compagnon, gabarit, journal, langues, vocabulaire
+from . import compagnon, gabarit, journal, langues, sorties, vocabulaire
 
 #: Taille au-delà de laquelle un fichier texte n'est pas chargé en entier.
 #: Cent mille caractères représentent déjà plusieurs heures de réunion.
@@ -96,29 +96,16 @@ def _valeur_entete_traduite(entete: str, cle_texte: str) -> str:
 # Paragraphes
 # ---------------------------------------------------------------------------
 
-#: Un paragraphe se ferme à la première fin de phrase passé ce seuil, et de
-#: force au second. Sans cela, une heure de réunion sans locuteurs séparés
-#: s'afficherait d'un seul bloc, illisible à l'écran.
-LONGUEUR_CONFORTABLE = 450
-LONGUEUR_MAXIMALE = 900
-
-#: Un silence de cette durée entre deux segments marque un changement de sujet.
-SILENCE_PARAGRAPHE = 1.5
-
-_FINS_DE_PHRASE = (".", "!", "?", "…", ":")
+#: Les seuils de découpe sont ceux du fichier texte (`app/sorties.py`) : la
+#: vue coupe ses paragraphes exactement où le fichier les coupe.
+LONGUEUR_CONFORTABLE = sorties.LONGUEUR_CONFORTABLE
+LONGUEUR_MAXIMALE = sorties.LONGUEUR_MAXIMALE
+SILENCE_PARAGRAPHE = sorties.SILENCE_PARAGRAPHE
 
 
 def _doit_couper(courant: dict, segment: dict) -> bool:
-    """Faut-il ouvrir un nouveau paragraphe avant ce segment ?"""
-    longueur = len(courant["texte"])
-    if longueur >= LONGUEUR_MAXIMALE:
-        return True
-    if longueur < LONGUEUR_CONFORTABLE:
-        return False
-    if not courant["texte"].rstrip().endswith(_FINS_DE_PHRASE):
-        return False
-    silence = float(segment.get("d", 0) or 0) - courant["fin"]
-    return silence >= SILENCE_PARAGRAPHE or longueur >= LONGUEUR_CONFORTABLE
+    """Faut-il ouvrir un nouveau paragraphe avant ce segment ? Même règle que le fichier."""
+    return sorties.doit_couper(courant["texte"], courant["fin"], float(segment.get("d", 0) or 0))
 
 
 def _paragraphes_du_compagnon(donnees: dict) -> list[dict]:

@@ -65,6 +65,15 @@ Corrections issues d'une revue d'usage de l'application réelle (vérifiées par
   listé, et la carte ne disparaît plus sur un refus ; une ligne arrêtée ou en
   échec se relance d'un clic ; redéposer un fichier arrêté, en échec ou terminé
   le remet en attente, et un doublon est dit « déjà dans la file ».
+- **Fichiers produits** : le `.txt` est coupé en paragraphes aux pauses
+  (et non plus seulement aux changements de locuteur : sans séparation des
+  voix, une réunion tenait sur une ligne), l'horodatage facultatif marque
+  chaque paragraphe, et la vue de relecture coupe exactement aux mêmes
+  endroits ; l'en-tête donne le nom de l'enregistrement, plus son chemin
+  complet ; une seconde transcription porte le même suffixe sur le texte,
+  ses sous-titres et son compagnon ; l'onglet « Transcriptions » compte des
+  transcriptions (une ligne avec ses formats) et ne s'arrête plus à 40
+  fichiers.
 - **Correction depuis la relecture** : l'en-tête du fichier texte reste séparé
   du corps ; la barre de fin d'en-tête et la première phrase ne se retrouvent
   plus sur la même ligne.

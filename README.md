@@ -36,7 +36,7 @@ The installer is not signed, so SmartScreen may warn on first run: "More info", 
 
 - **Drop and go.** Drag files or a folder onto the window, pick a preset, start. Files are processed one after another, a failure does not stop the queue.
 - **Formats in:** `m4a` (including phone recordings), `mp3`, `wav`, `ogg`, `flac`, `opus`, `webm`, `wma`, `aac`, `amr`, and the usual video containers (`mp4`, `mkv`, `mov`), whose audio track is extracted.
-- **Formats out:** `.txt` with a header (source, duration, model, date, real compute time), plus optional `.srt` and `.vtt`. Output names follow a configurable pattern with `{nom}`, `{date}`, `{heure}` and `{modele}`.
+- **Formats out:** `.txt` in paragraphs, with a header (recording name, duration, model, date, real compute time), plus optional `.srt` and `.vtt`. Output names follow a configurable pattern with `{nom}`, `{date}`, `{heure}` and `{modele}`.
 - **Two presets.** *Highest quality* (`large-v3`) for anything that will be read back, *Fast* (`large-v3-turbo`) to get the gist. Other Whisper models are reachable in advanced mode.
 - **Glossary and corrections.** A list of proper nouns primes the model before it transcribes, and a list of rewrite rules cleans up the recurring mistakes afterwards. See [the guide](docs/guide.md#vocabulary-and-corrections).
 - **Read back in the app.** Uncertain words are highlighted, any word shows its confidence on hover, and correcting one can be remembered for good. See [the guide](docs/guide.md#reading-back-a-transcript).

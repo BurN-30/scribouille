@@ -1720,25 +1720,13 @@ class Passerelle:
         self._fond(self._lire_historique)
 
     def _lire_historique(self) -> None:
-        dossier = Path(self.config.get("dossier_sortie") or "")
-        elements: list[dict] = []
-        if dossier.is_dir():
-            fichiers = [
-                f for f in dossier.iterdir()
-                if f.is_file() and f.suffix.lower() in (".txt", ".srt", ".vtt")
-            ]
-            fichiers.sort(key=lambda f: f.stat().st_mtime, reverse=True)
-            for fichier in fichiers[:40]:
-                import datetime as dt
+        from app import sorties
 
-                horodatage = dt.datetime.fromtimestamp(fichier.stat().st_mtime)
-                elements.append({
-                    "nom": fichier.name,
-                    "chemin": str(fichier),
-                    "format": fichier.suffix.lstrip(".").upper(),
-                    "date": horodatage.strftime(langues.t("format.date_heure")),
-                    "taille": audio_module.formater_taille(fichier.stat().st_size),
-                })
+        # Une entrée par transcription (texte et sous-titres ensemble), et plus
+        # de coupure à 40 fichiers.
+        elements = sorties.historique(Path(self.config.get("dossier_sortie") or ""))
+        for element in elements:
+            element["taille"] = audio_module.formater_taille(element["taille"])
         self._js(f"onHistorique({_json(elements)})")
 
     def lire_texte(self, chemin: str) -> str:

@@ -36,7 +36,7 @@ Le programme d'installation n'est pas signé, SmartScreen peut donc avertir au p
 
 - **Glisser, lancer.** Déposez des fichiers ou un dossier sur la fenêtre, choisissez un preset, lancez. Les fichiers sont traités l'un après l'autre, et un échec n'interrompt pas la file.
 - **Formats acceptés :** `m4a` (dont les enregistrements de smartphone), `mp3`, `wav`, `ogg`, `flac`, `opus`, `webm`, `wma`, `aac`, `amr`, et les vidéos courantes (`mp4`, `mkv`, `mov`), dont la piste audio est extraite.
-- **Formats produits :** `.txt` avec un en-tête (source, durée, modèle, date, temps de calcul réel), plus `.srt` et `.vtt` en option. Le nom des fichiers suit un motif configurable avec `{nom}`, `{date}`, `{heure}` et `{modele}`.
+- **Formats produits :** `.txt` en paragraphes, avec un en-tête (nom de l'enregistrement, durée, modèle, date, temps de calcul réel), plus `.srt` et `.vtt` en option. Le nom des fichiers suit un motif configurable avec `{nom}`, `{date}`, `{heure}` et `{modele}`.
 - **Deux presets.** *Qualité maximale* (`large-v3`) pour tout ce qui sera relu, *Rapide* (`large-v3-turbo`) pour dégrossir. Les autres modèles Whisper restent accessibles en mode avancé.
 - **Glossaire et corrections.** Une liste de noms propres oriente le modèle avant qu'il transcrive, une liste de règles nettoie les massacres récurrents après. Voir [Vocabulaire](docs/guide.fr.md#vocabulaire-et-corrections).
 - **Relecture dans l'application.** Les mots incertains sont surlignés, n'importe quel mot affiche sa confiance au survol, et corriger une fois peut valoir pour toujours. Voir [Relire une transcription](docs/guide.fr.md#relire-une-transcription).

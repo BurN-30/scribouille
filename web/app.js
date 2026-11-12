@@ -1309,6 +1309,7 @@ function dessinerHistorique() {
       <div>${ech(t('ui.historique.vide'))}</div></div>`;
     return;
   }
+  /* Une ligne par transcription ; chaque format present s'ouvre a part. */
   vue.innerHTML = etat.historique.map((h) => `
     <div class="ligne" data-chemin="${ech(h.chemin)}">
       <span class="pastille termine">${icone('i-coche', 'icone-s')}</span>
@@ -1316,10 +1317,14 @@ function dessinerHistorique() {
         <div class="nom">${ech(h.nom)}</div>
         <div class="meta">${ech(h.date)} · ${ech(h.taille)}</div>
       </div>
-      <span class="etiquette-format">${ech(h.format)}</span>
+      ${(h.formats || [{ format: h.format, chemin: h.chemin }]).map((f) =>
+        `<button class="etiquette-format" data-ouvrir="${ech(f.chemin)}">${ech(f.format)}</button>`).join('')}
     </div>`).join('');
   $$('#vue-historique .ligne').forEach((l) => {
     l.onclick = () => ouvrirSortie(l.dataset.chemin);
+  });
+  $$('#vue-historique [data-ouvrir]').forEach((b) => {
+    b.onclick = (e) => { e.stopPropagation(); ouvrirSortie(b.dataset.ouvrir); };
   });
 }
 
