@@ -62,10 +62,10 @@ Un fichier est « déjà transcrit » quand le dossier de sortie contient un com
 ### reprendre
 
 ```
-scribouille reprendre [CLE|FICHIER] [--sortie D] [--rythme R] [--telecharger]
+scribouille reprendre [CLE|FICHIER] [--sortie D] [--formats LISTE] [--rythme R] [--telecharger]
 ```
 
-Sans argument, la plus récente. La reprise garde son modèle (le texte ne mêle jamais deux modèles). Sorties dans le dossier que la transcription interrompue visait (`--sortie` de départ), sinon à côté de la source.
+Sans argument, la plus récente. La reprise rétablit tout ce que la demande de départ prévoyait : modèle (le texte ne mêle jamais deux modèles), formats, dossier de sortie, langue, vocabulaire, voix et `--noms`, rythme, moteur. `--sortie`, `--formats` et `--rythme` remplacent la valeur de départ. Une reprise laissée par la 3.0.0, qui ne gardait pas la demande, repart des réglages actuels, et le dit (`journal`, niveau `attention`).
 
 ### etat
 

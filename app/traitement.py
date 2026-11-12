@@ -457,6 +457,11 @@ class FileTraitement:
         instance = contexte["instance"]
         if element.sortie:
             config = {**config, "dossier_sortie": element.sortie}
+        if element.reprise:
+            # Une reprise retrouve ce que la demande de départ prévoyait
+            # (formats, langue, vocabulaire, voix), pas les réglages du moment.
+            demande = (reprise_module.lire_etat(element.reprise) or {}).get("demande") or {}
+            config = {**config, **{c: v for c, v in demande.items() if c in reprise_module.CLES_PAR_FICHIER}}
         echec = True
         statut = "erreur"
         verrou = False
@@ -614,6 +619,7 @@ class FileTraitement:
                 source, reglages["modele"], duree_audio,
                 position=decalage, nb_segments=len(deja_transcrits),
                 ecoule=ecoule_anterieur, sortie=str(config.get("dossier_sortie") or ""),
+                demande=reprise_module.demande_de(config),
             )
             if session.active:
                 getattr(rappels, "reprise", lambda i, c: None)(element.identifiant, identifiant)

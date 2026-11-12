@@ -44,6 +44,27 @@ from .moteur import Mot, Segment
 #: Au-delà, une reprise ne présente plus d'intérêt et l'audio a souvent bougé.
 RETENTION_JOURS = 30
 
+#: Ce que la demande de départ prévoyait et qu'une reprise rétablit : formats,
+#: langue, vocabulaire, voix et leurs noms, rythme, modèle, moteur. Le dossier
+#: de sortie est gardé à part (« sortie »).
+CLES_DEMANDE = ("formats", "compagnon_confiance", "langue", "preset", "utiliser_glossaire",
+                "appliquer_corrections", "vocabulaires_partages", "rapprochement_vocabulaire", "diarisation",
+                "nb_locuteurs", "noms_locuteurs", "motif_sortie", "filtres_salle", "rythme", "rythme_auto",
+                "mode_avance", "modele_avance", "beam_size", "condition_on_previous_text", "forcer_processeur",
+                "reglage_machine")
+
+#: Parmi elles, celles qui valent fichier par fichier : une reprise remise
+#: dans la file de la fenêtre les retrouve, quels que soient les réglages du
+#: moment (le modèle, lui, est gardé par la clé de reprise).
+CLES_PAR_FICHIER = ("formats", "compagnon_confiance", "langue", "utiliser_glossaire", "appliquer_corrections",
+                    "vocabulaires_partages", "rapprochement_vocabulaire", "diarisation", "nb_locuteurs",
+                    "noms_locuteurs", "motif_sortie")
+
+
+def demande_de(config: dict) -> dict:
+    """La part de la configuration qu'une reprise doit retrouver."""
+    return {cle: json.loads(json.dumps(config[cle])) for cle in CLES_DEMANDE if cle in config}
+
 
 def dossier() -> Path:
     cible = chemins.RACINE / "reprises"
@@ -101,7 +122,7 @@ class Session:
 
     def ouvrir(self, source: Path, modele: str, duree_audio: float,
                position: float = 0.0, nb_segments: int = 0, ecoule: float = 0.0,
-               sortie: str = "") -> None:
+               sortie: str = "", demande: dict | None = None) -> None:
         if not self.active:
             return
         self.position = position
@@ -117,6 +138,9 @@ class Session:
         # Dossier de sortie demandé : « scribouille reprendre » y écrit aussi.
         if sortie:
             self._infos["sortie"] = str(sortie)
+        # Toute la demande de départ (formats, langue, vocabulaire, voix...).
+        if demande:
+            self._infos["demande"] = demande
         try:
             self._flux = _fichier_segments(self.identifiant).open("a", encoding="utf-8")
         except OSError as exc:

@@ -598,11 +598,15 @@ def essai_ligne_de_commande() -> None:
     code, _, _ = cli("agent", "installer", "--cible", "claude", "--dossier", str(TEMPORAIRE / "maison"), "--json")
     verifier(code == 4, "fiche modifiée à la main : pas écrasée sans --ecraser")
 
-    # Ctrl+C : interrompu, reprenable (code 5), puis « reprendre ».
+    # Ctrl+C : interrompu, reprenable (code 5), puis « reprendre », qui
+    # rétablit toute la demande de départ (formats, dossier, langue, rythme).
     longue = dossier / "longue.ogg"
     longue.write_bytes(EXTRAIT.read_bytes())
+    ailleurs = TEMPORAIRE / "cli-sorties-demandees"
     env = dict(os.environ, SCRIBOUILLE_MOTEUR_ESSAI=json.dumps({"segments": 60, "pause_s": 0.1}))
-    p = subprocess.Popen([PYTHON, str(RACINE / "transcriber.pyw"), "transcrire", str(longue), "--json", "--telecharger"],
+    p = subprocess.Popen([PYTHON, str(RACINE / "transcriber.pyw"), "transcrire", str(longue), "--json", "--telecharger",
+                          "--formats", "txt,json,srt,horodatage", "--sortie", str(ailleurs), "--langue", "en",
+                          "--rythme", "discret"],
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=str(TEMPORAIRE),
                          creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
     vus = 0
@@ -622,11 +626,27 @@ def essai_ligne_de_commande() -> None:
     taches = lignes[-1]["donnees"]["taches"] if lignes else []
     verifier(any(Path(t["chemin"]).name == "longue.ogg" for t in taches),
              "interruption brutale de la commande : la transcription est reprenable", str(taches)[:200])
+    from app import reprise as reprise_module
+
+    tache = next((t for t in taches if Path(t["chemin"]).name == "longue.ogg"), {})
+    demande = (reprise_module.lire_etat(tache.get("cle", "")) or {}).get("demande") or {}
+    verifier(demande.get("formats", {}).get("srt") and demande.get("langue") == "en"
+             and demande.get("rythme") == "discret" and demande.get("formats", {}).get("horodatage"),
+             "la sauvegarde garde la demande de départ (formats, langue, rythme)", str(demande)[:200])
     code, lignes, err = cli("reprendre", "--json", essai={"segments": 60, "pause_s": 0.0})
-    compagnons = sorted(dossier.glob("*longue*.json"))
-    textes = [s["t"] for s in json.loads(compagnons[-1].read_text(encoding="utf-8"))["segments"]] if compagnons else []
+    compagnons = sorted(ailleurs.glob("*longue*.json"))
+    contenu = json.loads(compagnons[-1].read_text(encoding="utf-8")) if compagnons else {}
+    textes = [s["t"] for s in contenu.get("segments", [])]
     verifier(code == 0 and textes == attendu(60), "reprendre : terminé au segment près, sans doublon",
              f"{code} {len(textes)} {err[-200:]}")
+    produits = sorted(f.suffix for f in ailleurs.glob("*longue*"))
+    debut = next((x for x in lignes if x.get("evenement") == "debut"), {})
+    txt_repris = next(iter(ailleurs.glob("*longue*.txt")), None)
+    verifier(produits == [".json", ".srt", ".txt"] and debut.get("rythme") == "discret"
+             and (contenu.get("transcription") or {}).get("langue") == "en"
+             and txt_repris is not None and "[00:00:" in txt_repris.read_text(encoding="utf-8"),
+             "reprendre rétablit TOUTE la demande : .srt, horodatage, dossier --sortie, langue, rythme",
+             f"{produits} {debut.get('rythme')} {(contenu.get('transcription') or {}).get('langue')}")
     code, lignes, _ = cli("reprendre", "cle-qui-n-existe-pas", "--json")
     verifier(code == 2 and lignes[-1]["erreur"]["code"] == "introuvable", "reprendre une clé inconnue : code 2")
 

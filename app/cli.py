@@ -330,7 +330,7 @@ def _analyseur() -> argparse.ArgumentParser:
                  "prévoyait (formats, dossier de sortie, langue, vocabulaire, voix, noms, rythme).")
     _ajouter(r, "cible", nargs="?", default="", metavar="CLE|FICHIER", aide="Défaut : la plus récente (scribouille etat).")
     _ajouter(r, "--sortie", default="", metavar="DOSSIER", aide="Autre dossier de sortie que celui de départ.")
-    _ajouter(r, "--formats", default="txt,json", metavar="LISTE", aide="Formats écrits ; défaut : txt,json.")
+    _ajouter(r, "--formats", default="", metavar="LISTE", aide="Autres formats que ceux de départ.")
     _ajouter(r, "--rythme", choices=rythmes, metavar="|".join(rythmes), aide="Autre rythme que celui de départ.")
     _ajouter(r, "--telecharger", action="store_true", aide="Permet de télécharger le modèle de départ s'il manque.")
     r.add_argument("--json", action="store_true")
@@ -856,7 +856,7 @@ def _executer_file(sortie: Sortie, elements: list, config: dict, telecharger: bo
     file = traitement.FileTraitement(mat, distant=distant)
     file.elements = list(elements)
     resultats: dict[str, dict] = {e.identifiant: {"fichier": e.chemin, "ok": False} for e in elements}
-    noms = {e.identifiant: e.nom for e in elements}
+    noms_fichiers = {e.identifiant: e.nom for e in elements}
     rang = {e.identifiant: i + 1 for i, e in enumerate(elements)}
     dernier: dict[str, tuple[float, int, str]] = {}
     fini, bilan = threading.Event(), {}
@@ -873,7 +873,7 @@ def _executer_file(sortie: Sortie, elements: list, config: dict, telecharger: bo
         sortie.evenement("progres", id=identifiant, fichier=resultats[identifiant]["fichier"], pct=pct,
                          phase=phase, ecoule_s=donnees.get("ecoule_s"), reste_s=donnees.get("restant_s"))
         reste = f", reste {donnees.get('restant')}" if donnees.get("restant") else ""
-        sortie.progression(f"[{rang[identifiant]}/{len(elements)}] {noms[identifiant]} : {phase} {pct} %"
+        sortie.progression(f"[{rang[identifiant]}/{len(elements)}] {noms_fichiers[identifiant]} : {phase} {pct} %"
                            f" ({donnees.get('ecoule') or ''}{reste})")
 
     def termine(identifiant: str, donnees: dict) -> None:
@@ -889,14 +889,14 @@ def _executer_file(sortie: Sortie, elements: list, config: dict, telecharger: bo
                 r["renommes"] = _renommer(produits, noms)
             sortie.fin_progression()
             sortie.evenement("fichier_fini", id=identifiant, **r)
-            sortie.dire(f"[{rang[identifiant]}/{len(elements)}] {noms[identifiant]} : fait en {r['duree']}"
+            sortie.dire(f"[{rang[identifiant]}/{len(elements)}] {noms_fichiers[identifiant]} : fait en {r['duree']}"
                         + "".join(f"\n    {c}" for c in r["sorties"]))
         else:
             r.update({"annule": bool(donnees.get("annule")), "erreur": donnees.get("titre") or donnees.get("message") or "",
                       "detail": donnees.get("detail") or donnees.get("message") or ""})
             sortie.fin_progression()
             sortie.evenement("fichier_echec", id=identifiant, **r)
-            sortie.dire(f"[{rang[identifiant]}/{len(elements)}] {noms[identifiant]} : "
+            sortie.dire(f"[{rang[identifiant]}/{len(elements)}] {noms_fichiers[identifiant]} : "
                         + ("arrêté (reprenable)" if r["annule"] else f"échec : {r['erreur']}"), erreur=True)
 
     def journal_ui(niveau: str, texte: str) -> None:
@@ -983,7 +983,8 @@ def cmd_transcrire(options, sortie: Sortie) -> int:
         sortie.evenement("fin", reussis=0, echecs=0, annules=0, ignores=len(ignores), code_retour=SORTIE_EXISTANTE,
                          fichiers=[], ignores_detail=ignores)
         return SORTIE_EXISTANTE
-    execution = _executer_file(sortie, elements, config, options.telecharger, _noms(options.noms))
+    config["noms_locuteurs"] = _noms(options.noms)
+    execution = _executer_file(sortie, elements, config, options.telecharger, config["noms_locuteurs"])
     code = _code_de_fin(execution, len(ignores))
     bilan = execution["bilan"]
     sortie.evenement("fin", reussis=bilan.get("reussis", 0), echecs=bilan.get("echecs", 0),
@@ -1012,9 +1013,32 @@ def cmd_reprendre(options, sortie: Sortie) -> int:
         if choisie is None:
             raise Echec("introuvable", f"aucune reprise pour « {cible} » (scribouille etat)", ARGUMENTS)
     mat, _ = detecter_au_demarrage()
-    options.preset = None
-    options.langue = ""
-    config = _config_de_commande(options, mat)
+    etat = reprise.lire_etat(choisie["cle"]) or {}
+    demande = etat.get("demande") or {}
+    from . import config as config_module
+
+    # Tout ce que la demande de départ prévoyait (formats, langue, vocabulaire,
+    # voix, noms, rythme, moteur), puis les seules options données ici.
+    config = copy.deepcopy(config_module.charger())
+    config.update(copy.deepcopy(demande))
+    if options.formats:
+        formats = {f.strip().lower() for f in options.formats.split(",") if f.strip()}
+        config["formats"] = {"txt": True, "srt": "srt" in formats, "vtt": "vtt" in formats,
+                             "horodatage": "horodatage" in formats}
+        config["compagnon_confiance"] = "json" in formats
+    if options.rythme:
+        if options.rythme == "auto":
+            config["rythme_auto"] = True
+        else:
+            config["rythme"], config["rythme_auto"] = options.rythme, False
+    if not demande:
+        sortie.evenement("journal", niveau="attention",
+                         texte="Reprise d'une version antérieure : la demande de départ n'est pas connue, "
+                               "réglages actuels et --formats " + (options.formats or "txt,json"))
+        sortie.dire("  Demande de départ inconnue (version antérieure) : réglages actuels.", erreur=True)
+        if not options.formats:
+            config["formats"] = {"txt": True, "srt": False, "vtt": False, "horodatage": False}
+            config["compagnon_confiance"] = True
     # Une reprise garde son modèle : le texte ne mêle jamais deux modèles.
     if presets.modele_du_preset(config.get("preset", "qualite"), "") != choisie["modele"]:
         cles = [c for c, p in presets.PRESETS.items() if p["modele"] == choisie["modele"]]
@@ -1024,7 +1048,7 @@ def cmd_reprendre(options, sortie: Sortie) -> int:
             config["mode_avance"], config["modele_avance"] = True, choisie["modele"]
     source = Path(choisie["chemin"])
     # Sans --sortie : le dossier que la transcription interrompue visait.
-    ancien = str((reprise.lire_etat(choisie["cle"]) or {}).get("sortie") or "")
+    ancien = str(etat.get("sortie") or "")
     dossier = (Path(options.sortie).expanduser().resolve() if options.sortie
                else Path(ancien) if ancien and Path(ancien).is_dir() else source.parent)
     dossier.mkdir(parents=True, exist_ok=True)
@@ -1032,7 +1056,8 @@ def cmd_reprendre(options, sortie: Sortie) -> int:
                                  reprise=choisie["cle"], sortie=str(dossier))
     sortie.dire(f"Reprise de {source.name} à {presets.formater_duree(choisie['position'])} "
                 f"sur {presets.formater_duree(choisie['duree_audio'])}.")
-    execution = _executer_file(sortie, [element], config, options.telecharger)
+    execution = _executer_file(sortie, [element], config, options.telecharger,
+                               dict(config.get("noms_locuteurs") or {}))
     code = _code_de_fin(execution, 0)
     bilan = execution["bilan"]
     sortie.evenement("fin", reussis=bilan.get("reussis", 0), echecs=bilan.get("echecs", 0),
