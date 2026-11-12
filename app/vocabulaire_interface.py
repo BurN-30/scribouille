@@ -164,7 +164,7 @@ def exporter(chemin: str, config: dict) -> dict:
     for e in sortie.entrees:
         e.source = ""
     v2.ecrire(sortie, chemin)
-    return {"ok": True, "message": langues.t("voc2.exporte", n=len(sortie.entrees))}
+    return {"ok": True, "message": langues.tn("voc2.exporte", len(sortie.entrees))}
 
 
 def convertir() -> dict:

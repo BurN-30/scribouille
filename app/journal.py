@@ -209,7 +209,8 @@ def formater_incident(exc: BaseException, contexte: str = "") -> dict:
         "titre": titre,
         "message": message,
         "log": nom_fichier(),
-        "detail": f"{type(exc).__name__}: {exc}"[:400],
+        # Un incident déjà rédigé pour l'utilisateur n'expose pas de nom interne.
+        "detail": (message if isinstance(exc, ErreurLisible) else f"{type(exc).__name__}: {exc}")[:400],
     }
 
 

@@ -623,6 +623,22 @@ def essai_documentation_livree() -> None:
     verifier(not casses, "chaque lien relatif des documents livrés mène à un document livré", "; ".join(casses))
 
 
+def essai_messages() -> None:
+    """Messages : pas de nom interne, pas de redite, pluriels justes."""
+    from app import journal, langues as langues_module
+
+    titre("Messages : sans nom interne ni redite, pluriels accordés")
+    incident = journal.formater_incident(journal.ErreurLisible("Déjà en cours ailleurs", "Un autre processus le transcrit."))
+    verifier("ErreurLisible" not in incident["detail"], "détail d'un incident rédigé : sans nom interne", incident["detail"])
+    message = langues_module.t("audio.illisible.msg", nom="faux.mp3", journal="2026-11-12.log")
+    titre_audio = langues_module.t("audio.illisible.titre")
+    verifier("illisible" not in message.lower() and "/" not in message and "faux.mp3" in message,
+             "fichier illisible : le message ne redit pas le titre, sans chemin à barres obliques",
+             f"{titre_audio} / {message}")
+    verifier(langues_module.tn("voc2.exporte", 1) == "1 terme actif exporté."
+             and langues_module.tn("voc2.exporte", 3) == "3 termes actifs exportés.", "« 1 terme actif exporté »")
+
+
 def principal() -> int:
     print(f"Vérification du socle de Scribouille\n{'=' * 40}")
     with tempfile.TemporaryDirectory(prefix="scribouille-socle-") as brut:
@@ -635,6 +651,7 @@ def principal() -> int:
         essai_migration(base)
         essai_instances(base)
     essai_documentation_livree()
+    essai_messages()
     print(f"\n{'=' * 40}")
     if _echecs:
         print(f"{_reussites} vérifications passées, {len(_echecs)} en échec :")

@@ -204,7 +204,7 @@ _FR: dict[str, str] = {
     "audio.decodage.titre": "Décodage impossible",
     "audio.decodage.msg": "Le décodeur n'a pas pu être lancé sur « {nom} ».",
     "audio.illisible.titre": "Fichier audio illisible",
-    "audio.illisible.msg": "« {nom} » est illisible : fichier abîmé, incomplet ou sans piste audio. Détail FFmpeg : logs/{journal}.",
+    "audio.illisible.msg": "Fichier abîmé, incomplet ou sans piste audio ({nom}). Détail dans le journal {journal}.",
     "audio.muet.titre": "Aucun son détecté",
     "audio.muet.msg": "« {nom} » ne contient aucune donnée audio exploitable.",
 
@@ -706,7 +706,8 @@ _FR: dict[str, str] = {
     "voc2.supprime": "« {forme} » retiré du vocabulaire.",
     "voc2.import_illisible": "Fichier de vocabulaire illisible : {detail}",
     "voc2.importe": "{ajoutees} propositions à relire ajoutées ({ignorees} déjà connues ou refusées).",
-    "voc2.exporte": "{n} termes actifs exportés.",
+    "voc2.exporte.un": "{n} terme actif exporté.",
+    "voc2.exporte.autres": "{n} termes actifs exportés.",
     "voc2.converti": (
         "{n} termes du glossaire et des corrections convertis. "
         "Les anciens fichiers sont sauvegardés à côté."
@@ -1628,7 +1629,7 @@ _EN: dict[str, str] = {
     "audio.decodage.titre": "Decoding failed",
     "audio.decodage.msg": "The decoder could not be started on \"{nom}\".",
     "audio.illisible.titre": "Unreadable audio file",
-    "audio.illisible.msg": "\"{nom}\" cannot be read: damaged or incomplete file, or no audio track. FFmpeg details: logs/{journal}.",
+    "audio.illisible.msg": "Damaged or incomplete file, or no audio track ({nom}). Details in the log {journal}.",
     "audio.muet.titre": "No sound found",
     "audio.muet.msg": "\"{nom}\" contains no usable audio data.",
 
@@ -2121,7 +2122,8 @@ _EN: dict[str, str] = {
     "voc2.supprime": "\"{forme}\" removed from the vocabulary.",
     "voc2.import_illisible": "Unreadable vocabulary file: {detail}",
     "voc2.importe": "{ajoutees} suggestions added for review ({ignorees} already known or rejected).",
-    "voc2.exporte": "{n} active terms exported.",
+    "voc2.exporte.un": "{n} active term exported.",
+    "voc2.exporte.autres": "{n} active terms exported.",
     "voc2.converti": (
         "{n} terms from the glossary and corrections converted. "
         "The old files are backed up next to them."

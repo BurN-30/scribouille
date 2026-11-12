@@ -1760,7 +1760,8 @@ def _vocabulaire_appliquer(options, sortie: Sortie, config: dict) -> int:
     remplacements = correcteur.corriger_segments(segments)
     (cible or source).write_text("\n".join(s.texte for s in segments), encoding="utf-8")
     sortie.donnees({"fichier": str((cible or source).resolve()), "remplacements": remplacements},
-                   f"{len(remplacements)} remplacement(s) : {(cible or source)}")
+                   (f"{len(remplacements)} remplacement" + ("s" if len(remplacements) > 1 else "")
+                    + f" : {(cible or source)}"))
     return OK
 
 
