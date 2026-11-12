@@ -1921,7 +1921,9 @@ class Passerelle:
         # compagnon recalé dessus une fois pour toutes.
         retour = lecture.charger(chemin, persister=True)
         retour["lecture_audio"] = bool(self.config.get("lecture_audio"))
-        retour["annulable"] = lecture.correction_annulable(chemin)
+        retour["niveaux"] = lecture.niveaux_annulables(chemin)
+        retour["annulable"] = retour["niveaux"] > 0
+        retour["original"] = lecture.original_disponible(chemin)
         # L'audio passe par le serveur local, jamais par un « file:// » que le
         # navigateur intégré refuse depuis une page servie en http.
         meta = retour.get("meta") or {}
@@ -1974,6 +1976,10 @@ class Passerelle:
             regles, _ = vocabulaire.analyser_corrections()
             retour["nb_corrections"] = len(regles)
         return retour
+
+    def revenir_original(self, chemin: str) -> dict:
+        """Remet la transcription dans son état d'avant toute modification (annulable)."""
+        return lecture.revenir_original(chemin)
 
     def annuler_remplacement(self, chemin: str, rang: int) -> dict:
         """Défait un remplacement du vocabulaire dans une transcription relue."""

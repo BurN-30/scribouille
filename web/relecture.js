@@ -756,11 +756,18 @@ async function appliquerCorrection() {
 }
 
 function majAnnulation() {
-  $('#rl-annuler').hidden = !(lect.d && lect.d.annulable);
+  const niveaux = (lect.d && lect.d.niveaux) || 0;
+  const bouton = $('#rl-annuler');
+  bouton.hidden = !(lect.d && lect.d.annulable);
+  bouton.title = niveaux > 1 ? tn('ui.rl.annuler_niveaux', niveaux) : '';
+  const original = !!(lect.d && lect.d.original);
+  $('#rl-original').hidden = !original;
+  $('#rl-sep-original').hidden = !original;
 }
 
 async function annulerCorrection() {
-  if (!lect.d || !lect.d.annulable) return;
+  if (!lect.d) return;
+  if (!lect.d.annulable) { statutRelecture(t('ui.rl.rien_a_annuler')); return; }
   const r = await ecrireRelecture(() => pywebview.api.annuler_correction(lect.chemin));
   if (r.nb_corrections !== undefined) majCorrections({ nb: r.nb_corrections, erreurs: [] });
   journaliser(r.ok ? 'ok' : 'attention', r.message);
@@ -837,6 +844,12 @@ async function exporter(nature) {
     pywebview.api.ouvrir(lect.chemin);
   } else if (nature === 'dossier') {
     appelPasserelle('ouvrir_dossier_de', lect.chemin).catch(() => pywebview.api.ouvrir_dossier_sortie());
+  } else if (nature === 'original') {
+    // Annulable comme une correction : pas de confirmation.
+    const r = await ecrireRelecture(() => appelPasserelle('revenir_original', lect.chemin));
+    journaliser(r.ok ? 'ok' : 'attention', r.message);
+    await chargerLecture(lect.chemin, true);
+    statutRelecture(r.message, r.ok ? 'ok' : 'erreur');
   }
 }
 

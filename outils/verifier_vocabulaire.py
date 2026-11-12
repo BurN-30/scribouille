@@ -765,6 +765,9 @@ def principal() -> int:
     print(f"Vérification du vocabulaire (format 2) de Scribouille\n{'=' * 52}")
     with tempfile.TemporaryDirectory(prefix="scribouille-voc-") as brut:
         base = Path(brut)
+        from app import lecture
+
+        lecture.DOSSIER_HISTORIQUE = base / "historique-relecture"
         for sous in ("migration", "apprentissage", "documents", "interface", "fusion"):
             (base / sous).mkdir()
         essai_lexique()

@@ -1058,6 +1058,49 @@ def essai_modifie_dehors(base: Path) -> None:
     verifier(donnees is not None, "le compagnon reste lisible après tout cela")
 
 
+def essai_annulation_profonde(base: Path) -> None:
+    """Annuler remonte cran par cran, survit à la fermeture, et l'original reste disponible."""
+    import importlib
+
+    from app import relecture
+
+    titre("Annulation : plusieurs niveaux, gardés sur le disque, original conservé")
+    dossier = base / "annulation"
+    dossier.mkdir()
+    txt = ecrire(dossier, reunion_sans_locuteurs(), {"txt": True, "srt": True})
+    etats = [{s: txt.with_suffix(s).read_bytes() for s in (".txt", ".json", ".srt")}]
+    for source, cible in (("budget", "Budget"), ("printemps", "Printemps"), ("vendredi", "Vendredi")):
+        relecture.corriger(txt, source, cible, "tous")
+        etats.append({s: txt.with_suffix(s).read_bytes() for s in (".txt", ".json", ".srt")})
+    niveaux = getattr(lecture, "niveaux_annulables", lambda _t: 1)(txt)
+    verifier(niveaux == 3, "trois corrections, trois niveaux d'annulation", str(niveaux))
+
+    # Le module est rechargé : rien ne vient de la mémoire de la session.
+    dossier_historique = lecture.DOSSIER_HISTORIQUE if hasattr(lecture, "DOSSIER_HISTORIQUE") else None
+    importlib.reload(lecture)
+    if dossier_historique is not None:
+        lecture.DOSSIER_HISTORIQUE = dossier_historique
+    for rang in (2, 1, 0):
+        retour = lecture.annuler_correction(txt)
+        actuel = {s: txt.with_suffix(s).read_bytes() for s in (".txt", ".json", ".srt")}
+        verifier(retour.get("ok") is True and actuel == etats[rang],
+                 f"annuler remonte d'un cran, à l'octet près (état {rang})", retour.get("message", ""))
+    verifier(lecture.annuler_correction(txt).get("message") == langues.t("lect.annulation.aucune"),
+             "au-delà : « Rien à annuler. »")
+
+    relecture.corriger(txt, "budget", "BUDGET", "tous")
+    relecture.corriger(txt, "congés", "vacances", "tous")
+    revenir = getattr(lecture, "revenir_original", None)
+    retour = revenir(txt) if revenir else {}
+    verifier(retour.get("ok") is True and txt.read_bytes() == etats[0][".txt"]
+             and txt.with_suffix(".json").read_bytes() == etats[0][".json"],
+             "revenir au texte d'origine remet les fichiers d'avant toute modification", str(retour))
+    verifier(lecture.annuler_correction(txt).get("ok") is True
+             and "vacances" in txt.read_text(encoding="utf-8"),
+             "revenir à l'original s'annule comme le reste")
+    verifier(lecture.controler(txt) == "", "après tout cela, l'écran est toujours le fichier")
+
+
 def principal() -> int:
     print(f"Vérification du parcours de l'utilisateur\n{'=' * 42}")
     with tempfile.TemporaryDirectory(prefix="scribouille-parcours-") as brut:
@@ -1067,6 +1110,7 @@ def principal() -> int:
         from app import vocabulaire_v2
 
         chemins.FICHIER_CORRECTIONS = base / "corrections.txt"
+        lecture.DOSSIER_HISTORIQUE = base / "historique-relecture"
         vocabulaire_v2.FICHIER_PERSONNEL = base / "vocabulaire.toml"
         essai_entete_apres_correction(base)
         essai_vue_egale_fichier(base)
@@ -1083,6 +1127,7 @@ def principal() -> int:
         essai_reunion_longue(base)
         essai_selection_exacte(base)
         essai_modifie_dehors(base)
+        essai_annulation_profonde(base)
         essai_accessibilite()
         essai_ecrans()
 

@@ -997,24 +997,103 @@ def _ecrire(etat: dict, nouveau_corps: str, donnees: dict | None) -> dict:
     return {"ok": True, "avant": avant, "apres": _photo(fichier)}
 
 
-#: Dernière modification de chaque fichier, de quoi la défaire : photos des
-#: fichiers et des règles avant et après. En mémoire, le temps de la session.
-_DERNIERES: dict[str, dict] = {}
+# -- historique des modifications, sur le disque ---------------------------
+
+#: Une pile par transcription, dans le dossier de données : chaque
+#: modification y garde les fichiers d'avant (texte, compagnon, sous-titres)
+#: et les règles d'avant, compressés. Elle survit à la fermeture de
+#: l'application ; l'état d'origine, photographié à la première modification,
+#: est gardé à part et n'est jamais retiré.
+DOSSIER_HISTORIQUE = chemins.RACINE / "historique-relecture"
+PROFONDEUR_HISTORIQUE = 50
+
+
+def _dossier_historique(fichier: Path) -> Path:
+    import hashlib
+
+    cle = hashlib.sha1(str(fichier.resolve()).lower().encode("utf-8")).hexdigest()[:16]
+    return DOSSIER_HISTORIQUE / cle
+
+
+def _ecrire_gz(chemin: Path, objet) -> None:
+    import gzip
+
+    provisoire = chemin.with_name(chemin.name + ".tmp")
+    with gzip.open(provisoire, "wt", encoding="utf-8") as flux:
+        json.dump(objet, flux, ensure_ascii=False)
+    os.replace(provisoire, chemin)
+
+
+def _lire_gz(chemin: Path):
+    import gzip
+
+    try:
+        with gzip.open(chemin, "rt", encoding="utf-8") as flux:
+            return json.load(flux)
+    except (OSError, ValueError, EOFError):
+        return None
+
+
+def _index_historique(dossier: Path) -> dict:
+    index = _lire_gz(dossier / "index.json.gz")
+    return index if isinstance(index, dict) and isinstance(index.get("pile"), list) else {}
+
+
+def _signature(photo: dict) -> dict:
+    import hashlib
+
+    return {s: (hashlib.sha256(c.encode("utf-8")).hexdigest() if c is not None else None)
+            for s, c in photo.items()}
+
+
+def _elaguer_historique() -> None:
+    """Retire les historiques des transcriptions qui n'existent plus."""
+    import shutil
+
+    try:
+        dossiers = list(DOSSIER_HISTORIQUE.iterdir())
+    except OSError:
+        return
+    for dossier in dossiers:
+        chemin = _index_historique(dossier).get("chemin")
+        if chemin and not Path(chemin).exists():
+            shutil.rmtree(dossier, ignore_errors=True)
 
 
 def _memoriser_annulation(fichier: Path, ecrit: dict, regles_avant: dict, regles_apres: dict,
                           regle_ajoutee: bool) -> None:
-    _DERNIERES[str(fichier.resolve())] = {
-        "avant": ecrit["avant"], "apres": ecrit["apres"],
-        "regles_avant": regles_avant, "regles_apres": regles_apres, "regle_ajoutee": regle_ajoutee,
-    }
+    """Empile une modification ; la plus ancienne sort au-delà de la profondeur."""
+    dossier = _dossier_historique(fichier)
+    try:
+        dossier.mkdir(parents=True, exist_ok=True)
+        index = _index_historique(dossier) or {"chemin": str(fichier.resolve()), "pile": [], "suivant": 1}
+        if not (dossier / "original.json.gz").exists():
+            _ecrire_gz(dossier / "original.json.gz", ecrit["avant"])
+        numero = int(index.get("suivant", 1))
+        _ecrire_gz(dossier / f"{numero}.json.gz", {
+            "avant": ecrit["avant"], "apres": _signature(ecrit["apres"]),
+            "regles_avant": regles_avant, "regles_apres": regles_apres, "regle_ajoutee": regle_ajoutee,
+            "date": datetime.now().isoformat(timespec="seconds"),
+        })
+        index["pile"].append(numero)
+        index["suivant"] = numero + 1
+        while len(index["pile"]) > PROFONDEUR_HISTORIQUE:
+            ancien = index["pile"].pop(0)
+            (dossier / f"{ancien}.json.gz").unlink(missing_ok=True)
+        _ecrire_gz(dossier / "index.json.gz", index)
+    except OSError as exc:
+        journal.attention("Historique de relecture non écrit pour %s : %s", fichier.name, exc)
+        return
+    _elaguer_historique()
 
 
-def modifier(chemin: str | Path, calcul, empreinte_attendue: str = "") -> dict:
+def modifier(chemin: str | Path, calcul, empreinte_attendue: str = "", memoriser: bool = True) -> dict:
     """
     Applique une modification calculée par `calcul(etat) -> (corps, donnees)`
-    et la rend annulable. `empreinte_attendue`, quand elle est donnée, est
-    celle que la vue a lue : si le fichier a changé depuis, rien n'est écrit.
+    et la rend annulable (sauf `memoriser=False` : l'appelant l'empile
+    lui-même, avec les règles qu'il touche). `empreinte_attendue`, quand elle
+    est donnée, est celle que la vue a lue : si le fichier a changé depuis,
+    rien n'est écrit.
     """
     fichier = Path(chemin or "")
     if not fichier.is_file():
@@ -1033,8 +1112,9 @@ def modifier(chemin: str | Path, calcul, empreinte_attendue: str = "") -> dict:
     if not ecrit["ok"]:
         ecrit["message"] = langues.t("lect.refus." + ecrit["code"])
         return ecrit
-    regles = _instantane_regles()
-    _memoriser_annulation(fichier, ecrit, regles, regles, False)
+    if memoriser:
+        regles = _instantane_regles()
+        _memoriser_annulation(fichier, ecrit, regles, regles, False)
     return {"ok": True, "annulable": True, "ecrit": ecrit}
 
 
@@ -1143,7 +1223,7 @@ def corriger_plages(chemin: str | Path, plages: list[tuple[int, int, str]], sour
     """
     fichier = Path(chemin or "")
     regles_avant = _instantane_regles()
-    retour = modifier(fichier, lambda etat: calculer_plages(etat, plages), empreinte_attendue)
+    retour = modifier(fichier, lambda etat: calculer_plages(etat, plages), empreinte_attendue, memoriser=False)
     if not retour["ok"]:
         return retour
     regle_ajoutee = False
@@ -1198,30 +1278,44 @@ def appliquer_correction(chemin: str | Path, source: str, cible: str,
 
 
 def correction_annulable(chemin: str | Path) -> bool:
-    return str(Path(chemin or "").resolve()) in _DERNIERES
+    return niveaux_annulables(chemin) > 0
+
+
+def niveaux_annulables(chemin: str | Path) -> int:
+    fichier = Path(chemin or "")
+    return len(_index_historique(_dossier_historique(fichier)).get("pile") or []) if fichier.name else 0
 
 
 def annuler_correction(chemin: str | Path) -> dict:
     """
     Défait la dernière modification de ce fichier : texte, compagnon,
-    sous-titres et, si elle avait été ajoutée, la règle. Rien n'est touché si
-    le fichier a été modifié entre-temps, par un éditeur par exemple : on
-    écraserait ce travail.
+    sous-titres et, si elle avait été ajoutée, la règle. Chaque appel remonte
+    d'un cran. Rien n'est touché si le fichier a été modifié entre-temps, par
+    un éditeur par exemple : on écraserait ce travail.
     """
     fichier = Path(chemin or "")
-    cle = str(fichier.resolve())
-    derniere = _DERNIERES.get(cle)
-    if not derniere:
+    dossier = _dossier_historique(fichier)
+    index = _index_historique(dossier)
+    if not index.get("pile"):
         return {"ok": False, "message": langues.t("lect.annulation.aucune")}
-    if _photo(fichier) != derniere["apres"]:
-        _DERNIERES.pop(cle, None)
+    numero = index["pile"][-1]
+    derniere = _lire_gz(dossier / f"{numero}.json.gz")
+    if not isinstance(derniere, dict) or _signature(_photo(fichier)) != derniere.get("apres"):
+        # Modifié ailleurs depuis : aucun cran de la pile ne s'applique plus.
+        # L'original, lui, reste disponible.
+        for ancien in index["pile"]:
+            (dossier / f"{ancien}.json.gz").unlink(missing_ok=True)
+        index["pile"] = []
+        _ecrire_gz(dossier / "index.json.gz", index)
         return {"ok": False, "message": langues.t("lect.annulation.modifie")}
     try:
         _remettre(fichier, derniere["avant"])
     except OSError as exc:
         journal.attention("Correction non annulée dans %s : %s", fichier, exc)
         return {"ok": False, "message": langues.t("lect.non_reecrit")}
-    _DERNIERES.pop(cle, None)
+    index["pile"].pop()
+    _ecrire_gz(dossier / "index.json.gz", index)
+    (dossier / f"{numero}.json.gz").unlink(missing_ok=True)
 
     message = langues.t("lect.annulation.faite")
     remis = _remettre_regles(derniere["regles_avant"], derniere["regles_apres"])
@@ -1232,6 +1326,41 @@ def annuler_correction(chemin: str | Path) -> dict:
         message += " " + langues.t("lect.annulation.proposition")
     journal.info("Correction annulée dans %s%s", fichier.name, ", règle retirée" if regle_retiree else "")
     return {"ok": True, "message": message, "regle_retiree": regle_retiree}
+
+
+def original_disponible(chemin: str | Path) -> bool:
+    """L'état d'avant la première modification est gardé, et diffère de l'état actuel."""
+    fichier = Path(chemin or "")
+    original = _lire_gz(_dossier_historique(fichier) / "original.json.gz") if fichier.name else None
+    return isinstance(original, dict) and original.get(".txt") is not None and original != _photo(fichier)
+
+
+def revenir_original(chemin: str | Path) -> dict:
+    """
+    Remet la transcription telle qu'elle était avant toute modification :
+    texte, compagnon et sous-titres d'origine. C'est une modification comme
+    une autre : contrôlée, et annulable.
+    """
+    fichier = Path(chemin or "")
+    original = _lire_gz(_dossier_historique(fichier) / "original.json.gz") if fichier.name else None
+    if not isinstance(original, dict) or original.get(".txt") is None:
+        return {"ok": False, "code": "sans_original", "message": langues.t("lect.original.absent")}
+    avant = _photo(fichier)
+    if original == avant:
+        return {"ok": False, "code": "deja_original", "message": langues.t("lect.original.deja")}
+    try:
+        _remettre(fichier, original)
+    except OSError as exc:
+        journal.attention("Original non remis dans %s : %s", fichier, exc)
+        return {"ok": False, "code": "non_reecrit", "message": langues.t("lect.non_reecrit")}
+    ecart = controler(fichier)
+    if ecart:
+        _remettre(fichier, avant)
+        return {"ok": False, "code": "ecart", "message": langues.t("lect.refus.ecart")}
+    regles = _instantane_regles()
+    _memoriser_annulation(fichier, {"avant": avant, "apres": _photo(fichier)}, regles, regles, False)
+    journal.info("Transcription remise dans son état d'origine : %s", fichier.name)
+    return {"ok": True, "annulable": True, "message": langues.t("lect.original.remis")}
 
 
 def _fichiers_de_regles() -> list[Path]:

@@ -26,6 +26,10 @@ gabarit-ia.txt
 logs/
 modeles/
 reprises/
+# Historique des modifications faites en relecture (contient du texte de
+# réunion) et dernière position de relecture de chaque transcription.
+historique-relecture/
+relecture-positions.json
 # Séparation des locuteurs installée depuis l'application, et son cache de
 # téléchargement. Plusieurs gigaoctets de bibliothèques, jamais versionnés.
 extensions/
