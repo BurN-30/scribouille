@@ -748,6 +748,8 @@ function ouvrirCorrection() {
   const sel = lect.selection || lireSelection();
   if (!sel || !lect.d) return;
   lect.selection = sel;
+  // L'audio ne continue pas pendant qu'on tape la correction.
+  if (!son().paused) son().pause();
   $('#correction-source').value = sel.source;
   $('#correction-cible').value = sel.source;
   // La regle vaut pour toutes les transcriptions a venir : c'est un choix

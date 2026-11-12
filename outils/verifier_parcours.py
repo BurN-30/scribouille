@@ -1238,7 +1238,9 @@ def essai_finition() -> None:
             ("seules les catégories non vides sont proposées", "ui.rl.rien_a_verifier"),
             ("file vide masquée, « Arrêter » seulement pendant un calcul", "$('#btn-arreter').hidden = !etat.enCours;"),
             ("rien à libérer : une phrase, pas un bouton grisé", "$('#espace-rien').hidden"),
-            ("seule la forme risquée est barrée", "Seule la forme risquée est barrée")):
+            ("seule la forme risquée est barrée", "Seule la forme risquée est barrée"),
+            ("l'écoute se met en pause quand la fenêtre de correction s'ouvre",
+             "L'audio ne continue pas pendant qu'on tape la correction.")):
         verifier(preuve in js, f"finition : {constat}")
     verifier("_entete_historique" in passerelle,
              "les transcriptions listées donnent la durée et la date de la réunion, plus la taille du fichier")
