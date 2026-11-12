@@ -378,6 +378,8 @@ def rediger_rapport_reunions(voc: Vocabulaire, par_reunion: list[dict], echecs: 
                              peripherique: str, duree_totale: float) -> str:
     lignes = [f"{NOM_APPLICATION} {VERSION} : mesure du vocabulaire sur des réunions, {datetime.now():%Y-%m-%d %H:%M}",
               ""] + _entete("camp.rapport.titre")[2:]
+    if not peripherique and par_reunion:
+        peripherique = str(par_reunion[0].get("_meta", {}).get("peripherique") or "")
     lignes += [f"Réglage : {reglage}, périphérique {peripherique or '?'}",
                f"Réunions mesurées : {len(par_reunion)}" + (f" ; écartées : {dict(echecs)}" if echecs else "")]
     lignes += lignes_vocabulaire(voc, "vocabulaire mesuré")
