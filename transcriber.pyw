@@ -560,6 +560,7 @@ class Passerelle:
         if not (reussis or echecs) or self._fenetre is None or not self.config.get("prevenir_fin", True):
             return
         if barre_taches.au_premier_plan():
+            journal.info("Fin de file : fenêtre au premier plan, rien à signaler")
             return
         titre = langues.tn("app.titre_fin", reussis, nom=NOM_APPLICATION)
         try:
@@ -570,7 +571,9 @@ class Passerelle:
         texte = (langues.tn("app.notif.reussies", reussis) if not echecs
                  else langues.t("app.notif.bilan", reussies=langues.tn("app.notif.reussies", reussis),
                                 echecs=langues.tn("app.notif.echecs", echecs)))
-        barre_taches.notifier(titre, texte)
+        notifiee = barre_taches.notifier(titre, texte)
+        journal.info("Fin de file signalée : titre, clignotement, notification %s",
+                     "affichée" if notifiee else "impossible (fenêtre introuvable)")
 
     def titre_normal(self) -> None:
         """Appelé par l'interface quand la fenêtre reprend la main."""

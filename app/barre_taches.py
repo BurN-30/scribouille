@@ -231,7 +231,9 @@ def au_premier_plan() -> bool:
     if _hors_service or not _hwnd or sys.platform != "win32":
         return False
     try:
-        return int(ctypes.windll.user32.GetForegroundWindow() or 0) == _hwnd
+        user32 = ctypes.windll.user32
+        # Réduite, elle peut rester « au premier plan » pour Windows : elle ne l'est pas pour l'œil.
+        return int(user32.GetForegroundWindow() or 0) == _hwnd and not user32.IsIconic(ctypes.c_void_p(_hwnd))
     except Exception:
         return False
 
