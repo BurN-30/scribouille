@@ -6,6 +6,49 @@ version : la chaîne de publication en extrait la section correspondant au tag.
 
 ---
 
+## 2.5.0
+
+*Non publiée.*
+
+Plus léger, plus vite ouvert, sans rien changer à la justesse.
+
+- **Démarrage** : la fenêtre n'attend plus la détection du matériel. Cartes
+  graphiques, NPU, CUDA et périphériques d'OpenVINO sont gardés dans
+  `materiel.json` et relus en arrière-plan après l'affichage, par un
+  processus à part ; plus aucun PowerShell (WMI et SetupAPI dans le
+  processus). numpy, CTranslate2, faster-whisper et PyAV ne sont chargés
+  qu'au lancement d'une transcription. Mesuré sur le paquet, à chaud : page
+  prête en 1,1 s au lieu de 2,2 s, 70 Mo de mémoire engagée au repos au lieu
+  de 612 Mo.
+- **Une seule FFmpeg** : le décodage passe par PyAV, déjà livré avec
+  faster-whisper (mêmes échantillons que la ligne de commande d'avant) ; le
+  paquet perd l'exécutable d'imageio-ffmpeg, 84 Mo. Une réunion d'une heure
+  se décode avec deux fois moins de mémoire.
+- **File** : le modèle reste chargé d'un fichier à l'autre quand le réglage
+  ne change pas ; il est rendu avant la séparation des voix, après un échec,
+  quand la mémoire libre passe sous 2 Go, et à la fin de la file.
+- **Garde-fou des répétitions** : une courte boucle de mots au milieu d'une
+  fenêtre ordinaire est maintenant repérée (elle échappait au taux de
+  compression), la fenêtre refaite en faisceau puis par échantillonnage, puis
+  par CTranslate2 si le même modèle est déjà sur le disque ; en dernier
+  recours, la suite répétée est gardée une fois.
+- **Réglage proposé** : les phrases ne contiennent plus de vitesse fixe, elles
+  reprennent les durées annoncées sur le poste ; l'installation du moteur
+  Intel est proposée sur tout processeur sans carte NVIDIA.
+- **Dossier de données** : `%LOCALAPPDATA%\WhiScribe` devient
+  `%LOCALAPPDATA%\Scribouille` au premier lancement, par renommage, sans rien
+  perdre ni retélécharger ; seuls les fichiers de Scribouille sont déplacés (un
+  projet homonyme range ses modèles au même endroit). Retour arrière :
+  `scribouille-verifier.exe --revenir-whiscribe`. La désinstallation n'efface
+  plus que les entrées de Scribouille.
+- **Vérification continue** : les vérificateurs rapides tournent à chaque
+  envoi (`.github/workflows/verifications.yml`), sans rien publier.
+- **Vocabulaire et relecture** : une correction mémorisée va dans le
+  vocabulaire du format 2 quand le format 1 est vide ou converti ;
+  l'annulation retire aussi la règle ou la proposition ajoutée ; le texte de
+  la relecture reste celui du fichier, mots corrigés marqués ; plus de
+  doublon « Réseaux sociaux sociaux » ni de casse oubliée (« pierre »).
+
 ## 2.4.1
 
 *Non publiée.*
