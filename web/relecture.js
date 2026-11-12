@@ -1162,8 +1162,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Correction
   $('#correction-cible').addEventListener('input', majQuestionRegle);
-  $('#correction-cible').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); appliquerCorrection(); }
+  // Entree valide depuis toute la fenetre (champ, case « Memoriser », liens
+  // « Tout cocher ») ; seuls « Annuler » et la croix gardent leur role.
+  $('#modale-correction').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || e.shiftKey || e.target.closest('[data-fermer]')) return;
+    e.preventDefault();
+    appliquerCorrection();
   });
   $('#apercu-correction').addEventListener('change', () => {
     // Une case decochee a la main : « tout » ne vaut plus pour les endroits non listes.

@@ -745,6 +745,8 @@ def essai_ecrans() -> None:
                           ("5 s en arrière ou en avant aux flèches", "deplacer(touche === 'ArrowLeft' ? -5 : 5)"),
                           ("recherche par Ctrl+F", "(touche === 'f' || touche === 'F')"),
                           ("point à vérifier suivant par N", "touche === 'n' || touche === 'N'"),
+                          ("Entrée valide depuis toute la fenêtre de correction",
+                           "$('#modale-correction').addEventListener('keydown'"),
                           ("clic sur un mot : l'écoute s'y place", "placerA(Math.max(0, lect.mots[i].d")):
         verifier(preuve in js, f"relecture : {geste}")
     piege = re.search(r"function pieger.*?querySelectorAll\(\s*'([^']*)'", js, re.S)
