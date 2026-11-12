@@ -1184,6 +1184,10 @@ def essai_depot_mele() -> None:
 def essai_ce_que_l_ecran_affirme(base: Path) -> None:
     """Ce que l'écran dit doit être vrai : heures, avis, moteur, durées, dépôt."""
     titre("Ce que l'écran affirme : heures, avis d'écoute, moteur, durées, dépôt")
+    from app import config as config_module
+
+    verifier(config_module.DEFAUTS["formats"]["horodatage"] is True,
+             "par défaut, le .txt porte l'heure de chaque paragraphe")
 
     js = "\n".join((RACINE / "web" / nom).read_text(encoding="utf-8") for nom in ("app.js", "relecture.js"))
     passerelle = (RACINE / "transcriber.pyw").read_text(encoding="utf-8")

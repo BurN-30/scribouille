@@ -139,7 +139,8 @@ fr: {
   'ui.format.txt': 'Texte (.txt)',
   'ui.format.srt': 'Sous-titres (.srt)',
   'ui.format.vtt': 'Sous-titres (.vtt)',
-  'ui.format.horodatage': 'Horodater chaque paragraphe du texte',
+  'ui.format.horodatage': "Heure en tête de chaque paragraphe",
+  'ui.format.horodatage_aide': "Coché par défaut : depuis le compte rendu, on retrouve le passage dans l'enregistrement. « Copier le texte » copie le fichier tel quel ; la relecture montre l'heure dans la marge.",
   'ui.format.un_minimum': 'Au moins un format de sortie doit rester coché.',
 
   /* -- réglages : dossier surveillé ------------------------------------- */
@@ -929,7 +930,8 @@ en: {
   'ui.format.txt': 'Text (.txt)',
   'ui.format.srt': 'Subtitles (.srt)',
   'ui.format.vtt': 'Subtitles (.vtt)',
-  'ui.format.horodatage': 'Timestamp every paragraph of the text',
+  'ui.format.horodatage': "Time at the head of each paragraph",
+  'ui.format.horodatage_aide': "On by default: from the minutes, you can find the passage in the recording. \"Copy the text\" copies the file as is; the review shows the time in the margin.",
   'ui.format.un_minimum': 'At least one output format has to stay ticked.',
 
   'ui.section.veille': 'Watched folder',

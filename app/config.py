@@ -20,7 +20,9 @@ DEFAUTS: dict = {
     "dossier_sortie": "",
     "diarisation": True,
     "nb_locuteurs": 0,              # 0 = détection automatique
-    "formats": {"txt": True, "srt": False, "vtt": False, "horodatage": False},
+    # Heure en tête de chaque paragraphe du .txt, par défaut : depuis un compte
+    # rendu, on retrouve le passage dans l'enregistrement.
+    "formats": {"txt": True, "srt": False, "vtt": False, "horodatage": True},
     "appliquer_corrections": True,
     "utiliser_glossaire": True,
     "compagnon_confiance": True,    # fichier .json de confiance à côté des sorties
