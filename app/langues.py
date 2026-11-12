@@ -1194,9 +1194,8 @@ _FR: dict[str, str] = {
         "Il va être renouvelé automatiquement, environ {taille} vers « {dossier} »."
     ),
     "app.arret": (
-        "Arrêt demandé : la transcription s'interrompt à la fin du lot de passages en "
-        "cours, ce qui peut prendre plus d'une minute sur processeur. Avec la "
-        "sauvegarde progressive, le texte déjà produit est conservé."
+        "Arrêté. Avec la sauvegarde progressive, le texte déjà produit est conservé : "
+        "relancer le fichier reprend où il en était."
     ),
     "app.fichier_disparu": "Ce fichier n'existe plus.",
     "app.copie_ia": (
@@ -2655,9 +2654,8 @@ _EN: dict[str, str] = {
         "It will be renewed automatically, about {taille} into \"{dossier}\"."
     ),
     "app.arret": (
-        "Stop requested: the transcription stops at the end of the current batch of "
-        "passages, which can take more than a minute on a CPU. With progressive "
-        "saving, text already produced is kept."
+        "Stopped. With progressive saving, text already produced is kept: running "
+        "the file again resumes where it was."
     ),
     "app.fichier_disparu": "This file no longer exists.",
     "app.copie_ia": (

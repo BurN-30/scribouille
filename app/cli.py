@@ -710,14 +710,15 @@ def cmd_etat(options, sortie: Sortie) -> int:
 
     maintenant = time.time()
     taches = []
+    # « en_cours » : un moteur tourne et la sauvegarde a bougé dans la minute.
+    moteurs = _moteurs_actifs()
     for r in reprise.lister():
         try:
             maj = time.mktime(time.strptime(str(r.get("date") or "")[:19], "%Y-%m-%dT%H:%M:%S"))
         except ValueError:
             maj = 0.0
-        taches.append({**r, "etat": "en_cours" if maintenant - maj < 60 else "interrompue",
+        taches.append({**r, "etat": "en_cours" if moteurs and maintenant - maj < 60 else "interrompue",
                        "reprendre": f"scribouille reprendre {r['cle']}"})
-    moteurs = _moteurs_actifs()
     lignes = [f"Moteurs actifs : {len(moteurs)}"] + [f"  PID {m['pid']}, {langues.octets(m['memoire_octets'])}"
                                                       for m in moteurs]
     lignes.append(f"Transcriptions reprenables : {len(taches)}")
@@ -1035,7 +1036,8 @@ def _tableau(postes: list[dict]) -> str:
     lignes = []
     for p in postes:
         marque = "  libérable" if p.get("liberable") else ""
-        lignes.append(f"  {p['libelle'][:38]:<38} {p['taille']:>10}  [{p['cle']}]{marque}")
+        cle = "" if p["cle"].startswith("modele:") else f"  [{p['cle']}]"
+        lignes.append(f"  {p['libelle'][:64]:<64} {p['taille']:>10}{cle}{marque}")
     return "\n".join(lignes)
 
 
