@@ -1217,9 +1217,11 @@ def cmd_exporter(options, sortie: Sortie) -> int:
         raise Echec(str(resultat.get("code") or "echec"), f"export non écrit : {resultat.get('code')}", ECHEC_PARTIEL)
     texte = f"Export écrit : {resultat['chemin']}"
     if resultat.get("variante"):
-        texte += " (l'export précédent a été modifié ou n'est pas de Scribouille : gardé tel quel)"
+        texte += " (l'export de base a été modifié ou n'est pas de Scribouille : gardé tel quel" + (
+            " ; variante intacte remplacée)" if resultat.get("remplace") else ")")
     elif resultat.get("remplace"):
-        texte += " (remplace l'export précédent, intact)"
+        texte += (" (remplace l'export précédent, intact)" if resultat.get("precedent_intact")
+                  else " (remplace l'export précédent, retouché à la main : --remplacer)")
     sortie.donnees(resultat, texte)
     return OK
 

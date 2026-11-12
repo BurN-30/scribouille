@@ -295,16 +295,32 @@ def enregistrer_export(chemin: str | Path, extension: str, contenu: str,
     cible = fichier.parent / f"{fichier.stem}{extension}"
     exports = _lire_exports()
     remplace = variante = False
-    if cible.exists():
+    intact = True
+
+    def est_intact(chemin: Path) -> bool:
         try:
-            intact = exports.get(_cle_export(cible)) == _empreinte(cible.read_bytes())
+            return exports.get(_cle_export(chemin)) == _empreinte(chemin.read_bytes())
         except OSError:
-            intact = False
+            return False
+
+    if cible.exists():
+        intact = est_intact(cible)
         if remplacer is True or (remplacer is None and intact):
             remplace = True
         else:
-            cible = sorties.chemin_libre(fichier.parent, fichier.stem, extension)
             variante = True
+            # Une variante déjà écrite par Scribouille et restée intacte est
+            # reprise : les exports successifs ne s'accumulent pas en -2, -3...
+            reprise = None
+            if remplacer is None:
+                motif = re.compile(re.escape(fichier.stem) + r"-(\d+)" + re.escape(extension) + "$", re.IGNORECASE)
+                candidates = sorted((int(m.group(1)), c) for c in fichier.parent.iterdir()
+                                    if (m := motif.match(c.name)) and c.is_file() and est_intact(c))
+                reprise = candidates[-1][1] if candidates else None
+            if reprise is not None:
+                cible, remplace = reprise, True
+            else:
+                cible = sorties.chemin_libre(fichier.parent, fichier.stem, extension)
     octets = (contenu or "").encode("utf-8")
     try:
         provisoire = cible.with_name(cible.name + ".scribouille-tmp")
@@ -320,4 +336,5 @@ def enregistrer_export(chemin: str | Path, extension: str, contenu: str,
     except OSError as exc:
         journal.attention("Empreinte de l'export non gardée : %s", exc)
     journal.info("Export écrit : %s (%s)", cible, "remplacé" if remplace else "variante" if variante else "nouveau")
-    return {"ok": True, "chemin": str(cible), "nom": cible.name, "remplace": remplace, "variante": variante}
+    return {"ok": True, "chemin": str(cible), "nom": cible.name, "remplace": remplace, "variante": variante,
+            "precedent_intact": intact}

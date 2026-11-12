@@ -867,10 +867,22 @@ def essai_relecture_ciblee(base: Path) -> None:
         verifier(troisieme.get("ok") and troisieme["variante"] and troisieme["chemin"] != second["chemin"]
                  and "Note ajoutée" in Path(second["chemin"]).read_text(encoding="utf-8"),
                  "un export retouché à la main est gardé : variante numérotée, dite", str(troisieme))
+        variantes = [relecture.enregistrer_export(txt, ".md", f"# Encore {n}\n") for n in range(3)]
+        verifier(all(v["chemin"] == troisieme["chemin"] and v["variante"] and v["remplace"] for v in variantes)
+                 and len(list(txt.parent.glob("*.md"))) == 2
+                 and Path(troisieme["chemin"]).read_text(encoding="utf-8") == "# Encore 2\n",
+                 "exports suivants : la variante intacte est reprise, pas de -3, -4...",
+                 str([Path(v["chemin"]).name for v in variantes]))
+        Path(troisieme["chemin"]).write_text("# Encore 2\nretouchée aussi\n", encoding="utf-8")
+        quatrieme = relecture.enregistrer_export(txt, ".md", "# Encore\n")
+        verifier(quatrieme["chemin"] not in (second["chemin"], troisieme["chemin"])
+                 and "retouchée aussi" in Path(troisieme["chemin"]).read_text(encoding="utf-8"),
+                 "une variante retouchée à son tour est gardée : nouvelle variante")
         force = relecture.enregistrer_export(txt, ".md", "# Forcé\n", remplacer=True)
-        verifier(force["chemin"] == second["chemin"] and force["remplace"], "--remplacer force le remplacement")
+        verifier(force["chemin"] == second["chemin"] and force["remplace"] and force["precedent_intact"] is False,
+                 "--remplacer force le remplacement, et dit que l'export était retouché")
         nouveau = relecture.enregistrer_export(txt, ".md", "# Neuf\n", remplacer=False)
-        verifier(nouveau["variante"] and nouveau["chemin"] not in (second["chemin"], troisieme["chemin"]),
+        verifier(nouveau["variante"] and nouveau["chemin"] not in (second["chemin"], troisieme["chemin"], quatrieme["chemin"]),
                  "--nouveau force une variante")
         md = relecture.markdown(txt)
         verifier(md.startswith("# ") and "Alice" not in md.splitlines()[0],
