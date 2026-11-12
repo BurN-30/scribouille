@@ -2117,6 +2117,72 @@ def essai_campagne(base: Path) -> None:
 
 
 
+def essai_campagne_candidats(base: Path) -> None:
+    """Modèles candidats : sur demande seulement, hors verdict, interprète à part, poids absents."""
+    titre("Campagne : modèles candidats")
+    import os
+    from app import campagne as cp
+
+    verifier([r.cle for r in cp._choisir("")] == [r.cle for r in cp.CANDIDATS]
+             and not any(r.candidat for r in cp.CANDIDATS),
+             "sans --reglages, la campagne ne passe que les réglages de l'application")
+    choisis = [r.cle for r in cp._choisir("candidats")]
+    verifier(choisis == [r.cle for r in cp.MODELES_CANDIDATS] and all(cp.PAR_CLE[c].candidat for c in choisis),
+             "« candidats » choisit tous les modèles candidats, et seulement eux")
+    verifier([r.cle for r in cp._choisir("ov-turbo-f1,candidats,ov-turbo-f1")][:2]
+             == ["ov-turbo-f1", cp.MODELES_CANDIDATS[0].cle],
+             "réglages et groupe mêlés, sans doublon")
+    verifier(len(cp._choisir("tous")) == len(cp.TOUS) == len(cp.PAR_CLE),
+             "« tous » choisit le tout, chaque clé est unique")
+    verifier(all(r.revision or r.converti for r in cp.MODELES_CANDIDATS),
+             "chaque candidat téléchargé a sa révision figée")
+    verifier("glouton" in cp.libelle(cp.PAR_CLE["onnx-parakeet3"])
+             and "cohere" in cp.libelle(cp.PAR_CLE["hf-cohere"]),
+             "libellé des moteurs de mesure")
+
+    # Verdict : les candidats sont situés, jamais retenus.
+    ordre = ["e1", "e2"]
+    par = {c: {i: {"erreurs": e, "mots_ref": 100} for i in ordre}
+           for c, e in (("ov-turbo-f1", 30), ("ct2-frd16-f5", 10))}
+    application = [c for c in par if not cp.PAR_CLE[c].candidat]
+    decision = cp.verdict({c: {"etat": "ok", "facteur": 0.1, "wer": par[c]["e1"]["erreurs"]} for c in application},
+                          ordre, {c: par[c] for c in application})
+    verifier(decision["retenu"] == "ov-turbo-f1" and "ct2-frd16-f5" not in decision["lignes"],
+             "un candidat plus juste n'entre pas dans le verdict (rien ne peut l'appliquer)")
+
+    # Poids absents : état « modele_absent », sans appel réseau.
+    modeles_reels = cp.chemins.DOSSIER_MODELES
+    cp.chemins.DOSSIER_MODELES = base / "candidats-vide"
+    cp.chemins.DOSSIER_MODELES.mkdir()
+    try:
+        verifier(cp.chemin_poids(cp.PAR_CLE["ct2-frv3-f5"]) == "" and cp.chemin_poids(cp.PAR_CLE["ov-frd16-f1"]) == "",
+                 "poids absents ou conversion pas faite : chemin vide")
+    finally:
+        cp.chemins.DOSSIER_MODELES = modeles_reels
+
+    # Moteur de mesure sans interprète désigné : non lancé, dit pourquoi.
+    lances: list[str] = []
+    lancer_reel = cp.lancer_reglage
+    cp.lancer_reglage = lambda parametres, *a, **k: lances.append(parametres) or {"cle": parametres["cle"], "etat": "ok"}
+    ancien = os.environ.pop(cp.VARIABLE_PYTHON_CANDIDATS, None)
+    try:
+        resultats = cp._jouer([cp.PAR_CLE["onnx-parakeet3"]], [{"id": "e1", "wav": "e1.wav", "duree_s": 60.0}],
+                              base / "candidats-jouer", "CPU", {"langue": "fr"}, lambda m: None, None)
+        verifier(resultats["onnx-parakeet3"]["etat"] == "moteur_absent" and not lances,
+                 "moteur de mesure sans interprète : non lancé, état « moteur_absent »")
+        os.environ[cp.VARIABLE_PYTHON_CANDIDATS] = sys.executable
+        cp._jouer([cp.PAR_CLE["onnx-parakeet3"]], [{"id": "e1", "wav": "e1.wav", "duree_s": 60.0}],
+                  base / "candidats-jouer-2", "CPU", {"langue": "fr"}, lambda m: None, None)
+        verifier(lances and lances[0].get("interprete") == sys.executable
+                 and cp.commande_essai(lances[0])[0][0] == sys.executable,
+                 "avec l'interprète désigné, le réglage tourne dans cet interprète")
+    finally:
+        cp.lancer_reglage = lancer_reel
+        os.environ.pop(cp.VARIABLE_PYTHON_CANDIDATS, None)
+        if ancien is not None:
+            os.environ[cp.VARIABLE_PYTHON_CANDIDATS] = ancien
+
+
 def essai_campagne_limites(base: Path) -> None:
     """Faisceau sur la puce graphique non pris en charge, réglage de comparaison des réunions."""
     titre("Campagne : limites du périphérique, réglage de comparaison")
@@ -2616,6 +2682,7 @@ def principal() -> int:
         essai_comparaison(base)
         essai_campagne(base)
         essai_campagne_limites(base)
+        essai_campagne_candidats(base)
         essai_openvino_faisceau()
         essai_filet_openvino()
         essai_endurance(base)
