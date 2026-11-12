@@ -326,9 +326,40 @@ def appliquer(texte: str, regles: list[Correction]) -> tuple[str, int]:
         return texte, 0
     total = 0
     for regle in regles:
-        texte, nombre = regle.motif.subn(regle.cible, texte)
+        texte, nombre = _remplacer(regle, texte)
         total += nombre
     return texte, total
+
+
+def _remplacer(regle: Correction, texte: str) -> tuple[str, int]:
+    """
+    Une règle sur un texte. Ne compte que les changements réels.
+
+    Deux garde-fous : une occurrence déjà écrite sous la forme corrigée n'est
+    pas réécrite (« gitlab => GitLab » laisse « GitLab » tel quel), et quand la
+    forme corrigée contient la forme entendue (« réseaux => réseaux sociaux »),
+    une occurrence qui fait déjà partie de la forme corrigée n'est pas touchée :
+    sans cela, chaque passage ajoutait un « sociaux » de plus.
+    """
+    proteges: list[tuple[int, int]] = []
+    if regle.source.lower() in regle.cible.lower() and regle.source.lower() != regle.cible.lower():
+        cible = re.sub(r"\\?\s+", r"\\s+", re.escape(regle.cible))
+        motif_cible = re.compile(rf"(?<!\w){cible}(?!\w)", re.IGNORECASE | re.UNICODE)
+        proteges = [trouve.span() for trouve in motif_cible.finditer(texte)]
+    nombre = 0
+
+    def remplacement(trouve: re.Match) -> str:
+        nonlocal nombre
+        if trouve.group(0) == regle.cible:
+            return trouve.group(0)
+        if any(debut <= trouve.start() and trouve.end() <= fin for debut, fin in proteges):
+            return trouve.group(0)
+        nombre += 1
+        return regle.cible
+
+    # Un remplacement par fonction : la forme corrigée est prise à la lettre,
+    # une barre oblique inverse n'y est jamais lue comme un renvoi de motif.
+    return regle.motif.sub(remplacement, texte), nombre
 
 
 # ---------------------------------------------------------------------------
@@ -366,7 +397,9 @@ def verifier_regle(source: str, cible: str) -> str:
         return langues.t("regle.selection_vide")
     if not cible:
         return langues.t("regle.cible_vide")
-    if source.lower() == cible.lower():
+    # Une correction de casse (« gitlab » vers « GitLab ») est une vraie
+    # correction : seule une forme strictement identique est refusée.
+    if source == cible:
         return langues.t("regle.identique")
     for valeur, cle_etiquette in ((source, "regle.etiquette.source"),
                                   (cible, "regle.etiquette.cible")):

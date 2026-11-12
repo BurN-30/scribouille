@@ -22,7 +22,7 @@ RACINE = Path(__file__).resolve().parent.parent
 if str(RACINE) not in sys.path:
     sys.path.insert(0, str(RACINE))
 
-from app import chemins, langues, lecture, sorties  # noqa: E402
+from app import chemins, langues, lecture, sorties, vocabulaire  # noqa: E402
 from app.moteur import Mot, Segment  # noqa: E402
 
 # Les contrôles comparent des chaînes produites par l'application.
@@ -135,6 +135,31 @@ def essai_vue_egale_fichier(base: Path) -> None:
              "après correction, la vue suit toujours le fichier")
 
 
+def essai_casse_et_doublons(base: Path) -> None:
+    titre("Corrections : la casse se corrige, une forme étendue ne se répète pas")
+    regle = lambda s, c: vocabulaire.analyser_corrections(f"{s} => {c}")[0]  # noqa: E731
+    verifier(vocabulaire.verifier_regle("gitlab", "GitLab") == "", "« gitlab » vers « GitLab » accepté")
+    verifier(bool(vocabulaire.verifier_regle("api", "api")), "une forme strictement identique reste refusée")
+    texte, n = vocabulaire.appliquer("le gitlab, le GitLab et le GITLAB", regle("gitlab", "GitLab"))
+    verifier(texte == "le GitLab, le GitLab et le GitLab" and n == 2,
+             "seules les formes à changer sont comptées", f"{texte!r}, {n}")
+    phrase = "les réseaux sociaux, puis les réseaux"
+    texte, n = vocabulaire.appliquer(phrase, regle("réseaux", "réseaux sociaux"))
+    verifier(texte == "les réseaux sociaux, puis les réseaux sociaux" and n == 1,
+             "aucun « réseaux sociaux sociaux »", f"{texte!r}, {n}")
+    texte2, n2 = vocabulaire.appliquer(texte, regle("réseaux", "réseaux sociaux"))
+    verifier(texte2 == texte and n2 == 0, "une seconde application ne change rien", f"{texte2!r}, {n2}")
+    texte, n = vocabulaire.appliquer("chemin a", regle("a", r"b\1"))
+    verifier(texte == r"chemin b\1", "une barre oblique inverse est prise à la lettre", texte)
+
+    dossier = base / "casse"
+    dossier.mkdir()
+    txt = ecrire(dossier, [segment(0.0, 4.0, jetons("On pousse sur gitlab ce soir."))])
+    retour = lecture.appliquer_correction(txt, "gitlab", "GitLab", ajouter_regle=False)
+    verifier(retour.get("ok") is True and "sur GitLab ce soir" in txt.read_text(encoding="utf-8"),
+             "la relecture corrige la casse dans le fichier", str(retour))
+
+
 def principal() -> int:
     print(f"Vérification du parcours de l'utilisateur\n{'=' * 42}")
     with tempfile.TemporaryDirectory(prefix="scribouille-parcours-") as brut:
@@ -144,6 +169,7 @@ def principal() -> int:
         chemins.FICHIER_CORRECTIONS = base / "corrections.txt"
         essai_entete_apres_correction(base)
         essai_vue_egale_fichier(base)
+        essai_casse_et_doublons(base)
 
     print(f"\n{'=' * 42}")
     if _echecs:

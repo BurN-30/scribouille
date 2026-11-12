@@ -51,6 +51,10 @@ Corrections issues d'une revue d'usage de l'application réelle (vérifiées par
   apostrophe ou un trait d'union (« c 'est », « peut -être »), garde les mots
   que le moteur n'a pas détaillés, et « Copier le texte » copie le corps du
   fichier lui-même. Une expression avec apostrophe se corrige de nouveau.
+- **Corrections de casse** acceptées (« gitlab » vers « GitLab »), et plus
+  aucun doublon quand la forme corrigée prolonge la forme entendue
+  (« réseaux » vers « réseaux sociaux » ne produit plus « réseaux sociaux
+  sociaux ») ; seuls les changements réels sont comptés.
 - **Correction depuis la relecture** : l'en-tête du fichier texte reste séparé
   du corps ; la barre de fin d'en-tête et la première phrase ne se retrouvent
   plus sur la même ligne.
