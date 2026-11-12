@@ -80,6 +80,11 @@ def _dossier_donnees() -> Path:
     utilisateur. Dans la version gelée, l'ancien dossier « WhiScribe » est
     repris ici, avant que quoi que ce soit ne lise ses fichiers.
     """
+    # Dossier imposé (mesures, essais côte à côte d'une autre version) : pris
+    # tel quel, sans reprise de l'ancien dossier.
+    impose = os.environ.get("SCRIBOUILLE_DONNEES", "").strip()
+    if impose:
+        return Path(impose).expanduser()
     if not EST_GELE:
         return Path(__file__).resolve().parent.parent
     base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")

@@ -580,6 +580,26 @@ class Passerelle:
             "proposition": self._proposition_au_demarrage(proposition),
         }
 
+    # -- durées du démarrage, notées au journal -----------------------------
+
+    def _depuis_le_lancement(self) -> float:
+        """Secondes écoulées depuis la création du processus (horloge du système)."""
+        import time
+
+        try:
+            import psutil  # type: ignore
+
+            return time.time() - psutil.Process().create_time()
+        except Exception:
+            return -1.0
+
+    def fenetre_affichee(self) -> None:
+        journal.info("Démarrage : fenêtre affichée à %.2f s du lancement", self._depuis_le_lancement())
+
+    def interface_prete(self) -> None:
+        """Appelé par l'interface une fois l'état initial dessiné : la fenêtre est utilisable."""
+        journal.info("Démarrage : interface prête à %.2f s du lancement", self._depuis_le_lancement())
+
     # -- matériel rafraîchi après l'affichage --------------------------------
 
     def _etat_materiel(self) -> dict:
@@ -2203,6 +2223,7 @@ def principal() -> None:
         text_select=True,
     )
     passerelle._fenetre = fenetre
+    fenetre.events.shown += passerelle.fenetre_affichee
     fenetre.events.loaded += lambda: _au_demarrage(passerelle, fenetre)
     fenetre.events.closing += lambda: _avant_fermeture(passerelle, fenetre)
 

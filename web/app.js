@@ -55,6 +55,8 @@ window.addEventListener('pywebviewready', async () => {
   try {
     const donnees = await pywebview.api.etat_initial();
     initialiser(donnees);
+    // Moment où la fenêtre devient utilisable, noté au journal (mesure du démarrage).
+    pywebview.api.interface_prete();
   } catch (e) {
     journaliser('erreur', t('ui.journal.etat_perdu'));
     console.error(e);

@@ -247,8 +247,13 @@ def chemin_poids(reglage: Reglage, telecharger: bool = False) -> str:
     aucun appel réseau.
     """
     if reglage.converti:
-        dossier = chemins.DOSSIER_MODELES / "convertis" / reglage.converti
-        return str(dossier) if moteur.est_modele_openvino(str(dossier)) else ""
+        # Dans le dossier des modèles, ou livré à côté du programme (paquet de
+        # mesure : un modèle converti voyage avec lui, rien à télécharger).
+        for dossier in (chemins.DOSSIER_MODELES / "convertis" / reglage.converti,
+                        chemins.DOSSIER_PROGRAMME / "convertis" / reglage.converti):
+            if moteur.est_modele_openvino(str(dossier)):
+                return str(dossier)
+        return ""
     if not reglage.motifs:
         return ""
     from huggingface_hub import snapshot_download
