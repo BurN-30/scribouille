@@ -822,6 +822,150 @@ def essai_relecture_ciblee(base: Path) -> None:
              "un export ne peut pas créer une seconde transcription .txt")
 
 
+# ---------------------------------------------------------------------------
+# Règle d'or sur une réunion longue : écran, fichier, compagnon, sous-titres
+# ---------------------------------------------------------------------------
+
+#: Paires de segments posées exprès : chaque correction ci-dessous chevauche
+#: la frontière entre les deux.
+_PAIRES = [
+    ("Bon, alors,", "on commence le comité."),
+    ("Alors du coup, pour moi,", "pour ma part, c'est clair."),
+    ("On parle de la politique,", "d'emploi. On verra bien."),
+    ("Le rôle de", "l'héros du film reste flou."),
+    ("Bref, c'est", "peut-être vrai, ou pas."),
+]
+_FIN = "Merci à tous, à la semaine prochaine."
+
+_PHRASES = [
+    "On reprend le point sur le budget de l'année prochaine.",
+    "Il faut qu'on en reparle avec la direction avant vendredi.",
+    "Le serveur de test redémarre encore, c'est-à-dire trois fois par jour.",
+    "J'ai vu l'équipe d'exploitation hier, elle est d'accord.",
+    "Peut-être qu'on peut décaler la mise en production d'une semaine ?",
+    "Aujourd'hui, le ticket est ouvert depuis vingt-deux jours.",
+    "Qu'est-ce qu'on fait des anciens comptes, on les archive ?",
+    "On garde l'ordinateur portable pour les astreintes.",
+    "L'audit de sécurité arrive en mars, il faut s'y préparer.",
+    "D'accord, je note : relance du fournisseur lundi matin.",
+]
+
+
+def reunion_longue(nb_mots: int = 15000) -> list[Segment]:
+    """Une réunion de trois voix, environ quinze mille mots, avec les paires piégées dedans."""
+    import random
+
+    hasard = random.Random(7)
+    segments: list[Segment] = []
+    debut = 0.0
+    mots = 0
+    paires = list(_PAIRES)
+    locuteur = "Locuteur 1"
+    while mots < nb_mots:
+        if hasard.random() < 0.08:
+            locuteur = f"Locuteur {hasard.randint(1, 3)}"
+        if paires and (not segments or hasard.random() < 0.004 * (len(segments) > 50)):
+            textes = paires.pop(0)
+        else:
+            phrase = hasard.choice(_PHRASES).split()
+            coupe = hasard.randint(3, max(3, len(phrase) - 2))
+            textes = (" ".join(phrase[:coupe]), " ".join(phrase[coupe:]))
+        for texte in textes:
+            fin = debut + 0.45 * len(texte.split())
+            segments.append(segment(debut, fin, jetons(texte, p=0.4 + 0.6 * hasard.random()), locuteur))
+            mots += len(texte.split())
+            debut = fin + (2.0 if hasard.random() < 0.05 else 0.3)
+    for textes in paires:
+        for texte in textes:
+            fin = debut + 2.0
+            segments.append(segment(debut, fin, jetons(texte), locuteur))
+            debut = fin + 0.3
+    segments.append(segment(debut, debut + 3.0, jetons(_FIN), locuteur))
+    return segments
+
+
+def egalite_ecran_fichier(txt: Path) -> str:
+    """Écart entre ce que la vue affiche et le corps du fichier, ou chaîne vide."""
+    import re
+
+    vue = lecture.charger(txt)
+    corps = lecture.separer_entete(txt.read_text(encoding="utf-8"))[1].strip()
+    corps = re.sub(r"(?m)^\[\d\d:\d\d:\d\d\] ", "", corps)
+    affiche = "\n\n".join((f"{p['locuteur']} : " if p.get("locuteur") else "") + texte_affiche(p)
+                          for p in vue["paragraphes"])
+    if affiche == corps:
+        return ""
+    i = next((n for n in range(min(len(affiche), len(corps))) if affiche[n] != corps[n]),
+             min(len(affiche), len(corps)))
+    return f"au caractère {i} : écran {affiche[max(0, i - 30):i + 30]!r}, fichier {corps[max(0, i - 30):i + 30]!r}"
+
+
+def essai_reunion_longue(base: Path) -> None:
+    from app import compagnon, relecture
+
+    titre("Règle d'or : corrections à cheval sur deux segments, réunion de 15 000 mots")
+    dossier = base / "longue"
+    dossier.mkdir()
+    segments = reunion_longue()
+    txt = ecrire(dossier, segments, {"txt": True, "srt": True, "vtt": True},
+                 details={"nb_locuteurs": 3, "duree": 6000.0})
+    avant = {s: txt.with_suffix(s).read_text(encoding="utf-8") for s in (".txt", ".json", ".srt", ".vtt")}
+    corps = lecture.separer_entete(avant[".txt"])[1]
+    verifier(len(corps.split()) >= 15000 and egalite_ecran_fichier(txt) == "",
+             "réunion longue : l'écran est le fichier à l'ouverture", f"{len(corps.split())} mots")
+
+    controler = getattr(lecture, "controler", None)
+    corrections = [
+        ("Bon, alors, on commence", "Bon, on commence", "début du fichier, à cheval"),
+        ("pour moi, pour ma part,", "pour ma part,", "à cheval sur deux segments"),
+        ("politique, d'emploi.", "politique d'emploi", "à cheval, le point retiré"),
+        ("de l'héros", "du héros", "à cheval, apostrophe"),
+        ("c'est peut-être", "c'est sans doute", "à cheval, trait d'union"),
+        ("à la semaine prochaine.", "à mardi.", "fin du fichier"),
+    ]
+    for source, cible, cas in corrections:
+        vue = relecture.occurrences(txt, source, cible)
+        retour = relecture.corriger(txt, source, cible, "tous") if vue.get("ok") else vue
+        ecart = egalite_ecran_fichier(txt)
+        verifier(retour.get("ok") is True and ecart == "", f"correction {cas} : l'écran suit le fichier",
+                 ecart or str(retour)[:160])
+        if controler:
+            verifier(controler(txt) == "", f"correction {cas} : contrôle après écriture", controler(txt))
+    texte = lecture.separer_entete(txt.read_text(encoding="utf-8"))[1]
+    verifier(texte.startswith("Locuteur 1 : Bon, on commence le comité.") and texte.rstrip().endswith("à mardi.")
+             and "pour moi, pour ma part" not in texte and "du héros" in texte,
+             "les corrections à cheval sont dans le fichier, du premier au dernier mot")
+
+    donnees = compagnon.lire(txt)
+    situes = lecture.situer(lecture.separer_entete(txt.read_text(encoding="utf-8"))[1], donnees["segments"]) \
+        if hasattr(lecture, "situer") else None
+    verifier(situes is not None, "après les corrections à cheval, chaque segment reste situé dans le fichier")
+
+    # Corrections ciblées après coup : c'est là que la relecture refusait tout.
+    for n in range(4):
+        vue = relecture.occurrences(txt, "budget", "Budget")
+        retour = relecture.corriger(txt, "budget", "Budget", [n * 7]) if vue.get("ok") else vue
+        verifier(retour.get("ok") is True and egalite_ecran_fichier(txt) == "",
+                 f"correction ciblée {n + 1} après les corrections à cheval", str(retour)[:160])
+    srt = txt.with_suffix(".srt").read_text(encoding="utf-8")
+    verifier("pour moi, pour ma part" not in srt and "à mardi." in srt and "Budget" in srt,
+             "les sous-titres suivent les corrections")
+    verifier(lecture.charger(txt)["paragraphes"][0]["texte"].startswith("Bon, on commence"),
+             "le premier paragraphe affiché porte la correction de début de fichier")
+
+    # Une écriture qui romprait la règle est annulée et dite.
+    if controler:
+        original = lecture.situer
+        try:
+            lecture.situer = lambda corps, segs: None if "PIÈGE" in corps else original(corps, segs)
+            retour = relecture.corriger(txt, "Budget", "PIÈGE", [0])
+        finally:
+            lecture.situer = original
+        verifier(retour.get("ok") is False and retour.get("code") == "ecart"
+                 and "PIÈGE" not in txt.read_text(encoding="utf-8") and controler(txt) == "",
+                 "une écriture qui romprait l'égalité est refusée, les fichiers restent intacts", str(retour))
+
+
 def principal() -> int:
     print(f"Vérification du parcours de l'utilisateur\n{'=' * 42}")
     with tempfile.TemporaryDirectory(prefix="scribouille-parcours-") as brut:
@@ -844,6 +988,7 @@ def principal() -> int:
         essai_retour_pendant_calcul(base)
         essai_file_apres_arret(base)
         essai_relecture_ciblee(base)
+        essai_reunion_longue(base)
         essai_accessibilite()
         essai_ecrans()
 
