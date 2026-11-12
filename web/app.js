@@ -1501,7 +1501,8 @@ function ligneHTML(id) {
   // Arrete, ou abandonne apres plantage du moteur : ce qui est transcrit est
   // garde, le bouton le dit (« Reprendre ») ; un autre echec repart de zero.
   if (['annule', 'erreur'].includes(it.etat)) {
-    const reprendre = it.etat === 'annule' || !!it.reprise;
+    const chemin = String(it.chemin || '').toLowerCase();
+    const reprendre = !!it.reprise || (etat.reprises || []).some((r) => String(r.chemin || '').toLowerCase() === chemin);
     actions.push(`<button class="bouton bouton-petit" data-relancer>${icone('i-reprise', 'icone-s')}<span>${ech(t(reprendre ? 'ui.ligne.reprendre' : 'ui.ligne.relancer'))}</span></button>`);
   }
   if (it.etat === 'erreur') actions.push(boutonLigne('data-log', 'ui.ligne.journal', 'i-info'));
@@ -1653,7 +1654,9 @@ function dessinerHistorique() {
     const texte = formats.find((f) => f.format === 'TXT');
     const r = recente(h);
     const meta = [
-      r ? t('ui.historique.a_l_instant', { duree: r.duree || '?' }) : '',
+      // « A l'instant » dix minutes durant, puis l'heure de fin.
+      r ? (Date.now() - r.quand < 600000 ? t('ui.historique.a_l_instant', { duree: r.duree || '?' })
+        : t('ui.historique.termine_a', { heure: formaterHeure(new Date(r.quand)), duree: r.duree || '?' })) : '',
       h.duree,
       h.reunion ? t('ui.historique.reunion', { date: h.reunion }) : '',
       h.date ? t('ui.historique.transcrite', { date: h.date }) : '',
@@ -2365,6 +2368,7 @@ window.onFileTerminee = function (d) {
   pywebview.api.liste_reprises().then((liste) => {
     etat.reprises = liste || [];
     dessinerReprises();
+    dessinerFile();  // Reprendre ou Relancer, selon ce qui a ete garde
   }).catch(() => { /* sans consequence */ });
 };
 
@@ -2994,6 +2998,11 @@ function encartAttention(m) {
    transcription, arrete, en panne. Montre tant qu'il vit, et apres une panne
    (avec sa cause en infobulle) ; rien quand il est simplement arrete. */
 let derniereVueMoteur = '';
+/* « deepdml/faster-whisper-large-v3-turbo-ct2 » devient « large-v3-turbo ». */
+function nomCourtModele(modele) {
+  return String(modele || '').split(/[\\/]/).pop()
+    .replace(/^faster-whisper-|^whisper-/i, '').replace(/-ct2$|-int8-ov$|-fp16-ov$|-ov$/i, '');
+}
 async function majEtatMoteur() {
   if (!etat.pret || !(window.pywebview && window.pywebview.api)) return;
   let m = null;
@@ -3005,7 +3014,7 @@ async function majEtatMoteur() {
     return;
   }
   const texte = t('ui.moteur.etat', { etat: t('ui.moteur.' + m.etat) })
-    + (m.modele && ['chargement', 'transcription', 'repos'].includes(m.etat) ? ` (${m.modele})` : '');
+    + (m.modele && ['chargement', 'transcription', 'repos'].includes(m.etat) ? ` (${nomCourtModele(m.modele)})` : '');
   if (texte === derniereVueMoteur && !el.hidden) return;
   derniereVueMoteur = texte;
   el.hidden = false;

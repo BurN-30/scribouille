@@ -39,6 +39,8 @@ def _duree_lisible(secondes: float) -> str:
     minutes, sec = divmod(reste, 60)
     if heures:
         return langues.t("duree_longue.heures", h=heures, m=f"{minutes:02d}")
+    if not minutes:
+        return f"{sec} s"  # « 43 s », pas « 0 min 43 s »
     return langues.t("duree_longue.minutes", m=minutes, s=f"{sec:02d}")
 
 
