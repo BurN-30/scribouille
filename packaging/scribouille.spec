@@ -98,6 +98,9 @@ donnees = [
     (str(RACINE / "README.md"), "."),
     # Extrait du banc d'essai de vitesse et son texte de référence (app/banc.py).
     (str(RACINE / "banc"), "banc"),
+    # Lexique du français courant (CC BY-SA 4.0), garde-fou des corrections du
+    # vocabulaire et repérage des noms propres (app/lexique.py).
+    (str(RACINE / "lexique"), "lexique"),
 ]
 
 # faster-whisper embarque le modèle de détection d'activité vocale (silero, ONNX)

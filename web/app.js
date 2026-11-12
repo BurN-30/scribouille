@@ -90,6 +90,7 @@ function initialiser(d, silencieux) {
   appliquerConfig();
   majGlossaire(d.glossaire ? d.glossaire.resume : null);
   majCorrections(d.corrections || {});
+  majCompteurVocabulaire();
   majDiarisation();
   majVitesse();
   majRythme();
@@ -1369,6 +1370,7 @@ async function ouvrirLecture(chemin) {
   $('#lecture-retour').textContent = '';
   $('#lecture-audio').innerHTML = '';
   $('#lecture-legende').style.display = 'none';
+  $('#lecture-remplacements').hidden = true;
   await chargerLecture(chemin);
 }
 
@@ -1448,6 +1450,8 @@ function dessinerLecture() {
     }
   }
 
+  dessinerRemplacements();
+
   const seuils = d.seuils || { faible: 0.5, tres_faible: 0.3 };
   const ecoutable = !!(d.lecture_audio && m.source_presente && d.audio_url);
   $('#lecture-texte').innerHTML = (d.paragraphes || []).map((p) => `
@@ -1462,6 +1466,8 @@ function dessinerLecture() {
 
 function motHTML(mot, seuils) {
   const texte = ech(mot.t);
+  // Mot change apres coup par le vocabulaire ou une correction : marque discrete.
+  if (mot.c) return `<span class="mot-corrige" title="${ech(t('ui.lecture.mot_corrige'))}">${texte}</span>`;
   if (mot.p < 0) return texte;   // confiance inconnue : mot ordinaire
   let classe = '';
   if (mot.p < seuils.tres_faible) classe = ' mot-fort';
@@ -1499,6 +1505,308 @@ async function copier(texte) {
   try { await navigator.clipboard.writeText(texte); }
   catch (e) { pywebview.api.copier(texte); }
 }
+
+/* ------------------------- Remplacements du vocabulaire, dans la lecture */
+
+function dessinerRemplacements() {
+  const d = etat.lecture;
+  const bloc = $('#lecture-remplacements');
+  const liste = (d && d.remplacements) || [];
+  bloc.hidden = !liste.length;
+  if (!liste.length) return;
+  $('#lecture-remplacements-titre').textContent = tn('ui.lecture.remplacements', liste.length);
+  $('#lecture-remplacements-liste').innerHTML = liste.map((r) => `
+    <div class="remplacement">
+      <span class="horodatage">${formaterSecondes(r.debut)}</span>
+      <span class="avant">${ech(r.avant)}</span>
+      <svg class="icone-s icone fleche"><use href="#i-chevron"></use></svg>
+      <span class="apres">${ech(r.apres)}</span>
+      <span class="regle">${ech(t('ui.lecture.regle.' + r.regle))}</span>
+      <span class="pousse"></span>
+      <button class="bouton-lien" data-annuler-remplacement="${r.rang}">${ech(t('ui.lecture.remplacement_annuler'))}</button>
+    </div>`).join('');
+}
+
+async function annulerRemplacement(rang) {
+  if (!etat.lecture) return;
+  const r = await pywebview.api.annuler_remplacement(etat.lecture.chemin, Number(rang));
+  if (r.ok) {
+    journaliser('ok', r.message);
+    await chargerLecture(etat.lecture.chemin);
+    retourLecture(r.message, 'ok');
+  } else {
+    retourLecture(r.message, 'erreur');
+  }
+}
+
+/* ------------------------------------------------- Vocabulaire, format 2 */
+
+const voc = { donnees: null, onglet: 'propose', edition: null };
+
+function brancherVocabulaire() {
+  $('#btn-vocabulaire').addEventListener('click', ouvrirVocabulaire);
+  document.querySelectorAll('[data-voc-onglet]').forEach((b) => b.addEventListener('click', () => {
+    voc.onglet = b.dataset.vocOnglet;
+    fermerEditionVocabulaire();
+    dessinerVocabulaire();
+  }));
+  $('#voc-recherche').addEventListener('input', dessinerListeVocabulaire);
+  $('#voc-tout').addEventListener('change', (e) => {
+    document.querySelectorAll('.voc-case').forEach((c) => { c.checked = e.target.checked; });
+  });
+  $('#btn-voc-accepter').addEventListener('click', () => deciderSelection('accepter'));
+  $('#btn-voc-refuser').addEventListener('click', () => deciderSelection('refuser'));
+  $('#btn-voc-ajouter').addEventListener('click', () => ouvrirEditionVocabulaire(null));
+  $('#btn-voc-edition-annuler').addEventListener('click', fermerEditionVocabulaire);
+  $('#btn-voc-edition-enregistrer').addEventListener('click', () => enregistrerEditionVocabulaire(false));
+  $('#btn-voc-edition-accepter').addEventListener('click', () => enregistrerEditionVocabulaire(true));
+  $('#btn-voc-importer').addEventListener('click', () => pywebview.api.vocabulaire_importer());
+  $('#btn-voc-exporter').addEventListener('click', () => pywebview.api.vocabulaire_exporter());
+  $('#btn-voc-partage').addEventListener('click', () => pywebview.api.vocabulaire_ajouter_partage());
+  $('#opt-rapprochement').addEventListener('change', (e) =>
+    enregistrer({ rapprochement_vocabulaire: e.target.checked }));
+  $('#voc-liste').addEventListener('click', actionLigneVocabulaire);
+  $('#voc-avis').addEventListener('click', async (e) => {
+    if (!e.target.closest('#btn-voc-convertir')) return;
+    const r = await pywebview.api.vocabulaire_convertir();
+    retourVocabulaire(r);
+    await chargerVocabulaire();
+  });
+  $('#voc-partages-liste').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-retirer-partage]');
+    if (!b) return;
+    await pywebview.api.vocabulaire_retirer_partage(b.dataset.retirerPartage);
+    await chargerVocabulaire();
+  });
+  $('#lecture-remplacements-liste').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-annuler-remplacement]');
+    if (b) annulerRemplacement(b.dataset.annulerRemplacement);
+  });
+}
+
+async function majCompteurVocabulaire() {
+  try {
+    const d = await pywebview.api.vocabulaire_etat();
+    voc.donnees = d;
+    const n = d.resume.proposes;
+    const el = $('#voc-compteur-propositions');
+    el.hidden = !n;
+    el.textContent = t('ui.voc2.compteur', { n: n });
+  } catch (e) { console.error(e); }
+}
+
+async function ouvrirVocabulaire() {
+  fermerEditionVocabulaire();
+  $('#voc-retour').textContent = '';
+  ouvrirModale('#modale-vocabulaire');
+  await chargerVocabulaire();
+  if (voc.donnees && !voc.donnees.resume.proposes && voc.onglet === 'propose' && voc.donnees.resume.actifs) {
+    voc.onglet = 'actif';
+    dessinerVocabulaire();
+  }
+}
+
+async function chargerVocabulaire() {
+  voc.donnees = await pywebview.api.vocabulaire_etat();
+  dessinerVocabulaire();
+  const n = voc.donnees.resume.proposes;
+  $('#voc-compteur-propositions').hidden = !n;
+  $('#voc-compteur-propositions').textContent = t('ui.voc2.compteur', { n: n });
+}
+
+function dessinerVocabulaire() {
+  const d = voc.donnees;
+  if (!d) return;
+  const r = d.resume;
+  $('#voc-resume').textContent = t('ui.voc2.resume', {
+    actifs: r.actifs, proposes: r.proposes, refuses: r.refuses,
+    retenus: d.amorce.retenus, total: d.amorce.total, jetons: d.amorce.jetons,
+  });
+  const avis = [];
+  if (d.format1) {
+    avis.push(`<div class="encart encart-info"><svg class="icone-s icone"><use href="#i-info"></use></svg>
+      <span>${ech(t('ui.voc2.format1'))}</span><span class="pousse"></span>
+      <button class="bouton" id="btn-voc-convertir">${ech(t('ui.voc2.convertir'))}</button></div>`);
+  }
+  if (r.fautes_risquees) avis.push(encartAttention(t('ui.voc2.risquees', { n: r.fautes_risquees })));
+  if (!d.lexique) avis.push(encartAttention(t('ui.voc2.lexique_absent')));
+  (d.problemes || []).forEach((p) => avis.push(encartAttention(t('ui.voc2.probleme', { detail: p }))));
+  $('#voc-avis').innerHTML = avis.join('');
+  const comptes = { propose: 0, actif: 0, refuse: 0 };
+  d.entrees.forEach((e) => { comptes[e.etat] = (comptes[e.etat] || 0) + 1; });
+  ['propose', 'actif', 'refuse'].forEach((k) => { $('#voc-n-' + k).textContent = comptes[k]; });
+  document.querySelectorAll('[data-voc-onglet]').forEach((b) =>
+    b.setAttribute('aria-selected', String(b.dataset.vocOnglet === voc.onglet)));
+  $('#btn-voc-accepter').hidden = voc.onglet !== 'propose';
+  $('#btn-voc-refuser').hidden = voc.onglet !== 'propose';
+  $('#voc-tout').closest('label').hidden = voc.onglet !== 'propose';
+  $('#voc-tout').checked = false;
+  $('#opt-rapprochement').checked = d.rapprochement;
+  const categories = $('#voc-categorie');
+  if (!categories.options.length) {
+    categories.innerHTML = d.categories.map((c) =>
+      `<option value="${ech(c)}">${ech(t('ui.voc2.cat.' + c))}</option>`).join('');
+  }
+  $('#voc-partages-liste').innerHTML = d.partages.length
+    ? d.partages.map((p) => `<div class="voc-partage"><span class="nom">${ech(p.nom)}</span>
+        <span class="meta">${ech(p.ok ? t('ui.voc2.partage_termes', { n: p.termes }) : t('ui.voc2.partage_illisible'))}</span>
+        <span class="pousse"></span>
+        <button class="bouton-lien" data-retirer-partage="${ech(p.chemin)}">${ech(t('ui.voc2.partages.retirer'))}</button></div>`).join('')
+    : `<p class="aide">${ech(t('ui.voc2.aucun_partage'))}</p>`;
+  dessinerListeVocabulaire();
+}
+
+function texteFaute(f) {
+  let texte = ech(f.forme);
+  const notes = [];
+  if (f.voisins && f.voisins.length) notes.push(t('ui.voc2.pres_de', { voisins: f.voisins.join(', ') }));
+  else if (f.forcer) notes.push(t('ui.voc2.forcee'));
+  if (f.vu) notes.push(t('ui.voc2.vu', { vu: f.vu, reunions: f.reunions || 1 }));
+  if (notes.length) texte += ` <span class="note">(${ech(notes.join(' ; '))})</span>`;
+  if (f.risquee && !f.forcer) texte = `<span class="risquee" title="${ech(t('ui.voc2.risquee'))}">${texte}</span>`;
+  return texte;
+}
+
+function dessinerListeVocabulaire() {
+  const d = voc.donnees;
+  if (!d) return;
+  const filtre = $('#voc-recherche').value.trim().toLowerCase();
+  const lignes = d.entrees.filter((e) => e.etat === voc.onglet
+    && (!filtre || e.forme.toLowerCase().includes(filtre)
+        || e.fautes.some((f) => f.forme.toLowerCase().includes(filtre))));
+  if (!lignes.length) {
+    $('#voc-liste').innerHTML = `<p class="vide">${ech(t('ui.voc2.vide.' + voc.onglet))}</p>`;
+    return;
+  }
+  $('#voc-liste').innerHTML = lignes.map((e) => {
+    const index = d.entrees.indexOf(e);
+    const source = e.source === 'personnel' ? ''
+      : (e.source === 'format1' ? t('ui.voc2.source.format1')
+        : t('ui.voc2.source.partage', { nom: e.source.replace(/^partage:/, '') }));
+    const meta = [t('ui.voc2.cat.' + e.categorie), t('ui.voc2.origine.' + e.origine)];
+    if (e.vu) meta.push(t('ui.voc2.vu', { vu: e.vu, reunions: e.reunions || 1 }));
+    if (source) meta.push(source);
+    const actions = [];
+    if (e.modifiable) {
+      if (e.etat === 'propose') {
+        actions.push(`<button class="bouton-lien" data-voc-action="accepter" data-i="${index}">${ech(t('ui.voc2.accepter'))}</button>`);
+        actions.push(`<button class="bouton-lien" data-voc-action="refuser" data-i="${index}">${ech(t('ui.voc2.refuser'))}</button>`);
+      }
+      actions.push(`<button class="bouton-lien" data-voc-action="modifier" data-i="${index}">${ech(t('ui.voc2.modifier'))}</button>`);
+      if (e.etat !== 'propose') {
+        actions.push(`<button class="bouton-lien" data-voc-action="supprimer" data-i="${index}">${ech(t('ui.voc2.supprimer'))}</button>`);
+      }
+    }
+    return `<div class="voc-ligne">
+      ${e.etat === 'propose' && e.modifiable ? `<input type="checkbox" class="voc-case" data-i="${index}">` : '<span class="voc-case-vide"></span>'}
+      <div class="voc-infos">
+        <div class="voc-forme">${ech(e.forme)}${e.poids > 1 ? ` <span class="voc-poids">${'+'.repeat(e.poids - 1)}</span>` : ''}</div>
+        <div class="voc-fautes">${e.fautes.length ? e.fautes.map(texteFaute).join(', ') : `<span class="note">${ech(t('ui.voc2.sans_faute'))}</span>`}</div>
+        <div class="meta">${ech(meta.join(' · '))}</div>
+      </div>
+      <div class="voc-actions">${actions.join('')}</div>
+    </div>`;
+  }).join('');
+}
+
+async function actionLigneVocabulaire(e) {
+  const b = e.target.closest('[data-voc-action]');
+  if (!b) return;
+  const entree = voc.donnees.entrees[Number(b.dataset.i)];
+  if (!entree) return;
+  const action = b.dataset.vocAction;
+  let r;
+  if (action === 'accepter' || action === 'refuser') {
+    r = await pywebview.api.vocabulaire_decider([entree.forme], action);
+  } else if (action === 'supprimer') {
+    r = await pywebview.api.vocabulaire_supprimer(entree.forme, entree.etat);
+  } else {
+    ouvrirEditionVocabulaire(entree);
+    return;
+  }
+  retourVocabulaire(r);
+  await chargerVocabulaire();
+}
+
+async function deciderSelection(decision) {
+  const formes = Array.from(document.querySelectorAll('.voc-case:checked'))
+    .map((c) => voc.donnees.entrees[Number(c.dataset.i)].forme);
+  if (!formes.length) {
+    retourVocabulaire({ ok: false, message: t('ui.voc2.selection_vide') });
+    return;
+  }
+  retourVocabulaire(await pywebview.api.vocabulaire_decider(formes, decision));
+  await chargerVocabulaire();
+}
+
+function ouvrirEditionVocabulaire(entree) {
+  voc.edition = entree;
+  $('#voc-forme').value = entree ? entree.forme : '';
+  $('#voc-categorie').value = entree ? entree.categorie : 'autre';
+  $('#voc-poids').value = String(entree ? entree.poids : 1);
+  $('#voc-fautes').value = entree ? entree.fautes.map((f) =>
+    f.forme + (f.voisins && f.voisins.length ? ' | ' + f.voisins.join(', ') : '')).join('\n') : '';
+  $('#voc-amorce').checked = entree ? entree.amorce : true;
+  $('#btn-voc-edition-accepter').hidden = !(entree && entree.etat === 'propose');
+  $('#voc-edition-retour').innerHTML = '';
+  $('#voc-edition').hidden = false;
+  setTimeout(() => $('#voc-forme').focus(), 30);
+}
+
+function fermerEditionVocabulaire() {
+  voc.edition = null;
+  $('#voc-edition').hidden = true;
+}
+
+function lireFautesSaisies() {
+  const anciennes = {};
+  (voc.edition ? voc.edition.fautes : []).forEach((f) => { anciennes[f.forme.toLowerCase()] = f; });
+  return $('#voc-fautes').value.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
+    const [forme, voisins] = l.split('|');
+    const propre = forme.trim();
+    const ancienne = anciennes[propre.toLowerCase()] || {};
+    return {
+      forme: propre,
+      voisins: (voisins || '').split(',').map((v) => v.trim()).filter(Boolean),
+      forcer: !!ancienne.forcer, vu: ancienne.vu || 0, reunions: ancienne.reunions || 0,
+    };
+  });
+}
+
+async function enregistrerEditionVocabulaire(accepter) {
+  const modification = {
+    forme: $('#voc-forme').value.trim(),
+    categorie: $('#voc-categorie').value,
+    poids: Number($('#voc-poids').value),
+    fautes: lireFautesSaisies(),
+    amorce: $('#voc-amorce').checked,
+    accepter: accepter,
+  };
+  const r = voc.edition
+    ? await pywebview.api.vocabulaire_modifier(voc.edition.forme, voc.edition.etat, modification)
+    : await pywebview.api.vocabulaire_ajouter(modification);
+  if (!r.ok) {
+    $('#voc-edition-retour').innerHTML = encartAttention(r.message);
+    return;
+  }
+  fermerEditionVocabulaire();
+  retourVocabulaire(r);
+  await chargerVocabulaire();
+}
+
+function retourVocabulaire(r) {
+  const zone = $('#voc-retour');
+  zone.textContent = (r && r.message) || '';
+  zone.className = 'lecture-retour ' + (r && r.ok ? 'ok' : 'erreur');
+  if (r && r.message) journaliser(r.ok ? 'ok' : 'attention', r.message);
+}
+
+/* Retour des boites de fichiers (import, export, fichier partage). */
+window.onVocabulaire = async function (r) {
+  retourVocabulaire(r);
+  if ($('#modale-vocabulaire').classList.contains('ouvert')) await chargerVocabulaire();
+  else majCompteurVocabulaire();
+};
 
 /* ------------------------------------------- Correction depuis la lecture */
 
@@ -1580,6 +1888,7 @@ async function annulerCorrection() {
   const r = await pywebview.api.annuler_correction(etat.lecture.chemin);
   if (r.nb_corrections !== undefined) majCorrections({ nb: r.nb_corrections, erreurs: [] });
   journaliser(r.ok ? 'ok' : 'attention', r.message);
+  majCompteurVocabulaire();
   await chargerLecture(etat.lecture.chemin);
   retourLecture(r.message, r.ok ? 'ok' : 'erreur');
 }
@@ -1602,6 +1911,7 @@ async function appliquerCorrection() {
     journaliser('ok', t('ui.correction.journal', {
       source: source, cible: cible, message: r.message,
     }));
+    majCompteurVocabulaire();
     await chargerLecture(etat.lecture.chemin);
     retourLecture(r.message, 'ok');
   } catch (e) {
@@ -2226,6 +2536,9 @@ document.addEventListener('DOMContentLoaded', () => {
     journaliser('ok', t('ui.voc.regles_enregistrees', { n: r.nb }));
     if (!r.erreurs.length) setTimeout(() => fermerModale($('#modale-corrections')), 700);
   });
+
+  // Vocabulaire, format 2
+  brancherVocabulaire();
 
   // Relecture
   $('#opt-compagnon').addEventListener('change', (e) =>

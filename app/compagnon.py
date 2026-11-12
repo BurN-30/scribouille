@@ -134,7 +134,7 @@ def construire(source: Path, segments, details: dict) -> dict:
             entree["m"] = mots
         liste.append(entree)
 
-    return {
+    contenu = {
         "format": FORMAT,
         "version": VERSION_FORMAT,
         "produit_par": f"Scribouille {VERSION}",
@@ -154,6 +154,14 @@ def construire(source: Path, segments, details: dict) -> dict:
         "seuils": {"faible": SEUIL_FAIBLE, "tres_faible": SEUIL_TRES_FAIBLE},
         "segments": liste,
     }
+    # Remplacements faits par le vocabulaire (étage b) : clé facultative, que
+    # les versions antérieures ignorent. La vue de relecture les montre et
+    # permet de les annuler un à un. « s » : rang du segment ; « o » : position
+    # dans son texte ; « a » : avant ; « b » : après.
+    remplacements = details.get("remplacements_vocabulaire") or []
+    if remplacements:
+        contenu["vocabulaire"] = {"remplacements": [dict(r) for r in remplacements]}
+    return contenu
 
 
 def ecrire(chemin_sortie: str | Path, source: Path, segments, details: dict) -> Path | None:

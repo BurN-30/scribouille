@@ -24,7 +24,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from . import compagnon, gabarit, journal, langues, sorties, vocabulaire
+from . import chemins, compagnon, gabarit, journal, langues, sorties, vocabulaire
 
 #: Taille au-delà de laquelle un fichier texte n'est pas chargé en entier.
 #: Cent mille caractères représentent déjà plusieurs heures de réunion.
@@ -118,8 +118,14 @@ def _paragraphes_du_compagnon(donnees: dict) -> list[dict]:
     """
     paragraphes: list[dict] = []
     courant: dict | None = None
+    # Segments que le vocabulaire a changés (remplacements non annulés).
+    corriges = {
+        int(r.get("s", -1))
+        for r in ((donnees.get("vocabulaire") or {}).get("remplacements") or [])
+        if isinstance(r, dict) and not r.get("annule")
+    }
 
-    for segment in donnees.get("segments") or []:
+    for rang, segment in enumerate(donnees.get("segments") or []):
         if not isinstance(segment, dict) or not str(segment.get("t") or "").strip():
             continue
         locuteur = str(segment.get("l") or "")
@@ -147,8 +153,10 @@ def _paragraphes_du_compagnon(donnees: dict) -> list[dict]:
             if isinstance(mot, dict) and mot.get("t")
         ]
         # Segment sans mots : le paragraphe reste lisible, simplement sans
-        # confiance affichée pour cette portion.
-        places, reste = _placer_mots(texte, mots)
+        # confiance affichée pour cette portion. Segment corrigé après coup par
+        # le vocabulaire : le texte corrigé fait foi, les mots changés sont
+        # marqués.
+        places, reste = _placer_mots(texte, mots, marquer=rang in corriges)
         if places:
             places[0]["e"] = separateur + places[0]["e"]
         else:
@@ -166,6 +174,10 @@ def _paragraphes_du_compagnon(donnees: dict) -> list[dict]:
 #: rattaché à une occurrence lointaine.
 _ECART_MAXIMAL = 80
 
+#: Un écart entre deux mots placés : blancs et ponctuation de tête, partie
+#: écrite, ponctuation et blancs de queue.
+_MOTIF_ECART = re.compile(r"^([\s\W]*)(.*?\w)([\W]*)$", re.DOTALL)
+
 
 def _chercher_mot(texte: str, jeton: str, depart: int) -> int:
     """Position du jeton dans le texte à partir de `depart`, entre deux frontières de mot."""
@@ -181,7 +193,21 @@ def _chercher_mot(texte: str, jeton: str, depart: int) -> int:
     return -1
 
 
-def _placer_mots(texte: str, mots: list[dict]) -> tuple[list[dict], str]:
+def _ecart_marque(ecart: str, debut: float) -> tuple[list[dict], str]:
+    """
+    Un écart qui contient des lettres, dans un segment changé par le
+    vocabulaire, est un mot corrigé : il devient un mot marqué (« c »), sans
+    confiance. Renvoie ce mot (ou rien) et ce qui doit précéder le mot suivant.
+    Le texte rendu est inchangé : seule la découpe change.
+    """
+    trouve = _MOTIF_ECART.match(ecart)
+    if not trouve:
+        return [], ecart
+    tete, ecrit, queue = trouve.groups()
+    return [{"t": ecrit, "e": tete, "p": -1.0, "c": 1, "d": debut}], queue
+
+
+def _placer_mots(texte: str, mots: list[dict], marquer: bool = False) -> tuple[list[dict], str]:
     """
     Rattache chaque mot à sa place dans le texte du segment.
 
@@ -190,8 +216,10 @@ def _placer_mots(texte: str, mots: list[dict]) -> tuple[list[dict], str]:
     l'apostrophe de « l'Amazon » ni devant le trait d'union de « peut-être »,
     une espace ailleurs, ou un mot que le moteur n'a pas détaillé). Un mot qui
     n'est plus dans le texte, après une correction par exemple, n'est pas
-    affiché : sa confiance portait sur une forme qui n'existe plus. Renvoie les
-    mots placés et le texte restant après le dernier.
+    affiché : sa confiance portait sur une forme qui n'existe plus. Avec
+    `marquer` (segment changé par le vocabulaire), le texte qui ne vient
+    d'aucun mot du moteur est rendu comme un mot corrigé. Renvoie les mots
+    placés et le texte restant après le dernier.
     """
     places: list[dict] = []
     position = 0
@@ -199,9 +227,18 @@ def _placer_mots(texte: str, mots: list[dict]) -> tuple[list[dict], str]:
         trouve = _chercher_mot(texte, mot["t"], position)
         if trouve < 0:
             continue
-        places.append({**mot, "e": texte[position:trouve]})
+        ecart = texte[position:trouve]
+        if marquer:
+            corriges, ecart = _ecart_marque(ecart, mot["d"])
+            places.extend(corriges)
+        places.append({**mot, "e": ecart})
         position = trouve + len(mot["t"])
-    return places, texte[position:]
+    reste = texte[position:]
+    if marquer and reste:
+        dernier = places[-1]["d"] if places else (mots[0]["d"] if mots else 0.0)
+        corriges, reste = _ecart_marque(reste, dernier)
+        places.extend(corriges)
+    return places, reste
 
 
 def _couper_long(texte: str) -> list[str]:
@@ -287,8 +324,15 @@ def charger(chemin: str | Path) -> dict:
         message = langues.t("lect.tronque" if tronque else "lect.sans_compagnon")
 
     seuils = (donnees or {}).get("seuils") or {}
+    remplacements = []
+    if donnees and not tronque:
+        for rang, r in enumerate(((donnees.get("vocabulaire") or {}).get("remplacements")) or []):
+            if isinstance(r, dict) and not r.get("annule"):
+                remplacements.append({"rang": rang, "avant": str(r.get("a", "")), "apres": str(r.get("b", "")),
+                                      "regle": str(r.get("regle", "")), "debut": float(r.get("d", 0) or 0)})
     return {
         "ok": True,
+        "remplacements": remplacements,
         "chemin": str(fichier),
         "nom": fichier.name,
         "compagnon": bool(donnees) and not tronque,
@@ -544,21 +588,28 @@ def appliquer_correction(chemin: str | Path, source: str, cible: str,
                     mot["t"], _ = vocabulaire.appliquer(str(mot["t"]), regles)
         compagnon.enregistrer_tel_quel(fichier, donnees)
 
+    # Les fichiers de règles sont photographiés avant et après : l'annulation
+    # remet la règle mémorisée, ou la proposition ajoutée, telle qu'avant.
+    regles_avant = _instantane_regles()
     regle_ajoutee = False
     message_regle = ""
-    regles_avant = regles_apres = None
     if ajouter_regle:
-        regles_avant = vocabulaire.lire_corrections()
-        retour = vocabulaire.ajouter_correction_apprise(source, cible)
+        retour = _memoriser_regle(source, cible)
         regle_ajoutee = bool(retour.get("ajoutee"))
         message_regle = retour.get("message", "")
-        if regle_ajoutee:
-            regles_apres = vocabulaire.lire_corrections()
+    else:
+        # Sans règle mémorisée, la correction devient une proposition du
+        # vocabulaire (format 2), à relire plus tard : rien ne sert sans accord.
+        from . import vocabulaire_interface
+
+        if vocabulaire_interface.proposer_depuis_correction(source, cible):
+            message_regle = langues.t("voc2.propose_depuis_lecture")
+    regles_apres = _instantane_regles()
 
     _DERNIERES[str(fichier.resolve())] = {
         "txt_avant": contenu, "txt_apres": nouveau,
         "json_avant": json_avant, "json_apres": _lire_ou_rien(compagnon.chemin_pour(fichier)),
-        "regles_avant": regles_avant if regle_ajoutee else None, "regles_apres": regles_apres,
+        "regles_avant": regles_avant, "regles_apres": regles_apres, "regle_ajoutee": regle_ajoutee,
     }
 
     journal.info(
@@ -607,10 +658,114 @@ def annuler_correction(chemin: str | Path) -> dict:
     _DERNIERES.pop(cle, None)
 
     message = langues.t("lect.annulation.faite")
-    regle_retiree = False
-    if derniere["regles_avant"] is not None and vocabulaire.lire_corrections() == derniere["regles_apres"]:
-        vocabulaire.ecrire_corrections(derniere["regles_avant"])
-        regle_retiree = True
+    remis = _remettre_regles(derniere["regles_avant"], derniere["regles_apres"])
+    regle_retiree = bool(remis and derniere["regle_ajoutee"])
+    if regle_retiree:
         message += " " + langues.t("lect.annulation.regle")
+    elif remis:
+        message += " " + langues.t("lect.annulation.proposition")
     journal.info("Correction annulée dans %s%s", fichier.name, ", règle retirée" if regle_retiree else "")
     return {"ok": True, "message": message, "regle_retiree": regle_retiree}
+
+
+def _fichiers_de_regles() -> list[Path]:
+    from . import vocabulaire_v2
+
+    return [chemins.FICHIER_CORRECTIONS, vocabulaire_v2.FICHIER_PERSONNEL]
+
+
+def _instantane_regles() -> dict[str, str | None]:
+    """Contenu des fichiers qu'une correction peut toucher (règles, vocabulaire)."""
+    return {str(chemin): _lire_ou_rien(chemin) for chemin in _fichiers_de_regles()}
+
+
+def _remettre_regles(avant: dict, apres: dict) -> bool:
+    """
+    Remet chaque fichier de règles changé par la correction dans son état
+    d'avant, s'il n'a pas bougé depuis. Renvoie vrai si l'un d'eux a été remis.
+    """
+    remis = False
+    for chemin, contenu_avant in (avant or {}).items():
+        contenu_apres = (apres or {}).get(chemin)
+        if contenu_avant == contenu_apres:
+            continue
+        fichier = Path(chemin)
+        if _lire_ou_rien(fichier) != contenu_apres:
+            continue
+        try:
+            if contenu_avant is None:
+                fichier.unlink()
+            else:
+                fichier.write_text(contenu_avant, encoding="utf-8")
+            remis = True
+        except OSError as exc:
+            journal.attention("Règle non remise dans %s : %s", fichier.name, exc)
+    return remis
+
+
+def _memoriser_regle(source: str, cible: str) -> dict:
+    """
+    « Mémoriser la règle » : tant que le format 1 a du contenu, la règle va
+    dans `corrections.txt` comme avant ; une fois le vocabulaire converti (ou
+    jamais commencé), elle devient une faute active du vocabulaire personnel.
+    """
+    from . import vocabulaire_interface, vocabulaire_v2
+
+    if vocabulaire_v2.v1_a_du_contenu(vocabulaire.lire_glossaire(), vocabulaire.lire_corrections()):
+        return vocabulaire.ajouter_correction_apprise(source, cible)
+    return vocabulaire_interface.memoriser_depuis_correction(source, cible)
+
+
+# ---------------------------------------------------------------------------
+# Remplacements du vocabulaire : montrés, et annulables un à un
+# ---------------------------------------------------------------------------
+
+def annuler_remplacement(chemin: str | Path, rang: int) -> dict:
+    """
+    Défait un remplacement fait par le vocabulaire (étage b) : dans le texte
+    du segment du compagnon, puis dans le fichier texte (même segment, corps
+    seulement). Le remplacement est marqué annulé, jamais effacé : on sait
+    ce qui a été fait, et ce qui a été défait.
+    """
+    from . import vocabulaire_usage
+
+    fichier = Path(chemin or "")
+    donnees = compagnon.lire(fichier)
+    if not donnees:
+        return {"ok": False, "message": langues.t("lect.absent")}
+    liste = (donnees.get("vocabulaire") or {}).get("remplacements") or []
+    if not (0 <= int(rang) < len(liste)) or not isinstance(liste[int(rang)], dict):
+        return {"ok": False, "message": langues.t("lect.annulation_introuvable")}
+    remplacement = liste[int(rang)]
+    if remplacement.get("annule"):
+        return {"ok": False, "message": langues.t("lect.annulation_deja")}
+    segments = donnees.get("segments") or []
+    rang_segment = int(remplacement.get("s", -1))
+    if not (0 <= rang_segment < len(segments)):
+        return {"ok": False, "message": langues.t("lect.annulation_introuvable")}
+    segment = segments[rang_segment]
+    ancien_texte = str(segment.get("t", ""))
+    nouveau_texte = vocabulaire_usage.annuler(ancien_texte, remplacement)
+    if nouveau_texte is None:
+        return {"ok": False, "message": langues.t("lect.annulation_introuvable")}
+    try:
+        contenu = fichier.read_text(encoding="utf-8")
+        entete, corps = separer_entete(contenu)
+        # Même précaution que pour une correction : la séparation entre
+        # l'en-tête et le corps est remise telle quelle.
+        separation = contenu[len(entete):len(contenu) - len(corps)]
+        if ancien_texte and ancien_texte in corps:
+            fichier.write_text(entete + separation + corps.replace(ancien_texte, nouveau_texte, 1),
+                               encoding="utf-8")
+    except OSError as exc:
+        journal.attention("Annulation non écrite dans %s : %s", fichier, exc)
+        return {"ok": False, "message": langues.t("lect.non_reecrit")}
+    segment["t"] = nouveau_texte
+    remplacement["annule"] = True
+    transcription = donnees.get("transcription") or {}
+    if isinstance(transcription.get("corrections_appliquees"), int):
+        transcription["corrections_appliquees"] = max(0, transcription["corrections_appliquees"] - 1)
+    compagnon.enregistrer_tel_quel(fichier, donnees)
+    journal.info("Remplacement du vocabulaire annulé dans %s (segment %s)", fichier.name, rang_segment)
+    return {"ok": True, "message": langues.t("lect.annulation_faite", avant=remplacement.get("a", ""),
+                                            apres=remplacement.get("b", ""))}

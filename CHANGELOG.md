@@ -12,6 +12,29 @@ version : la chaîne de publication en extrait la section correspondant au tag.
 
 S'adapter au poste, et travailler pendant que la transcription tourne.
 
+- **Vocabulaire, format 2** (`vocabulaire.toml`, écran « Vocabulaire ») : un
+  fichier unique, lisible à la main, versionné, fusionnable (personnel,
+  équipe, projet). Par terme : forme correcte, catégorie, fautes connues
+  (toujours, ou seulement près de mots voisins), prononciation facultative,
+  poids, origine, état (actif, proposé, refusé). Le glossaire et les
+  corrections du format 1 restent lus tels quels ; **Convertir** les intègre
+  sans rien perdre.
+- **Amorce choisie** dans les 224 jetons : termes évoqués par le nom du
+  fichier, puis poids ; refaite à chaque fenêtre d'OpenVINO d'après la
+  fenêtre précédente.
+- **Correction après coup** journalisée : fautes listées, casse, rapprochement
+  phonétique borné, garde-fous contre les mots courants. Chaque remplacement
+  est listé dans la vue de relecture et s'annule d'un clic ; les mots changés
+  y sont marqués.
+- **Apprentissage** : `--apprendre-vocabulaire` tire des propositions de
+  couples transcription brute et relue (et des comptes rendus : Word,
+  Markdown, PDF texte), avec un lexique du français courant (FrequencyWords,
+  CC BY-SA 4.0) ; une correction faite en relecture devient une proposition.
+  Rien ne sert sans validation, le rapport chiffré ne contient aucun terme.
+- **Mesure** : `--mesurer-vocabulaire` chiffre chaque étage (taux d'erreur,
+  rappel et précision des termes par catégorie, fausses corrections) ;
+  `--corpus` valide la mécanique sur le corpus public, par plis.
+
 - **Réglage proposé pour ce poste**, au premier lancement et sur le bouton
   **Reconnaître ce poste** (ou `scribouille-verifier.exe --reconnaitre`) : une
   table de décision lisible (`app/adaptation.py`) regarde la carte NVIDIA, la

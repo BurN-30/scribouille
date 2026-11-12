@@ -12,6 +12,13 @@ packaging/sortie/
 # Propre au poste : chemins locaux, préférences, secrets
 config.json
 jeton_hf.txt
+# Vocabulaire de l'utilisateur (format 2) et propositions apprises : des noms
+# de personnes et de sociétés, jamais dans le dépôt.
+vocabulaire.toml
+vocabulaire.toml.tmp
+vocabulaire-propositions-*.toml
+vocabulaire-propositions-*-chiffres.txt
+*-format1-sauvegarde.txt
 dossier-modeles.txt
 gabarit-ia.txt
 

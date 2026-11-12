@@ -24,6 +24,7 @@
   <symbol id="i-lecture" viewBox="0 0 24 24"><path d="M6 4.5v15L19.5 12z"/></symbol>
   <symbol id="i-arret" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
   <symbol id="i-livre" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H19v3H6.5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
   <symbol id="i-personnes" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20v-1.5A4.5 4.5 0 0 1 7.5 14h3A4.5 4.5 0 0 1 15 18.5V20"/><path d="M16 5.2a3.2 3.2 0 0 1 0 5.9M17.5 14h.5a3.5 3.5 0 0 1 3.5 3.5V20"/></symbol>
   <symbol id="i-theme" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/></symbol>
   <symbol id="i-aide" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.4 9.3a2.7 2.7 0 0 1 5.2.9c0 1.8-2.6 2.3-2.6 4M12 17.2v.1"/></symbol>
@@ -300,6 +301,11 @@
           <span data-i18n="ui.bouton.corrections"></span>
         </button>
       </div>
+      <button class="bouton" id="btn-vocabulaire" style="width:100%;margin-top:8px">
+        <svg class="icone-s icone"><use href="#i-livre"></use></svg>
+        <span data-i18n="ui.bouton.vocabulaire"></span>
+        <span class="voc-compteur" id="voc-compteur-propositions" hidden></span>
+      </button>
     </div>
 
     <div class="bloc-reglage">
@@ -743,6 +749,109 @@
   </div>
 </div>
 
+<!-- Vocabulaire, format 2 : termes, fautes connues, propositions a relire -->
+<div class="voile" id="modale-vocabulaire">
+  <div class="modale modale-large modale-vocabulaire">
+    <div class="modale-entete">
+      <svg class="icone"><use href="#i-livre"></use></svg>
+      <h2 data-i18n="ui.modale.vocabulaire.titre"></h2>
+      <button class="bouton-icone" data-fermer><svg class="icone"><use href="#i-croix"></use></svg></button>
+    </div>
+    <div class="modale-corps">
+      <p class="voc-intro" data-i18n="ui.voc2.intro"></p>
+      <div class="voc-resume" id="voc-resume"></div>
+      <div id="voc-avis"></div>
+      <div class="onglets voc-onglets" role="tablist">
+        <button class="onglet" role="tab" data-voc-onglet="propose" aria-selected="true">
+          <span data-i18n="ui.voc2.onglet.propose"></span><span class="compteur" id="voc-n-propose">0</span>
+        </button>
+        <button class="onglet" role="tab" data-voc-onglet="actif" aria-selected="false">
+          <span data-i18n="ui.voc2.onglet.actif"></span><span class="compteur" id="voc-n-actif">0</span>
+        </button>
+        <button class="onglet" role="tab" data-voc-onglet="refuse" aria-selected="false">
+          <span data-i18n="ui.voc2.onglet.refuse"></span><span class="compteur" id="voc-n-refuse">0</span>
+        </button>
+        <span class="pousse"></span>
+        <input type="text" id="voc-recherche" class="voc-recherche" spellcheck="false"
+               data-i18n-placeholder="ui.voc2.rechercher">
+      </div>
+      <div class="voc-outils" id="voc-outils">
+        <label class="case"><input type="checkbox" id="voc-tout"><span data-i18n="ui.voc2.tout"></span></label>
+        <span class="pousse"></span>
+        <button class="bouton bouton-discret" id="btn-voc-refuser" data-i18n="ui.voc2.refuser_selection"></button>
+        <button class="bouton bouton-accent" id="btn-voc-accepter" data-i18n="ui.voc2.accepter_selection"></button>
+        <button class="bouton" id="btn-voc-ajouter">
+          <svg class="icone-s icone"><use href="#i-plus"></use></svg>
+          <span data-i18n="ui.voc2.ajouter"></span>
+        </button>
+      </div>
+      <div class="voc-edition" id="voc-edition" hidden>
+        <div class="voc-grille">
+          <div class="champ">
+            <label for="voc-forme" data-i18n="ui.voc2.champ.forme"></label>
+            <input type="text" id="voc-forme" spellcheck="false">
+          </div>
+          <div class="champ">
+            <label for="voc-categorie" data-i18n="ui.voc2.champ.categorie"></label>
+            <select id="voc-categorie"></select>
+          </div>
+          <div class="champ">
+            <label for="voc-poids" data-i18n="ui.voc2.champ.poids"></label>
+            <select id="voc-poids">
+              <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+              <option value="4">4</option><option value="5">5</option>
+            </select>
+          </div>
+        </div>
+        <div class="champ">
+          <label for="voc-fautes" data-i18n="ui.voc2.champ.fautes"></label>
+          <textarea id="voc-fautes" rows="3" spellcheck="false"></textarea>
+          <span class="aide" data-i18n="ui.voc2.champ.fautes_aide"></span>
+        </div>
+        <label class="case"><input type="checkbox" id="voc-amorce" checked><span data-i18n="ui.voc2.champ.amorce"></span></label>
+        <div class="voc-edition-actions">
+          <span class="pousse"></span>
+          <button class="bouton" id="btn-voc-edition-annuler" data-i18n="ui.bouton.annuler"></button>
+          <button class="bouton" id="btn-voc-edition-enregistrer" data-i18n="ui.bouton.enregistrer"></button>
+          <button class="bouton bouton-accent" id="btn-voc-edition-accepter" data-i18n="ui.voc2.enregistrer_accepter"></button>
+        </div>
+        <div id="voc-edition-retour"></div>
+      </div>
+      <div class="voc-liste" id="voc-liste"></div>
+      <div class="voc-partages">
+        <span class="titre-section" data-i18n="ui.voc2.partages.titre"></span>
+        <p class="aide" data-i18n="ui.voc2.partages.aide"></p>
+        <div id="voc-partages-liste"></div>
+        <button class="bouton bouton-discret" id="btn-voc-partage" style="margin-top:6px">
+          <svg class="icone-s icone"><use href="#i-plus"></use></svg>
+          <span data-i18n="ui.voc2.partages.ajouter"></span>
+        </button>
+        <label class="bascule" style="margin-top:10px">
+          <input type="checkbox" id="opt-rapprochement" checked>
+          <span class="piste"></span>
+          <span>
+            <span class="libelle" data-i18n="ui.voc2.rapprochement"></span><br>
+            <span class="sous-libelle" data-i18n="ui.voc2.rapprochement_aide"></span>
+          </span>
+        </label>
+      </div>
+    </div>
+    <div class="modale-pied">
+      <button class="bouton" id="btn-voc-importer">
+        <svg class="icone-s icone"><use href="#i-import"></use></svg>
+        <span data-i18n="ui.voc2.importer"></span>
+      </button>
+      <button class="bouton" id="btn-voc-exporter">
+        <svg class="icone-s icone"><use href="#i-export"></use></svg>
+        <span data-i18n="ui.voc2.exporter"></span>
+      </button>
+      <span class="pousse"></span>
+      <span class="lecture-retour" id="voc-retour"></span>
+      <button class="bouton bouton-accent" data-fermer data-i18n="ui.bouton.fermer"></button>
+    </div>
+  </div>
+</div>
+
 <div class="voile" id="modale-extension">
   <div class="modale">
     <div class="modale-entete">
@@ -865,6 +974,10 @@
         <span id="lecture-legende-texte" data-i18n="ui.lecture.legende"></span>
       </div>
       <div id="lecture-audio"></div>
+      <details class="lecture-remplacements" id="lecture-remplacements" hidden>
+        <summary id="lecture-remplacements-titre"></summary>
+        <div id="lecture-remplacements-liste"></div>
+      </details>
       <div class="lecture-texte" id="lecture-texte"></div>
     </div>
     <div class="modale-pied">

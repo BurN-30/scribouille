@@ -712,6 +712,32 @@ _FR: dict[str, str] = {
     "voc.err.illisible": "Ligne {ligne} : règle illisible ({detail}).",
     "voc.section_apprises": "# Apprises depuis les transcriptions",
     "voc.section_commentaire": "# Ajoutées d'un clic depuis la vue de lecture. Modifiables à la main.",
+    # -- vocabulaire, format 2 (app/vocabulaire_interface.py) ---------------
+    "trait.vocabulaire_probleme": "Vocabulaire : {detail}",
+    "voc2.acceptees.un": "{n} proposition acceptée.",
+    "voc2.acceptees.autres": "{n} propositions acceptées.",
+    "voc2.refusees.un": "{n} proposition refusée.",
+    "voc2.refusees.autres": "{n} propositions refusées.",
+    "voc2.introuvable": "Ce terme n'est plus dans le vocabulaire personnel.",
+    "voc2.doublon": "« {forme} » est déjà dans le vocabulaire.",
+    "voc2.forme_vide": "La forme correcte ne peut pas être vide.",
+    "voc2.enregistre": "« {forme} » enregistré.",
+    "voc2.ajoute": "« {forme} » ajouté au vocabulaire.",
+    "voc2.supprime": "« {forme} » retiré du vocabulaire.",
+    "voc2.import_illisible": "Fichier de vocabulaire illisible : {detail}",
+    "voc2.importe": "{ajoutees} propositions à relire ajoutées ({ignorees} déjà connues ou refusées).",
+    "voc2.exporte": "{n} termes actifs exportés.",
+    "voc2.converti": (
+        "{n} termes du glossaire et des corrections convertis. "
+        "Les anciens fichiers sont sauvegardés à côté."
+    ),
+    "voc2.propose_depuis_lecture": "Proposée au vocabulaire, à relire.",
+    "voc2.regle_memorisee": "Règle « {source} » vers « {cible} » ajoutée au vocabulaire.",
+    "voc2.type_fichier": "Vocabulaire Scribouille (*.toml;*.json)",
+    "voc2.partage_ajoute": "Fichier partagé ajouté : {nom}.",
+    "lect.annulation_introuvable": "Ce remplacement n'est plus dans le texte : rien n'a été changé.",
+    "lect.annulation_deja": "Ce remplacement est déjà annulé.",
+    "lect.annulation_faite": "Remplacement annulé : « {apres} » redevient « {avant} ».",
     "regle.selection_vide": "Sélectionnez d'abord le mot ou l'expression à corriger.",
     "regle.cible_vide": "Indiquez la forme correcte.",
     "regle.identique": "La forme corrigée est identique à la forme entendue.",
@@ -773,7 +799,8 @@ _FR: dict[str, str] = {
         "Le fichier a été modifié depuis la correction : elle n'a pas été annulée, "
         "pour ne pas écraser ces changements."),
     "lect.annulation.faite": "Correction annulée, le fichier est revenu à son état précédent.",
-    "lect.annulation.regle": "La règle ajoutée a été retirée des corrections.",
+    "lect.annulation.regle": "La règle mémorisée a été retirée.",
+    "lect.annulation.proposition": "La proposition ajoutée au vocabulaire a été retirée.",
 
     # -- espace occupé (app/stockage.py) -----------------------------------
     "stock.modeles.libelle": "Modèles de transcription",
@@ -2109,6 +2136,32 @@ _EN: dict[str, str] = {
     "voc.err.illisible": "Line {ligne}: unreadable rule ({detail}).",
     "voc.section_apprises": "# Learned from transcriptions",
     "voc.section_commentaire": "# Added in one click from the reading view. Editable by hand.",
+    # -- vocabulary, format 2 (app/vocabulaire_interface.py) ----------------
+    "trait.vocabulaire_probleme": "Vocabulary: {detail}",
+    "voc2.acceptees.un": "{n} suggestion accepted.",
+    "voc2.acceptees.autres": "{n} suggestions accepted.",
+    "voc2.refusees.un": "{n} suggestion rejected.",
+    "voc2.refusees.autres": "{n} suggestions rejected.",
+    "voc2.introuvable": "This term is no longer in the personal vocabulary.",
+    "voc2.doublon": "\"{forme}\" is already in the vocabulary.",
+    "voc2.forme_vide": "The correct form cannot be empty.",
+    "voc2.enregistre": "\"{forme}\" saved.",
+    "voc2.ajoute": "\"{forme}\" added to the vocabulary.",
+    "voc2.supprime": "\"{forme}\" removed from the vocabulary.",
+    "voc2.import_illisible": "Unreadable vocabulary file: {detail}",
+    "voc2.importe": "{ajoutees} suggestions added for review ({ignorees} already known or rejected).",
+    "voc2.exporte": "{n} active terms exported.",
+    "voc2.converti": (
+        "{n} terms from the glossary and corrections converted. "
+        "The old files are backed up next to them."
+    ),
+    "voc2.propose_depuis_lecture": "Suggested to the vocabulary, for review.",
+    "voc2.regle_memorisee": "Rule \"{source}\" to \"{cible}\" added to your vocabulary.",
+    "voc2.type_fichier": "Scribouille vocabulary (*.toml;*.json)",
+    "voc2.partage_ajoute": "Shared file added: {nom}.",
+    "lect.annulation_introuvable": "This replacement is no longer in the text: nothing was changed.",
+    "lect.annulation_deja": "This replacement is already undone.",
+    "lect.annulation_faite": "Replacement undone: \"{apres}\" is \"{avant}\" again.",
     "regle.selection_vide": "Select the word or phrase to correct first.",
     "regle.cible_vide": "Enter the correct form.",
     "regle.identique": "The corrected form is identical to the transcribed form.",
@@ -2168,7 +2221,8 @@ _EN: dict[str, str] = {
         "The file has changed since the correction: it was not undone, so as not to "
         "overwrite those changes."),
     "lect.annulation.faite": "Correction undone, the file is back to its previous state.",
-    "lect.annulation.regle": "The rule that was added has been removed from your corrections.",
+    "lect.annulation.regle": "The saved rule has been removed.",
+    "lect.annulation.proposition": "The suggestion added to the vocabulary has been removed.",
 
     "stock.modeles.libelle": "Transcription models",
     "stock.modeles.detail": (

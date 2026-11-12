@@ -507,14 +507,20 @@ class MoteurOpenVINO:
         frein = reglages.get("frein")
         if frein is not None:
             frein.depart()
+        # Amorce du vocabulaire refaite fenêtre par fenêtre quand il déborde du
+        # budget : les termes que la fenêtre précédente évoque passent devant
+        # (voir app/vocabulaire_usage.py). Une chaîne simple reste fixe.
+        texte_precedent = ""
         for fenetre in fenetres:
             if arret():
                 journal.attention("Transcription interrompue à la demande de l'utilisateur")
                 raise Interruption()
             correspondance = Correspondance(fenetre)
             morceau = np.concatenate([signal[p["start"]:p["end"]] for p in fenetre])
+            amorce_fenetre = (amorce.pour_fenetre(texte_precedent) if hasattr(amorce, "pour_fenetre")
+                              else amorce)
             resultat = self._pipeline.generate(
-                morceau, self._config(langue_fixee, faisceau, amorce), streamer=flux)
+                morceau, self._config(langue_fixee, faisceau, amorce_fenetre), streamer=flux)
             if arret():
                 journal.attention("Transcription interrompue à la demande de l'utilisateur")
                 raise Interruption()
@@ -525,7 +531,7 @@ class MoteurOpenVINO:
                 # dernière phrase annoncée comme continuant au-delà de la fenêtre.
                 plafond += 1
             if faisceau == 1 and _taux_compression(texte) > SEUIL_COMPRESSION:
-                resultat = self._garde_repetition(morceau, resultat, texte, langue_fixee, amorce,
+                resultat = self._garde_repetition(morceau, resultat, texte, langue_fixee, amorce_fenetre,
                                                   flux, mode_garde, bilan)
                 if arret():
                     journal.attention("Transcription interrompue à la demande de l'utilisateur")
@@ -540,8 +546,10 @@ class MoteurOpenVINO:
                 brute = detectees[0] if detectees else getattr(resultat, "language", "")
                 langue_fixee = str(brute or "").strip("<|>") or None
                 langue_detectee = langue_fixee or ""
+            texte_precedent = ""
             for segment in self._segments(resultat, correspondance, decalage):
                 segments.append(segment)
+                texte_precedent += " " + segment.texte
                 if sur_segment is not None:
                     sur_segment(segment)
             if progression and duree_totale > 0:
