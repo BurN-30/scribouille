@@ -542,6 +542,12 @@ def essai_instances(base: Path) -> None:
                  "le verrou d'un processus disparu est repris")
         instance.rendre_fichier(source)
         verifier(not verrou.exists(), "le verrou est rendu en fin de fichier")
+        from app import cli, langues
+
+        langues.definir("fr")
+        verifier(cli._noms("Alice,Bob") == {"Locuteur 1": "Alice", "Locuteur 2": "Bob"}
+                 and cli._noms("Locuteur 3=Chloé") == {"Locuteur 3": "Chloé"},
+                 "--noms : « Alice,Bob » ou « Locuteur 3=Chloé »")
     finally:
         chemins.RACINE = racine
 

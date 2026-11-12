@@ -223,6 +223,7 @@ def _analyseur() -> argparse.ArgumentParser:
     t.add_argument("--vocabulaire", action="append", default=[])
     t.add_argument("--sans-vocabulaire", action="store_true")
     t.add_argument("--locuteurs", default="")
+    t.add_argument("--noms", default="")
     t.add_argument("--rythme", choices=("vitesse", "equilibre", "discret", "auto"))
     t.add_argument("--recursif", action="store_true")
     t.add_argument("--telecharger", action="store_true")
@@ -323,7 +324,7 @@ AIDE = """Scribouille {version}, transcription locale, sans fenêtre.
   scribouille transcrire FICHIER|DOSSIER... [--sortie D] [--formats txt,json,srt,vtt]
                          [--langue fr] [--preset qualite|rapide] [--moteur auto|openvino|ctranslate2]
                          [--peripherique CPU|GPU|NPU] [--rythme vitesse|equilibre|discret|auto]
-                         [--locuteurs auto|non|N] [--vocabulaire F.toml] [--sans-vocabulaire]
+                         [--locuteurs auto|non|N] [--noms Alice,Bob] [--vocabulaire F.toml] [--sans-vocabulaire]
                          [--recursif] [--telecharger] [--ecraser]
   scribouille reprendre [CLE|FICHIER]          reprendre une transcription interrompue
   scribouille etat                             transcriptions en cours et reprenables, moteurs actifs
@@ -504,7 +505,36 @@ def _modele_attendu(config: dict, mat) -> str:
     return modele
 
 
-def _executer_file(sortie: Sortie, elements: list, config: dict, telecharger: bool) -> dict:
+def _noms(valeur: str) -> dict[str, str]:
+    """
+    « Alice,Bob » (Locuteur 1, Locuteur 2...) ou « Locuteur 2=Bob,Locuteur 1=Alice ».
+    """
+    noms: dict[str, str] = {}
+    for rang, morceau in enumerate([m.strip() for m in (valeur or "").split(",") if m.strip()], start=1):
+        ancien, egal, nouveau = morceau.partition("=")
+        if egal:
+            noms[ancien.strip()] = nouveau.strip()
+        else:
+            noms[langues.t("diar.locuteur", n=rang)] = morceau
+    return noms
+
+
+def _renommer(produits: list[str], noms: dict[str, str]) -> list[str]:
+    """Renomme les locuteurs dans les .txt produits ; rend les renommages faits."""
+    from . import relecture
+
+    faits = []
+    for chemin in produits:
+        if not chemin.lower().endswith(".txt"):
+            continue
+        for ancien, nouveau in noms.items():
+            if relecture.renommer_locuteur(chemin, ancien, nouveau).get("ok"):
+                faits.append(f"{ancien} -> {nouveau}")
+    return faits
+
+
+def _executer_file(sortie: Sortie, elements: list, config: dict, telecharger: bool,
+                   noms: dict[str, str] | None = None) -> dict:
     """Une file de fichiers dans le processus moteur, avec progression et Ctrl+C."""
     from . import presets, superviseur, traitement
     from .materiel import detecter_au_demarrage
@@ -543,6 +573,8 @@ def _executer_file(sortie: Sortie, elements: list, config: dict, telecharger: bo
             r.update({"ok": True, "sorties": produits + compagnons, "json": compagnons[0] if compagnons else "",
                       "duree": donnees.get("duree"), "facteur": donnees.get("facteur"),
                       "locuteurs": donnees.get("locuteurs"), "corrections": donnees.get("corrections")})
+            if noms and donnees.get("locuteurs"):
+                r["renommes"] = _renommer(produits, noms)
             sortie.fin_progression()
             sortie.evenement("fichier_fini", id=identifiant, **r)
             sortie.dire(f"[{rang[identifiant]}/{len(elements)}] {noms[identifiant]} : fait en {r['duree']}"
@@ -639,7 +671,7 @@ def cmd_transcrire(options, sortie: Sortie) -> int:
         sortie.evenement("fin", reussis=0, echecs=0, annules=0, ignores=len(ignores), code_retour=SORTIE_EXISTANTE,
                          fichiers=[], ignores_detail=ignores)
         return SORTIE_EXISTANTE
-    execution = _executer_file(sortie, elements, config, options.telecharger)
+    execution = _executer_file(sortie, elements, config, options.telecharger, _noms(options.noms))
     code = _code_de_fin(execution, len(ignores))
     bilan = execution["bilan"]
     sortie.evenement("fin", reussis=bilan.get("reussis", 0), echecs=bilan.get("echecs", 0),
