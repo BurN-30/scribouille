@@ -609,7 +609,6 @@ def _executer(passages: int, cle: str, pression: bool, memoire_libre: float, dia
     from . import config as config_module, corpus
 
     depart = time.time()
-    config_module.charger()  # langue de l'interface, celle du rapport
 
     def dire(message: str) -> None:
         journal.info("Endurance : %s", message)
@@ -701,6 +700,11 @@ def _executer(passages: int, cle: str, pression: bool, memoire_libre: float, dia
 # ---------------------------------------------------------------------------
 
 def principal_cli(arguments: list[str]) -> int:
+    from . import config as config_module
+
+    # Langue de l'interface, celle du rapport : posée ici, au point d'entrée,
+    # pas par `executer` (qu'un essai appelle dans sa propre langue).
+    config_module.charger(definir_langue=True)
     if "--endurance-essai" in arguments:
         try:
             return executer_passages(cp._valeur(arguments, "--endurance-essai"))

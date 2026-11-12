@@ -1029,7 +1029,6 @@ def _executer(reglages: str, limite: int, paquet: str, peripherique: str, recomm
     from .comparaison import nombre_mots_anglais
 
     depart = time.time()
-    config_module.charger()  # langue de l'interface, celle du rapport
 
     def dire(message: str) -> None:
         journal.info("Campagne : %s", message)
@@ -1382,6 +1381,11 @@ def _valeur(arguments: list[str], option: str, defaut: str = "") -> str:
 
 
 def principal_cli(arguments: list[str]) -> int:
+    from . import config as config_module
+
+    # Langue de l'interface, celle du rapport : posée ici, au point d'entrée,
+    # pas par `executer` (qu'un essai appelle dans sa propre langue).
+    config_module.charger(definir_langue=True)
     if "--campagne-essai" in arguments:
         return principal_essai(_valeur(arguments, "--campagne-essai"))
     from .comparaison import lire_duree

@@ -1461,6 +1461,11 @@ def _valeur(arguments: list[str], option: str, defaut: str = "") -> str:
 
 
 def principal_cli(arguments: list[str]) -> int:
+    from . import config as _config_langue
+
+    # Langue de l'interface, celle des messages et du rapport : posée au
+    # point d'entrée (lire la configuration ne la change plus).
+    _config_langue.charger(definir_langue=True)
     if "--comparer-essai" in arguments:
         return principal_moteur(_valeur(arguments, "--comparer-essai"))
     fichier = _valeur(arguments, "--comparer")

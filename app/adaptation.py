@@ -325,6 +325,11 @@ def decrire(p: Profil) -> list[str]:
 
 def principal_cli(arguments: list[str]) -> int:
     """`--reconnaitre [--appliquer]` : le poste, la règle, la proposition."""
+    from . import config as _config_langue
+
+    # Langue de l'interface, celle des messages et du rapport : posée au
+    # point d'entrée (lire la configuration ne la change plus).
+    _config_langue.charger(definir_langue=True)
     from . import config as config_module, materiel
 
     for flux in (__import__("sys").stdout,):

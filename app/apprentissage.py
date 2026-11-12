@@ -484,6 +484,11 @@ def charger_reunions(triplets, documents_seuls) -> tuple[list[Reunion], int]:
 
 
 def principal_cli(arguments: list[str]) -> int:
+    from . import config as _config_langue
+
+    # Langue de l'interface, celle des messages et du rapport : posée au
+    # point d'entrée (lire la configuration ne la change plus).
+    _config_langue.charger(definir_langue=True)
     from . import vocabulaire_v2
 
     for flux in (sys.stdout, sys.stderr):

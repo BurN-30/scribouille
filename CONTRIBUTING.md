@@ -44,6 +44,16 @@ All of them exit with code 0 when everything passes. Run at least `--verifier` a
 `outils/mesure_sauvegarde_progressive.py`, which measures the cost of progressive saving;
 it is a measurement, not a check.
 
+The checks must pass whatever the language of Windows. To try the other one without
+changing Windows, set `SCRIBOUILLE_LANGUE_SYSTEME` to `fr` or `en`: the application then
+takes it as the system language (the GitHub runner is in English; the continuous
+verification runs the fast checks a second time with `fr`).
+
+```bat
+set SCRIBOUILLE_LANGUE_SYSTEME=en
+.venv\Scripts\python outils\verifier_donnees.py
+```
+
 Please also add a line to the top section of [CHANGELOG.md](CHANGELOG.md). Do not bump
 `VERSION` in `app/__init__.py`, releases are cut by the maintainer.
 

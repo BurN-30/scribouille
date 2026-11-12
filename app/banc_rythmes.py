@@ -285,6 +285,11 @@ def rediger(mat, moteur_voulu: str, peripherique: str, repos: dict, resultats: l
 
 
 def principal_cli(arguments: list[str]) -> int:
+    from . import config as _config_langue
+
+    # Langue de l'interface, celle des messages et du rapport : posée au
+    # point d'entrée (lire la configuration ne la change plus).
+    _config_langue.charger(definir_langue=True)
     def valeur(option: str, defaut: str = "") -> str:
         if option in arguments:
             rang = arguments.index(option)

@@ -13,6 +13,7 @@ Sort avec le code 0 si tout passe, 1 sinon.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -578,7 +579,7 @@ def essai_instances(base: Path) -> None:
             langues_module.definir("en")
             config_module.charger(definir_langue=False)
             garde = langues_module.courante()
-            config_module.charger()
+            config_module.charger(definir_langue=True)
         finally:
             chemins.FICHIER_CONFIG = fichier_config
         passerelle = (RACINE / "transcriber.pyw").read_text(encoding="utf-8")
@@ -586,6 +587,33 @@ def essai_instances(base: Path) -> None:
                  and "disque = config_module.charger(definir_langue=False)" in passerelle,
                  "changer de langue : la fenêtre qui relit le disque ne remet pas l'ancienne langue",
                  f"{garde} {langues_module.courante()}")
+
+        # Langue choisie contre langue du système (échec du service de
+        # vérification, poste en anglais) : lire une configuration sans langue
+        # enregistrée ne doit pas imposer celle du système au processus.
+        variable = os.environ.get("SCRIBOUILLE_LANGUE_SYSTEME")
+        chemins.FICHIER_CONFIG = base / "config-sans-langue.json"
+        vus = []
+        try:
+            for systeme, choisie in (("en", "fr"), ("fr", "en")):
+                os.environ["SCRIBOUILLE_LANGUE_SYSTEME"] = systeme
+                chemins.FICHIER_CONFIG.unlink(missing_ok=True)
+                langues_module.definir(choisie)
+                lue = config_module.charger()
+                vus.append((langues_module.detecter_systeme(), langues_module.courante(), lue["langue_interface"]))
+                chemins.FICHIER_CONFIG.unlink(missing_ok=True)
+                config_module.charger(definir_langue=True)
+                vus.append(langues_module.courante())
+        finally:
+            chemins.FICHIER_CONFIG = fichier_config
+            if variable is None:
+                os.environ.pop("SCRIBOUILLE_LANGUE_SYSTEME", None)
+            else:
+                os.environ["SCRIBOUILLE_LANGUE_SYSTEME"] = variable
+            langues_module.definir("fr")
+        verifier(vus == [("en", "fr", "en"), "en", ("fr", "en", "fr"), "fr"],
+                 "langue choisie : lire la configuration ne la remplace pas par celle du système ; "
+                 "le premier lancement, lui, suit le système", str(vus))
         from app import processus as processus_module
 
         tampon = bytearray(64 * 1024 * 1024)  # 64 Mo occupés pour de bon

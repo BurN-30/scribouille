@@ -2910,7 +2910,15 @@ def detecter_systeme() -> str:
     formats français reste un poste anglais. Ailleurs, ou en cas d'échec, on lit
     les variables d'environnement habituelles. Une locale illisible donne
     l'anglais, choix documenté en tête de module.
+
+    `SCRIBOUILLE_LANGUE_SYSTEME` (« fr » ou « en ») remplace la langue lue :
+    point d'essai, pour vérifier sur un poste français le comportement d'un
+    poste anglais (le service de vérification de GitHub est en anglais), et
+    l'inverse. Une valeur inconnue est ignorée.
     """
+    impose = normaliser(os.environ.get("SCRIBOUILLE_LANGUE_SYSTEME"))
+    if impose:
+        return impose
     if sys.platform == "win32":
         try:
             import ctypes

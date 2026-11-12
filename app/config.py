@@ -64,11 +64,16 @@ def _fusionner(base: dict, ajout: dict) -> dict:
     return resultat
 
 
-def charger(definir_langue: bool = True) -> dict:
+def charger(definir_langue: bool = False) -> dict:
     """
-    La configuration du disque, défauts compris. `definir_langue=False` : la
-    langue de l'interface du processus n'est pas touchée (la fenêtre qui relit
-    le disque pour fusionner ses réglages vient peut-être d'en changer).
+    La configuration du disque, défauts compris.
+
+    Lire la configuration ne change pas la langue de l'interface du processus :
+    seuls les points d'entrée (fenêtre, ligne de commande, moteur, import de
+    données) la posent, avec `definir_langue=True`. Avant, toute lecture la
+    reposait : une langue choisie par le processus (par un essai, ou par la
+    fenêtre qui venait d'en changer) cédait à celle du disque, et, sur un
+    dossier sans langue enregistrée, à celle du système.
     """
     donnees: dict = {}
     if chemins.FICHIER_CONFIG.exists():

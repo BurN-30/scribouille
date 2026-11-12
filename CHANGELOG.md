@@ -117,6 +117,12 @@ Corrigé après la recette
   clic ; documentation livrée à côté de l'exécutable et accordée au
   comportement par un contrôle automatique.
 
+Corrigé après le premier essai sur le PC à puce Intel
+
+- **Langue** : lire la configuration ne change plus la langue de l'interface ;
+  une langue choisie l'emporte toujours sur celle du système (un Windows en
+  anglais faisait passer en anglais des messages attendus en français).
+
 ---
 
 ## 2.4.0

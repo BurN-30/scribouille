@@ -81,3 +81,17 @@ jobs:
       - name: Ligne de commande (analyse, aide, erreurs d'usage)
         shell: pwsh
         run: python outils/verifier_ligne_de_commande.py
+
+      # Le service de vérification est en anglais : les vérificateurs qui
+      # comparent des messages repassent avec la langue du système forcée au
+      # français (point d'essai de app/langues.py). Une langue choisie doit
+      # toujours l'emporter sur celle du système, dans un sens comme dans l'autre.
+      - name: Seconde passe, langue du système forcée au français
+        shell: pwsh
+        env:
+          SCRIBOUILLE_LANGUE_SYSTEME: fr
+        run: |
+          foreach ($v in "verifier_donnees", "verifier_fonctions_peripheriques", "verifier_vocabulaire", "verifier_socle") {
+            python "outils/$v.py"
+            if ($LASTEXITCODE -ne 0) { Write-Error "$v en échec avec la langue du système en français."; exit 1 }
+          }

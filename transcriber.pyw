@@ -472,7 +472,7 @@ class Passerelle:
         #: Premier lancement : pas encore de configuration. La fenêtre propose
         #: alors un réglage pour ce poste (voir `app/adaptation.py`).
         self._premier_lancement = not chemins.FICHIER_CONFIG.exists()
-        self.config = config_module.charger()
+        self.config = config_module.charger(definir_langue=True)
         import copy
 
         #: Réglages tels que lus : la base de `_enregistrer_config`.
@@ -1848,8 +1848,9 @@ class Passerelle:
         """Écrit réellement les données importées, après confirmation de l'utilisateur."""
         retour = donnees.importer(chemin)
         if retour.get("ok"):
-            # L'objet de configuration en mémoire est périmé dès cet instant.
-            self.config = config_module.charger()
+            # L'objet de configuration en mémoire est périmé dès cet instant,
+            # et la langue de l'interface est peut-être celle de l'archive.
+            self.config = config_module.charger(definir_langue=True)
             import copy
 
             self._config_lue = copy.deepcopy(self.config)

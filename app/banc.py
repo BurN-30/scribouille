@@ -809,6 +809,11 @@ def dernier_rapport() -> str:
 
 def principal_cli(arguments: list[str]) -> int:
     """`--banc` : le banc complet en ligne de commande, rapport sur la sortie."""
+    from . import config as _config_langue
+
+    # Langue de l'interface, celle des messages et du rapport : posée au
+    # point d'entrée (lire la configuration ne la change plus).
+    _config_langue.charger(definir_langue=True)
     if "--banc-essai" in arguments:
         rang = arguments.index("--banc-essai")
         return principal_essai(arguments[rang + 1] if rang + 1 < len(arguments) else "")

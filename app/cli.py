@@ -106,7 +106,7 @@ def config_cli(commande: str = "") -> dict:
     from . import config as config_module
 
     if commande not in SANS_ECRITURE:
-        return config_module.charger()
+        return config_module.charger(definir_langue=True)
     try:
         donnees = json.loads(chemins.FICHIER_CONFIG.read_text(encoding="utf-8"))
     except (OSError, ValueError):
