@@ -25,6 +25,8 @@ DEFAUTS: dict = {
     "utiliser_glossaire": True,
     "compagnon_confiance": True,    # fichier .json de confiance à côté des sorties
     "corrections_apprises": True,   # proposer de mémoriser une correction relue
+    "rapprochement_vocabulaire": True,  # vocabulaire : rapprochement phonétique borné, voir app/vocabulaire_usage.py
+    "vocabulaires_partages": [],    # fichiers de vocabulaire d'équipe ou de projet, lus en plus du personnel
     "sauvegarde_progressive": True, # écrire au fil des segments, reprise possible
     "lecture_audio": False,         # écouter l'extrait depuis la vue de lecture
     "motif_sortie": "",             # vide = nommage historique, « {date}-{nom} »

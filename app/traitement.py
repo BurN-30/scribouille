@@ -24,7 +24,7 @@ from . import audio as audio_module
 from . import calibration
 from . import config as config_module
 from . import diarisation, energie, journal, langues, moteur, presets, reprise as reprise_module
-from . import reglage_machine, rythme, sorties, vocabulaire
+from . import reglage_machine, rythme, sorties, vocabulaire, vocabulaire_usage, vocabulaire_v2
 from .journal import ErreurLisible
 from .materiel import Materiel
 
@@ -431,12 +431,21 @@ class FileTraitement:
 
         instance.charger(reglages["modele"], signaler)
 
+        # Vocabulaire effectif : glossaire et corrections du format 1 encore en
+        # place, fichiers partagés, puis vocabulaire personnel (format 2).
+        voc, problemes_voc = vocabulaire_v2.effectif(config)
+        for probleme in problemes_voc:
+            signaler("attention", langues.t("trait.vocabulaire_probleme", detail=probleme))
+
         amorce_info = {"amorce": "", "nb_retenus": 0, "message": ""}
+        amorce = ""
         if config.get("utiliser_glossaire", True):
             # L'en-tête de l'amorce suit la langue parlée : elle est lue par le
-            # décodeur comme un début de texte, pas comme une consigne.
-            amorce_info = vocabulaire.construire_amorce(
-                tokeniseur=instance.tokeniseur, langue=config.get("langue", "fr"))
+            # décodeur comme un début de texte, pas comme une consigne. Le nom
+            # du fichier sert d'indice : les termes qu'il évoque passent devant.
+            amorce = vocabulaire_usage.amorce(voc, tokeniseur=instance.tokeniseur,
+                                              langue=config.get("langue", "fr"), contexte=source.stem)
+            amorce_info = amorce.info
             if amorce_info["amorce"]:
                 signaler("info", amorce_info["message"])
                 if amorce_info["tronque"]:
@@ -465,7 +474,7 @@ class FileTraitement:
         debut_transcription = time.time()
         segments, details = instance.transcrire(
             a_transcrire, duree_audio, config.get("langue", "fr"), reglages,
-            amorce=amorce_info["amorce"], progression=progression,
+            amorce=amorce, progression=progression,
             interrompu=self._interrompu, decalage=decalage,
             sur_segment=lambda seg: session.ajouter(seg, time.time() - depart),
         )
@@ -524,18 +533,22 @@ class FileTraitement:
         gc.collect()
 
         # 5. Corrections post-transcription
+        # Étage b du vocabulaire : fautes listées, graphie, rapprochement
+        # phonétique borné. Chaque remplacement est noté dans le compagnon, pour
+        # être montré et annulé dans la vue de relecture.
         remplacements = 0
+        journal_remplacements: list[dict] = []
         if config.get("appliquer_corrections", True):
-            regles, erreurs = vocabulaire.analyser_corrections()
+            _regles, erreurs = vocabulaire.analyser_corrections()
             for message in erreurs:
                 signaler("attention", langues.t("trait.corrections_fichier", message=message))
-            if regles:
-                for segment in segments:
-                    segment.texte, nombre = vocabulaire.appliquer(segment.texte, regles)
-                    remplacements += nombre
-                if remplacements:
-                    signaler("ok", langues.t(
-                        "trait.corrections_appliquees", n=remplacements))
+            correcteur = vocabulaire_usage.Correcteur(
+                voc, rapprochement=bool(config.get("rapprochement_vocabulaire", True)))
+            journal_remplacements = correcteur.corriger_segments(segments)
+            remplacements = len(journal_remplacements)
+            if remplacements:
+                signaler("ok", langues.t(
+                    "trait.corrections_appliquees", n=remplacements))
 
         if self._interrompu():
             raise moteur.Interruption()
@@ -550,6 +563,7 @@ class FileTraitement:
             "nb_locuteurs": nb_locuteurs,
             "diarisation_demandee": bool(config.get("diarisation")),
             "corrections_appliquees": remplacements,
+            "remplacements_vocabulaire": journal_remplacements,
             "termes_amorce": amorce_info["nb_retenus"],
             "temps_calcul": temps_calcul,
             "facteur_reel": temps_calcul / duree_audio if duree_audio else 0,
