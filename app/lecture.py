@@ -740,7 +740,9 @@ def _raccorder(gauche: str, remplacement: str, droite: str) -> str:
     sur une ligne ; une suppression ne laisse ni double espace ni espace en
     bord de paragraphe.
     """
-    remplacement = " ".join(str(remplacement or "").split())
+    # Le remplacement arrive déjà sur une ligne (`calculer_plages`), et peut
+    # commencer ou finir par l'espace qui sépare deux mots : il est pris tel quel.
+    remplacement = str(remplacement or "")
     if not remplacement and gauche.endswith(" ") and droite.startswith(" "):
         droite = droite[1:]
     return (gauche + remplacement + droite).strip(" ")
@@ -832,6 +834,56 @@ def _reconstruire(corps: str, plan: list[dict], textes: dict[int, str],
     return "".join(morceaux)
 
 
+def _mots_situes(segments: list, situe: dict, corps: str) -> list[tuple[dict, int, int]]:
+    """Chaque mot du compagnon de ce paragraphe, avec sa place dans le texte du paragraphe."""
+    places = []
+    for rang, debut, fin in situe["segments"]:
+        texte, position = corps[debut:fin], 0
+        for mot in segments[rang].get("m") or []:
+            if not isinstance(mot, dict) or not mot.get("t"):
+                continue
+            trouve = _chercher_mot(texte, str(mot["t"]), position)
+            if trouve < 0:
+                continue
+            decalage = debut - situe["debut"]
+            places.append((mot, decalage + trouve, decalage + trouve + len(str(mot["t"]))))
+            position = trouve + len(str(mot["t"]))
+    return places
+
+
+def _etendre_au_mot(texte: str, debut: int, fin: int) -> tuple[int, int]:
+    """Une plage élargie aux mots qu'elle entame : « gitl » dans « gitlab » devient « gitlab »."""
+    dans_mot = lambda c: c.isalnum() or c in "'’-_"  # noqa: E731
+    while debut > 0 and dans_mot(texte[debut - 1]):
+        debut -= 1
+    while fin < len(texte) and dans_mot(texte[fin]):
+        fin += 1
+    return debut, fin
+
+
+def _corriger_mots(mots: list, avant: str, apres: str, debut: int, fin: int) -> None:
+    """
+    Les mots du compagnon touchés par un remplacement prennent le texte
+    nouveau : le premier le porte, avec son heure (l'écoute s'y place
+    toujours), les suivants sont retirés. Une suppression les retire tous.
+    """
+    a, b = _etendre_au_mot(avant, debut, fin)
+    nouveau = apres[a:len(apres) - (len(avant) - b)].strip()
+    touches = [entree for entree in mots if entree[1] < b and entree[2] > a]
+    for n, (mot, _, _) in enumerate(touches):
+        if n == 0 and nouveau:
+            mot["t"] = nouveau
+        else:
+            mot["t"] = ""
+
+
+def _nettoyer_mots(segments: list, situe: dict) -> None:
+    for rang, _, _ in situe["segments"]:
+        mots = segments[rang].get("m")
+        if isinstance(mots, list):
+            segments[rang]["m"] = [m for m in mots if not isinstance(m, dict) or m.get("t")]
+
+
 def calculer_plages(etat: dict, plages: list[tuple[int, int, str]]) -> tuple[str, dict | None]:
     """
     Nouveau corps et nouveau compagnon après remplacement de plages du corps
@@ -846,20 +898,34 @@ def calculer_plages(etat: dict, plages: list[tuple[int, int, str]]) -> tuple[str
         k = next((i for i, p in enumerate(plan) if p["debut"] <= debut <= fin <= p["fin"]), None)
         if k is None:
             raise Refus("hors_paragraphe")
-        par_paragraphe.setdefault(k, []).append((debut - plan[k]["debut"], fin - plan[k]["debut"], texte))
+        # La plage est réduite à ce qui change vraiment : un paragraphe
+        # réécrit dont seul un mot bouge ne touche que ce mot, et les autres
+        # gardent leur heure et leur confiance.
+        remplacement = " ".join(str(texte or "").split())
+        tete, queue = _commun(corps[debut:fin], remplacement)
+        debut, fin = debut + tete, fin - queue
+        remplacement = remplacement[tete:len(remplacement) - queue]
+        par_paragraphe.setdefault(k, []).append((debut - plan[k]["debut"], fin - plan[k]["debut"], remplacement))
     textes: dict[int, str] = {}
+    donnees = copy.deepcopy(etat["donnees"]) if etat["situe"] else None
     for k, liste in par_paragraphe.items():
         liste.sort()
         if any(liste[n][0] < liste[n - 1][1] for n in range(1, len(liste))):
             raise Refus("chevauchement")
         texte = corps[plan[k]["debut"]:plan[k]["fin"]]
+        mots = _mots_situes(donnees["segments"], plan[k], corps) if donnees else []
+        # De la fin vers le début : les positions des plages et des mots qui
+        # précèdent restent celles du texte d'origine.
         for debut, fin, remplacement in reversed(liste):
+            avant = texte
             texte = _raccorder(texte[:debut], remplacement, texte[fin:])
+            if mots:
+                _corriger_mots(mots, avant, texte, debut, fin)
         textes[k] = texte
+        if mots:
+            _nettoyer_mots(donnees["segments"], plan[k])
     nouveau_corps = _reconstruire(corps, plan, textes)
-    donnees = None
-    if etat["situe"]:
-        donnees = copy.deepcopy(etat["donnees"])
+    if donnees is not None:
         segments = donnees["segments"]
         for k, texte in textes.items():
             _redistribuer(segments, plan[k], corps[plan[k]["debut"]:plan[k]["fin"]], texte)

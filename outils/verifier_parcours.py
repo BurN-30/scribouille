@@ -1253,6 +1253,30 @@ def essai_finition() -> None:
              "les transcriptions listées donnent la durée et la date de la réunion, plus la taille du fichier")
 
 
+def essai_mots_corriges(base: Path) -> None:
+    """Le mot corrigé garde son heure ; les mots qui ne bougent pas gardent leur confiance."""
+    from app import relecture
+
+    titre("Corrections : le mot corrigé reste un mot, avec son heure ; les autres ne bougent pas")
+    dossier = base / "mots"
+    dossier.mkdir()
+    txt = ecrire(dossier, [segment(0.0, 6.0, jetons("On pousse sur gitlab ce soir, puis on relit le budget.", p=0.7))])
+    avant = lecture.charger(txt)["paragraphes"][0]["mots"]
+    heure = next(m["d"] for m in avant if m["t"] == "gitlab")
+    relecture.corriger(txt, "gitlab", "GitLab", "tous")
+    mots = lecture.charger(txt)["paragraphes"][0]["mots"]
+    corrige = next((m for m in mots if m["t"] == "GitLab"), None)
+    verifier(corrige is not None and corrige["d"] == heure,
+             "« GitLab » est un mot de la relecture, à l'heure de « gitlab »", str(corrige))
+    texte = lecture.charger(txt)["paragraphes"][0]["texte"]
+    lecture.editer_passage(txt, 0, 0, len(texte), texte, texte.replace("budget", "budget annuel"))
+    apres = lecture.charger(txt)["paragraphes"][0]["mots"]
+    gardes = [m for m in apres if m["p"] >= 0]
+    verifier(len(gardes) >= len([m for m in mots if m["p"] >= 0]) - 1 and lecture.controler(txt) == "",
+             "un paragraphe réécrit où un seul mot change garde la confiance des autres",
+             f"{len(gardes)} mots notés après, {len([m for m in mots if m['p'] >= 0])} avant")
+
+
 def essai_passage_libre(base: Path) -> None:
     """Réécrire ou supprimer un passage : même règle d'égalité, même annulation."""
     titre("Passage réécrit ou supprimé : l'écran reste le fichier")
@@ -1325,6 +1349,7 @@ def principal() -> int:
         essai_annulation_profonde(base)
         essai_vocabulaire_sur_demande(base)
         essai_passage_libre(base)
+        essai_mots_corriges(base)
         essai_position_relecture(base)
         essai_heures_et_avis(base)
         essai_depot_mele()
