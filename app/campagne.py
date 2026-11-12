@@ -917,10 +917,15 @@ def _executer(reglages: str, limite: int, paquet: str, peripherique: str, recomm
                            "peripherique": r.get("peripherique", ""), "facteur": r["facteur"],
                            "lot": int(r.get("lot") or 0), "duree_audio": corpus_info["duree_s"],
                            "wer": agregats[retenu]["wer"], "date": _heure()}
-    (dossier / "verdict.json").write_text(json.dumps({
+    # Écrit à côté puis renommé : une lecture concurrente (campagne « réunion »
+    # lancée pendant ce temps) voit l'ancien fichier ou le nouveau, jamais un
+    # fichier à moitié écrit.
+    provisoire = dossier / "verdict.json.tmp"
+    provisoire.write_text(json.dumps({
         "verdict": verdict_donnees,
         "agregats": agregats, "decision": decision,
         "resultats": resultats}, ensure_ascii=False, indent=1, default=list), encoding="utf-8")
+    os.replace(provisoire, dossier / "verdict.json")
     return {"rapport": rapport, "fichier": str(fichier), "verdict": verdict_donnees,
             "dossier": str(dossier), "decision": decision}
 
@@ -962,15 +967,32 @@ def dernier_verdict() -> dict:
 # Réunion réelle (confidentielle) : accord entre réglages, rien d'autre
 # ---------------------------------------------------------------------------
 
+def choisir_ancre(retenu: str, reussis: list[str]) -> tuple[str, str]:
+    """
+    Réglage auquel comparer les autres sur une réunion, et pourquoi.
+
+    Le réglage retenu par la campagne publique s'il a réussi ici ; sinon le
+    preset « Qualité maximale », en disant si c'est faute de verdict ou parce
+    que le réglage retenu a échoué sur cette réunion ; sinon le premier réussi.
+    """
+    if retenu and retenu in reussis:
+        return retenu, "verdict"
+    if "ct2-v3-f5" in reussis:
+        return "ct2-v3-f5", "verdict_echec" if retenu else "qualite"
+    return (reussis[0] if reussis else ""), "premier"
+
+
 def rediger_rapport_reunion(mat, duree: float, resultats: dict[str, dict], accords: dict[str, dict],
                             ancre: str, ancre_source: str, glossaire: dict, trouves: dict[str, int],
-                            segments: dict[str, dict], peripherique: str, duree_totale: float) -> str:
+                            segments: dict[str, dict], peripherique: str, duree_totale: float,
+                            retenu: str = "") -> str:
     from .banc import _masquer
 
     t = langues.t
     lignes = _entete(mat, "camp.reunion.titre")
     lignes += ["", t("camp.reunion.extrait", minutes=_n(duree / 60, 1))]
-    lignes.append(t("camp.reunion.ancre", code=ancre or "-", source=t(f"camp.reunion.ancre.{ancre_source}")))
+    lignes.append(t("camp.reunion.ancre", code=ancre or "-",
+                    source=t(f"camp.reunion.ancre.{ancre_source}", retenu=retenu or "-")))
     lignes.append(t("camp.reunion.glossaire", termes=glossaire["termes"], exemples=glossaire["exemples"]))
     lignes.append("")
     for reglage in CANDIDATS:
@@ -1054,19 +1076,16 @@ def _executer_reunion(fichier: str, debut: float, duree: float, reglages: str, p
     communs = {"langue": langue, "glossaire": bool(config.get("utiliser_glossaire", True)),
                "corrections": bool(config.get("appliquer_corrections", True))}
     entree = [{"id": "reunion", "npy": str(extrait), "duree_s": duree_extrait}]
+    # Verdict public lu AVANT de transcrire : celui qui vaut au lancement, et
+    # non celui qu'une campagne publique écrirait pendant ce temps.
+    verdict_public = dernier_verdict()
     resultats = _jouer(choisis, entree, dossier, peripherique, communs, dire, interrompu)
 
     textes = {c: construire_texte(_textes(dossier, c)["reunion"]["segments"])
               for c, r in resultats.items() if r.get("etat") == "ok"}
     for c in textes:
         resultats[c]["facteur"] = round(float(resultats[c]["calcul_s"]) / max(1e-9, duree_extrait), 4)
-    verdict_public = dernier_verdict()
-    if verdict_public.get("cle") in textes:
-        ancre, ancre_source = verdict_public["cle"], "verdict"
-    elif "ct2-v3-f5" in textes:
-        ancre, ancre_source = "ct2-v3-f5", "qualite"
-    else:
-        ancre, ancre_source = (next(iter(textes)), "premier") if textes else ("", "premier")
+    ancre, ancre_source = choisir_ancre(verdict_public.get("cle", ""), list(textes))
 
     accords: dict[str, dict] = {}
     if ancre:
@@ -1093,7 +1112,8 @@ def _executer_reunion(fichier: str, debut: float, duree: float, reglages: str, p
                        "longs": sum(1 for d in durees if d > SEGMENT_LONG_S)}
     glossaire = {"termes": len(termes), "exemples": vocabulaire.nombre_exemples_anciens(termes)}
     rapport = rediger_rapport_reunion(mat, duree_extrait, resultats, accords, ancre, ancre_source,
-                                      glossaire, trouves, segments, peripherique, time.time() - depart)
+                                      glossaire, trouves, segments, peripherique, time.time() - depart,
+                                      retenu=verdict_public.get("cle", ""))
     fichier_rapport = dossier / f"rapport-reunion-{datetime.now():%Y%m%d-%H%M}.txt"
     fichier_rapport.write_text(rapport, encoding="utf-8")
     return {"rapport": rapport, "fichier": str(fichier_rapport), "dossier": str(dossier)}

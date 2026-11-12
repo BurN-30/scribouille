@@ -1216,6 +1216,10 @@ Transcription :
     "camp.reunion.ancre": "Réglage de comparaison : {code} ({source})",
     "camp.reunion.ancre.verdict": "retenu par la campagne publique",
     "camp.reunion.ancre.qualite": "preset « Qualité maximale », pas de verdict public",
+    "camp.reunion.ancre.verdict_echec": (
+        "preset « Qualité maximale » : le réglage retenu par la campagne publique, {retenu}, "
+        "a échoué sur cette réunion"
+    ),
     "camp.reunion.ancre.premier": "premier réglage réussi",
     "camp.reunion.glossaire": (
         "Glossaire et corrections du poste appliqués : {termes} termes chargés, dont "
@@ -2360,6 +2364,10 @@ Transcript:
     "camp.reunion.ancre": "Comparison setting: {code} ({source})",
     "camp.reunion.ancre.verdict": "chosen by the public campaign",
     "camp.reunion.ancre.qualite": "\"Maximum quality\" preset, no public verdict",
+    "camp.reunion.ancre.verdict_echec": (
+        "\"Maximum quality\" preset: the setting chosen by the public campaign, {retenu}, "
+        "failed on this meeting"
+    ),
     "camp.reunion.ancre.premier": "first successful setting",
     "camp.reunion.glossaire": (
         "This computer's glossary and corrections applied: {termes} terms loaded, "

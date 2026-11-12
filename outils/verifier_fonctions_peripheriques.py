@@ -63,7 +63,8 @@ ce soit et **sans le moindre appel réseau** :
       exemples anciens du glossaire, application du verdict, veille suspendue ;
   27. OpenVINO sur la puce graphique : faisceau non pris en charge (campagne,
       réglage du poste), garde-fou des répétitions à température, filet de la
-      transcription (rejeu puis repli) sur un moteur simulé.
+      transcription (rejeu puis repli) sur un moteur simulé, réglage de
+      comparaison des réunions.
 
 Rien de ce que fait ce script ne touche à l'installation : tout se passe dans
 un dossier temporaire, effacé à la fin.
@@ -2152,6 +2153,24 @@ def essai_campagne_limites(base: Path) -> None:
              "le rapport les dit non pris en charge, pas en échec")
     cpu = [r.cle for r in cp.CANDIDATS if cp.pris_en_charge(r, "CPU")]
     verifier(len(cpu) == len(cp.CANDIDATS), "sur le processeur, tous les réglages sont mesurés")
+
+    # Réglage de comparaison d'une réunion.
+    verifier(cp.choisir_ancre("ov-turbo-f1", ["ov-v3-f1", "ct2-v3-f5", "ov-turbo-f1"]) == ("ov-turbo-f1", "verdict"),
+             "réunion : le réglage retenu par la campagne publique sert de comparaison")
+    verifier(cp.choisir_ancre("ov-turbo-f1", ["ov-v3-f1", "ct2-v3-f5"]) == ("ct2-v3-f5", "verdict_echec"),
+             "réglage retenu en échec sur la réunion : Qualité maximale, et le rapport dit pourquoi")
+    verifier(cp.choisir_ancre("", ["ov-v3-f1", "ct2-v3-f5"]) == ("ct2-v3-f5", "qualite")
+             and cp.choisir_ancre("", ["ov-v3-f1"]) == ("ov-v3-f1", "premier"),
+             "sans verdict public : Qualité maximale, à défaut le premier réglage réussi")
+    texte = langues.t("camp.reunion.ancre.verdict_echec", retenu="ov-turbo-f1")
+    verifier("ov-turbo-f1" in texte and "pas de verdict" not in texte,
+             "« pas de verdict public » n'est plus écrit quand le verdict existe")
+    import inspect
+    source = inspect.getsource(cp._executer_reunion)
+    verifier(source.index("dernier_verdict()") < source.index("_jouer("),
+             "le verdict public est lu au lancement de la réunion, avant les transcriptions")
+    verifier("os.replace" in inspect.getsource(cp._executer),
+             "le verdict public est écrit d'un bloc (fichier provisoire renommé)")
 
     # Réglage du poste : jamais de faisceau sur OpenVINO GPU, même écrit à la main.
     racine_reelle, config_reelle = chemins.RACINE, chemins.FICHIER_CONFIG
