@@ -818,3 +818,69 @@ textarea { resize: vertical; font-family: var(--police-mono); font-size: 12.5px;
 @media (max-width: 1040px) {
   .colonne-laterale { width: 330px; }
 }
+
+/* ----------------------------------------------- Vocabulaire, format 2 */
+
+.voc-compteur {
+  margin-left: 4px; padding: 0 7px; border-radius: 999px; font-size: 11px;
+  background: var(--accent); color: var(--accent-contraste); font-variant-numeric: tabular-nums;
+}
+.modale-vocabulaire { max-width: 860px; }
+.voc-intro { font-size: 12.5px; color: var(--texte-doux); margin-bottom: 8px; }
+.voc-resume { font-size: 12px; color: var(--texte-faible); margin-bottom: 10px; font-variant-numeric: tabular-nums; }
+#voc-avis .encart { align-items: center; margin-bottom: 8px; }
+#voc-avis .encart .bouton { padding: 5px 12px; }
+.voc-onglets { align-items: center; margin-top: 4px; }
+.voc-recherche { max-width: 220px; padding: 5px 9px !important; font-size: 12.5px; margin-bottom: 4px; }
+.voc-outils { display: flex; align-items: center; gap: 8px; padding: 10px 2px 6px; }
+.voc-outils .bouton { padding: 6px 12px; font-size: 12.5px; }
+.voc-edition {
+  border: 1px solid var(--bordure); background: var(--carte-creuse);
+  border-radius: var(--rayon-petit); padding: 12px 14px; margin: 4px 0 10px;
+}
+.voc-grille { display: grid; grid-template-columns: 2fr 1.4fr .6fr; gap: 10px; }
+.voc-edition textarea { font-family: inherit; resize: vertical; }
+.voc-edition-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.voc-liste { border: 1px solid var(--bordure); border-radius: var(--rayon-petit); max-height: 340px; overflow-y: auto; }
+.voc-liste .vide { padding: 22px 16px; }
+.voc-ligne {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 9px 12px; border-bottom: 1px solid var(--bordure);
+}
+.voc-ligne:last-child { border-bottom: none; }
+.voc-ligne:hover { background: var(--carte-creuse); }
+.voc-case, .voc-case-vide { width: 15px; height: 15px; flex: none; margin-top: 2px; accent-color: var(--accent); }
+.voc-infos { flex: 1; min-width: 0; }
+.voc-forme { font-size: 13.5px; font-weight: 650; }
+.voc-poids { color: var(--accent); font-size: 11px; font-weight: 700; letter-spacing: .05em; }
+.voc-fautes { font-size: 12.5px; color: var(--texte-doux); margin-top: 2px; overflow-wrap: anywhere; }
+.voc-fautes .note, .voc-ligne .note { color: var(--texte-faible); font-size: 11.5px; }
+.voc-fautes .risquee { color: var(--ambre); text-decoration: line-through; text-decoration-thickness: 1px; }
+.voc-ligne .meta { font-size: 11.5px; color: var(--texte-faible); margin-top: 3px; }
+.voc-actions { display: flex; gap: 12px; flex: none; padding-top: 2px; }
+.voc-partages { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--bordure); }
+.voc-partages .aide { font-size: 12px; color: var(--texte-faible); margin: 4px 0 6px; }
+.voc-partage { display: flex; align-items: center; gap: 10px; font-size: 12.5px; padding: 4px 0; }
+.voc-partage .meta { color: var(--texte-faible); font-size: 11.5px; }
+
+.lecture-remplacements {
+  border: 1px solid var(--bordure); border-radius: var(--rayon-petit);
+  margin-bottom: 12px; font-size: 12.5px; background: var(--carte-creuse);
+}
+.lecture-remplacements summary { cursor: pointer; padding: 8px 12px; font-weight: 600; color: var(--texte-doux); }
+.lecture-remplacements .remplacement {
+  display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-top: 1px solid var(--bordure);
+}
+.lecture-remplacements .horodatage { color: var(--texte-faible); font-variant-numeric: tabular-nums; font-size: 11.5px; }
+.lecture-remplacements .avant { color: var(--texte-faible); text-decoration: line-through; }
+.lecture-remplacements .apres { font-weight: 600; }
+.lecture-remplacements .regle { color: var(--texte-faible); font-size: 11.5px; }
+.mot-corrige {
+  border-bottom: 1px dotted var(--accent);
+  background: color-mix(in srgb, var(--accent-doux) 70%, transparent);
+  border-radius: 3px; padding: 0 1px;
+}
+
+/* L'attribut « hidden » l'emporte sur les « display » des composants. */
+[hidden] { display: none !important; }
+.lecture-remplacements .fleche { transform: rotate(-90deg); color: var(--texte-faible); flex: none; }

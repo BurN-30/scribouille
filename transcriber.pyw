@@ -38,6 +38,13 @@ Réglage proposé pour ce poste (voir `app/adaptation.py`), et banc des rythmes
 
     transcriber.pyw --reconnaitre [--appliquer]
     transcriber.pyw --banc --modes [--rythmes vitesse,equilibre,discret] [--peripherique GPU]
+
+Vocabulaire (format 2) : apprentissage à partir de transcriptions relues, et
+mesure de chaque étage (voir `app/apprentissage.py`, `app/mesure_vocabulaire.py`) :
+
+    transcriber.pyw --apprendre-vocabulaire --brut BRUT --propre RELUE [--cr CR] [--importer]
+    transcriber.pyw --mesurer-vocabulaire --vocabulaire V.toml --reunion AUDIO --reference RELUE
+    transcriber.pyw --mesurer-vocabulaire --corpus
 """
 
 from __future__ import annotations
@@ -124,6 +131,22 @@ if "--reconnaitre" in sys.argv[1:]:
     journal.silence_bibliotheques()
     sys.exit(_adaptation.principal_cli(sys.argv[1:]))
 
+# Vocabulaire, format 2 (voir `app/apprentissage.py` et `app/mesure_vocabulaire.py`) :
+# apprendre des propositions à partir de transcriptions relues, et mesurer ce
+# que chaque étage gagne. Version installée : « scribouille-verifier.exe ... ».
+if "--apprendre-vocabulaire" in sys.argv[1:]:
+    from app import apprentissage as _apprentissage
+
+    journal.demarrer()
+    sys.exit(_apprentissage.principal_cli(sys.argv[1:]))
+
+if "--mesurer-vocabulaire" in sys.argv[1:]:
+    from app import mesure_vocabulaire as _mesure_vocabulaire
+
+    journal.demarrer()
+    journal.silence_bibliotheques()
+    sys.exit(_mesure_vocabulaire.principal_cli(sys.argv[1:]))
+
 journal.demarrer()
 journal.purger()
 journal.silence_bibliotheques()
@@ -176,6 +199,16 @@ def verification() -> int:
     # Interface web : sans elle la fenêtre s'ouvrirait vide.
     page = chemins.DOSSIER_WEB / "index.html"
     resultat(page.is_file(), "interface web (web/index.html)", "" if page.is_file() else str(page))
+
+    # Lexique du français courant : sans lui, le vocabulaire se replie sur les
+    # seules fautes listées (garde-fou des corrections automatiques).
+    try:
+        from app import lexique as lexique_verif
+
+        nombre = len(lexique_verif.mots_courants())
+        resultat(nombre >= 30000, "lexique du français (vocabulaire)", f"{nombre} mots")
+    except Exception as exc:
+        resultat(False, "lexique du français (vocabulaire)", f"{type(exc).__name__}: {exc}")
 
     # FFmpeg : présence du binaire, puis exécution réelle.
     try:
@@ -319,7 +352,7 @@ from app import audio as audio_module  # noqa: E402
 from app import config as config_module  # noqa: E402
 from app import barre_taches, diarisation, donnees, gabarit, lecture, maj  # noqa: E402
 from app import banc, materiel, nommage, presets, reglage_machine, reprise, rythme, stockage  # noqa: E402
-from app import surveillance, traitement, vocabulaire  # noqa: E402
+from app import surveillance, traitement, vocabulaire, vocabulaire_interface  # noqa: E402
 
 _SANS_FENETRE = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
@@ -1768,6 +1801,71 @@ class Passerelle:
             regles, _ = vocabulaire.analyser_corrections()
             retour["nb_corrections"] = len(regles)
         return retour
+
+    def annuler_remplacement(self, chemin: str, rang: int) -> dict:
+        """Défait un remplacement du vocabulaire dans une transcription relue."""
+        return lecture.annuler_remplacement(chemin, int(rang))
+
+    # -- vocabulaire, format 2 (voir app/vocabulaire_interface.py) ----------
+
+    def vocabulaire_etat(self) -> dict:
+        return vocabulaire_interface.etat(self.config, self.config.get("langue", "fr"))
+
+    def vocabulaire_decider(self, formes: list, decision: str) -> dict:
+        return vocabulaire_interface.decider(list(formes or []), str(decision))
+
+    def vocabulaire_modifier(self, forme: str, etat: str, modification: dict) -> dict:
+        return vocabulaire_interface.modifier(forme, etat, dict(modification or {}))
+
+    def vocabulaire_ajouter(self, donnees_entree: dict) -> dict:
+        return vocabulaire_interface.ajouter(dict(donnees_entree or {}))
+
+    def vocabulaire_supprimer(self, forme: str, etat: str) -> dict:
+        return vocabulaire_interface.supprimer(forme, etat)
+
+    def vocabulaire_convertir(self) -> dict:
+        return vocabulaire_interface.convertir()
+
+    def vocabulaire_importer(self) -> None:
+        self._fond(lambda: self._dialogue_vocabulaire("importer"))
+
+    def vocabulaire_exporter(self) -> None:
+        self._fond(lambda: self._dialogue_vocabulaire("exporter"))
+
+    def vocabulaire_ajouter_partage(self) -> None:
+        self._fond(lambda: self._dialogue_vocabulaire("partager"))
+
+    def vocabulaire_retirer_partage(self, chemin: str) -> dict:
+        partages = [p for p in self.config.get("vocabulaires_partages") or [] if p != chemin]
+        return self.sauver_config({"vocabulaires_partages": partages})
+
+    def _dialogue_vocabulaire(self, geste: str) -> None:
+        types = (langues.t("voc2.type_fichier"), langues.t("arch.tous_fichiers"))
+        try:
+            if geste == "exporter":
+                resultat = self._fenetre.create_file_dialog(
+                    webview.SAVE_DIALOG, directory=self._dossier_de_depart(),
+                    save_filename="vocabulaire-equipe.toml", file_types=types)
+            else:
+                resultat = self._fenetre.create_file_dialog(
+                    webview.OPEN_DIALOG, directory=self._dossier_de_depart(), file_types=types)
+        except Exception as exc:
+            journal.exception("Ouverture de la boîte de fichiers impossible", exc)
+            return
+        if not resultat:
+            return
+        chemin = str(resultat[0] if isinstance(resultat, (list, tuple)) else resultat)
+        if geste == "exporter":
+            retour = vocabulaire_interface.exporter(chemin, self.config)
+        elif geste == "importer":
+            retour = vocabulaire_interface.importer(chemin)
+        else:
+            partages = list(self.config.get("vocabulaires_partages") or [])
+            if chemin not in partages:
+                partages.append(chemin)
+            self.sauver_config({"vocabulaires_partages": partages})
+            retour = {"ok": True, "message": langues.t("voc2.partage_ajoute", nom=Path(chemin).name)}
+        self._js(f"onVocabulaire({_json(retour)})")
 
     def lire_gabarit(self) -> dict:
         return {"contenu": gabarit.lire(), "chemin": str(gabarit.fichier())}
