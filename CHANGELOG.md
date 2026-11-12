@@ -98,6 +98,25 @@ La justesse
 - **Garde-fou des répétitions** renforcé ; OpenVINO se relance seul après un
   raté avant de passer la main à CTranslate2.
 
+Corrigé après la recette
+
+- **Ligne de commande** : une faute de frappe, une option inconnue ou `--aide`
+  ne lancent plus jamais la fenêtre (message, code 2) ; aide par commande ;
+  une option impossible (voix sans l'extension, OpenVINO absent, `--noms` sans
+  voix) rend son code au lieu d'être ignorée ; `--json` tenu partout ;
+  Ctrl+Pause vaut Ctrl+C (code 5) ; aucune fenêtre de console, jamais.
+- **Reprise** : toute la demande de départ est rétablie (formats, langue,
+  vocabulaire, voix et noms, rythme, dossier).
+- **Données** : l'export emporte le vocabulaire et les propositions, et
+  l'import les rétablit à l'identique.
+- **Relecture** : les mots du compagnon redisent toujours le texte ; Entrée
+  pressée vite dans « Corriger » valide ; heure en marge comme le fichier.
+- **Divers** : sortie par défaut dans le dossier imposé par
+  `SCRIBOUILLE_DONNEES` ; mémoire montrée réelle ; langue de l'interface
+  suivie par les textes de Python ; téléchargement d'un modèle demandé au
+  clic ; documentation livrée à côté de l'exécutable et accordée au
+  comportement par un contrôle automatique.
+
 ---
 
 ## 2.4.0
