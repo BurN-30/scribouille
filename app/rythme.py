@@ -77,10 +77,11 @@ PAUSES_AUTO_PROCESSEUR = {"vitesse": 0.0, "equilibre": 0.2, "discret": 0.5}
 PAUSE_MAX_S = 20.0
 
 #: Coefficients de durée par rapport à la vitesse maximale, faute de mesure sur
-#: le poste (`banc --modes` les remplace). Mesurés sur un processeur de bureau
-#: (Ryzen 7 7800X3D, 16 fils, novembre 2026) avec large-v3-turbo ; voir le
-#: rapport de la 2.4.1. Prudents : arrondis vers le haut.
-COEFFICIENTS_REPLI = {"vitesse": 1.0, "equilibre": 1.3, "discret": 2.2}
+#: le poste (`banc --modes` les remplace). Relevés sur un processeur de bureau
+#: (Ryzen 7 7800X3D, 16 fils, novembre 2026, large-v3-turbo, autre calcul en
+#: cours) : CTranslate2 1,11 et 2,35, OpenVINO sur processeur 0,90 et 1,32.
+#: Prudents : le plus lent, arrondi vers le haut ; rien encore sur la puce.
+COEFFICIENTS_REPLI = {"vitesse": 1.0, "equilibre": 1.3, "discret": 2.4}
 
 #: Mémoire de calcul au pic, en Go, par moteur et modèle, traitement un à un
 #: puis par lots de 8 (mesures du CHANGELOG 2.4.0 et de la campagne 2.4.1).

@@ -2806,7 +2806,7 @@ def essai_rythmes() -> None:
              and abs(rythme.restant_s(600, 100, 0.2) - (0.5 * 500 + 0.5 * 400)) < 1e-6,
              "temps restant : estimation, puis cadence observée")
     verifier(rythme.coefficient("discret", "cpu", {"processeur": {"discret": 1.8}}) == 1.8
-             and rythme.coefficient("discret", "openvino-gpu", {"processeur": {"discret": 1.8}}) == 2.2
+             and rythme.coefficient("discret", "openvino-gpu", {"processeur": {"discret": 1.8}}) == 2.4
              and rythme.coefficient("equilibre", "cpu", {"processeur": {"equilibre": 0.7}}) == 1.3
              and rythme.coefficient("vitesse", "cpu", {}) == 1.0,
              "coefficients de durée : mesure du banc, sinon repli prudent")
