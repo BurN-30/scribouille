@@ -96,12 +96,15 @@ if sys.argv[1:2] == ["--moteur"]:
     sys.exit(_moteur_processus.principal(sys.argv[1:]))
 
 # Ligne de commande (voir app/cli.py) : « scribouille COMMANDE ... ». Rien de
-# l'interface n'est importé sur ce chemin. « scribouille.com » seul affiche l'aide.
+# l'interface n'est importé sur ce chemin. « scribouille.com » seul affiche
+# l'aide ; « scribouille.com » ne lance JAMAIS la fenêtre : une commande
+# inconnue ou une faute de frappe rend un message et le code 2. Depuis les
+# sources, de même dès qu'il y a des arguments.
 from app import cli as _cli  # noqa: E402
 
-if _cli.reconnue(sys.argv[1:]) or (
-        chemins.EST_GELE and not sys.argv[1:] and Path(sys.executable).suffix.lower() == ".com"):
-    sys.exit(_cli.principal(sys.argv[1:] or ["aide"]))
+_CONSOLE = (Path(sys.executable).suffix.lower() == ".com") if chemins.EST_GELE else bool(sys.argv[1:])
+if _cli.pour_ce_module(sys.argv[1:], _CONSOLE):
+    sys.exit(_cli.principal(sys.argv[1:]))
 
 # Retour arrière du dossier de données vers « WhiScribe », pour une ancienne
 # version (voir app/migration.py) : « scribouille.com --revenir-whiscribe ».

@@ -77,3 +77,7 @@ jobs:
       - name: Processus moteur, ligne de commande, inventaire
         shell: pwsh
         run: python outils/verifier_moteur.py
+
+      - name: Ligne de commande (analyse, aide, erreurs d'usage)
+        shell: pwsh
+        run: python outils/verifier_ligne_de_commande.py

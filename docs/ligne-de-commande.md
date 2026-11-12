@@ -8,10 +8,11 @@ scribouille COMMANDE [options] [--json]
 
 - Version installée ou portable : `scribouille.com` dans le dossier du programme. Dans `cmd` ou PowerShell, `scribouille` suffit depuis ce dossier (le `.com` passe avant le `.exe`) ; ailleurs, chemin complet ou dossier ajouté au `PATH`.
 - Depuis les sources : `.venv\Scripts\python transcriber.pyw COMMANDE`.
-- `scribouille aide` : le résumé ; `scribouille version`.
+- `scribouille aide` : le résumé de toutes les commandes ; `scribouille aide COMMANDE`, `scribouille COMMANDE --aide` (ou `-h`, `--help`) : les options d'une commande, générées depuis l'analyseur ; `scribouille version`.
 
 ## Garanties
 
+- `scribouille.com` n'ouvre jamais la fenêtre : une commande inconnue, une faute de frappe, une option inconnue, une valeur manquante ou une combinaison contradictoire rendent un message sur la sortie d'erreur (et l'enveloppe d'erreur avec `--json`) et le code 2, sans rien faire. Seul `Scribouille.exe` ouvre la fenêtre.
 - Aucun téléchargement sans `--telecharger`, aucun écrasement sans `--ecraser`, aucun effacement sans `--oui` (ou confirmation tapée dans un terminal).
 - Aucun appel réseau hors téléchargement d'un modèle demandé.
 - `transcrire` ne modifie jamais les réglages : ses options valent pour la commande seule.

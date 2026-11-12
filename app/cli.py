@@ -149,13 +149,13 @@ class Sortie:
             self._ecrire({"schema": SCHEMA, "commande": self.commande, "evenement": nom, **champs})
 
     def erreur(self, echec: Echec) -> None:
+        """L'erreur en clair sur la sortie d'erreur, toujours ; en JSON sur la sortie standard en plus."""
         if self.json:
             self._ecrire({"schema": SCHEMA, "commande": self.commande, "erreur": {
                 "code": echec.code, "message": echec.message, "code_retour": echec.code_retour,
                 "suggestion": echec.suggestion}})
-        else:
-            self.dire(f"Erreur : {echec.message}" + (f"\n  {echec.suggestion}" if echec.suggestion else ""),
-                      erreur=True)
+        self.dire(f"Erreur : {echec.message}" + (f"\n  {echec.suggestion}" if echec.suggestion else ""),
+                  erreur=True)
 
     def dire(self, texte: str, erreur: bool = False) -> None:
         if self.json and not erreur:
@@ -195,178 +195,370 @@ class Sortie:
 # Analyse des arguments
 # ---------------------------------------------------------------------------
 
+#: Demandes d'aide, acceptées seules ou après une commande.
+AIDES = ("-h", "--help", "--aide")
+
+#: Anciennes formes (avant la 3.0) et processus de fond lancés par
+#: l'application : `transcriber.pyw` les traite lui-même, après ce module.
+ANCIENNES_FORMES = ("--verifier", "--banc", "--banc-essai", "--campagne", "--campagne-essai", "--endurance",
+                    "--endurance-essai", "--comparer", "--comparer-essai", "--reconnaitre", "--detecter-materiel",
+                    "--revenir-whiscribe", "--apprendre-vocabulaire", "--mesurer-vocabulaire")
+
+
+class ErreurUsage(Exception):
+    """Arguments refusés : message en français, code 2, jamais de fenêtre."""
+
+    def __init__(self, message: str, suggestion: str = ""):
+        super().__init__(message)
+        self.message, self.suggestion = message, suggestion
+
+
+def _traduire(message: str) -> str:
+    """Les messages d'argparse (anglais), en français."""
+    import re
+
+    regles = (
+        (r"the following arguments are required: (.+)", "argument obligatoire manquant : {0}"),
+        (r"unrecognized arguments: (.+)", "option ou argument inconnu : {0}"),
+        (r"argument (.+?): invalid choice: '?([^']*?)'? \(choose from (.+)\)",
+         "{0} : « {1} » n'est pas une valeur possible (valeurs : {2})"),
+        (r"argument (.+?): expected one argument", "{0} : valeur manquante"),
+        (r"argument (.+?): expected at least one argument", "{0} : valeur manquante"),
+        (r"argument (.+?): not allowed with argument (.+)", "{0} et {1} ne vont pas ensemble"),
+        (r"argument (.+?): invalid (\w+) value: '?([^']*?)'?$", "{0} : « {2} » n'est pas un nombre valable"),
+        (r"argument (.+?): ignored explicit argument '?([^']*?)'?$", "{0} ne prend pas de valeur (« {1} »)"),
+        (r"one of the arguments (.+) is required", "il faut l'un de : {0}"),
+        (r"ambiguous option: (.+?) could match (.+)", "option ambiguë : {0} ({1})"),
+    )
+    for motif, gabarit in regles:
+        trouve = re.fullmatch(motif, message.strip())
+        if trouve:
+            morceaux = [g.replace("'", "").replace("/", " ou ") for g in trouve.groups()]
+            return gabarit.format(*morceaux)
+    return message
+
+
+class _Analyseur(argparse.ArgumentParser):
+    """Analyseur qui lève `ErreurUsage` au lieu d'écrire en anglais et de quitter."""
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("add_help", False)
+        kwargs.setdefault("allow_abbrev", False)
+        super().__init__(*args, **kwargs)
+
+    def error(self, message):  # type: ignore[override]
+        raise ErreurUsage(_traduire(message))
+
+    def exit(self, status=0, message=None):  # type: ignore[override]
+        raise ErreurUsage(_traduire(message or "arguments invalides"))
+
+
 def reconnue(arguments: list[str]) -> bool:
     """Ces arguments sont-ils une commande de ce module ?"""
     reste = [a for a in arguments if a != "--json"]
     if not reste:
         return False
-    return reste[0] in COMMANDES or reste[0] in ("-h", "--help", "--version")
+    return reste[0] in COMMANDES or reste[0] in (*AIDES, "--version")
+
+
+def pour_ce_module(arguments: list[str], console: bool) -> bool:
+    """
+    Ces arguments vont-ils à la ligne de commande plutôt qu'à la fenêtre ?
+    Depuis l'exécutable console (`scribouille.com`) ou depuis les sources avec
+    des arguments, TOUJOURS, hors anciennes formes : une faute de frappe rend
+    un message et le code 2, jamais une fenêtre (qui, sans bureau, resterait
+    suspendue). L'exécutable fenêtré ne bascule que sur une commande connue.
+    """
+    if reconnue(arguments):
+        return True
+    if any(a in ANCIENNES_FORMES for a in arguments):
+        return False
+    return console
+
+
+def _sous_commandes(p: argparse.ArgumentParser) -> dict[str, argparse.ArgumentParser]:
+    for action in p._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            return dict(action.choices)
+    return {}
+
+
+def _ajouter(parseur: argparse.ArgumentParser, *noms: str, aide: str = "", **kwargs) -> None:
+    parseur.add_argument(*noms, help=aide, **kwargs)
 
 
 def _analyseur() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="scribouille", add_help=False,
-                                description="Scribouille, transcription locale, sans fenêtre.")
+    p = _Analyseur(prog="scribouille")
     p.add_argument("--json", action="store_true")
-    p.add_argument("-h", "--help", action="store_true")
     p.add_argument("--version", action="store_true")
-    s = p.add_subparsers(dest="commande")
+    s = p.add_subparsers(dest="commande", parser_class=_Analyseur)
 
-    t = s.add_parser("transcrire", add_help=False)
-    t.add_argument("chemins", nargs="+")
-    t.add_argument("--sortie", default="")
-    t.add_argument("--formats", default="txt,json")
-    t.add_argument("--langue", default="")
-    t.add_argument("--preset", choices=("qualite", "rapide"))
-    t.add_argument("--moteur", choices=("auto", "openvino", "ctranslate2"), default="auto")
-    t.add_argument("--peripherique", choices=("CPU", "GPU", "NPU", "cpu", "gpu", "npu"))
-    t.add_argument("--vocabulaire", action="append", default=[])
-    t.add_argument("--sans-vocabulaire", action="store_true")
-    t.add_argument("--locuteurs", default="")
-    t.add_argument("--noms", default="")
-    t.add_argument("--rythme", choices=("vitesse", "equilibre", "discret", "auto"))
-    t.add_argument("--recursif", action="store_true")
-    t.add_argument("--telecharger", action="store_true")
-    t.add_argument("--ecraser", action="store_true")
+    def commande(nom: str, usage: str, resume: str, description: str = "") -> argparse.ArgumentParser:
+        x = s.add_parser(nom, prog=f"scribouille {nom}", usage=usage, description=description or resume)
+        x.resume = resume  # type: ignore[attr-defined]
+        return x
+
+    rythmes = ("vitesse", "equilibre", "discret", "auto")
+    t = commande("transcrire", "FICHIER|DOSSIER... [options]", "transcrire des enregistrements",
+                 "Transcrit des fichiers audio ou vidéo, ou les enregistrements d'un dossier. Les options valent "
+                 "pour cette commande seule : les réglages ne changent pas.")
+    _ajouter(t, "chemins", nargs="+", metavar="FICHIER|DOSSIER", aide="Fichiers ou dossiers à transcrire.")
+    _ajouter(t, "--sortie", default="", metavar="DOSSIER", aide="Dossier des sorties ; défaut : à côté de chaque source.")
+    _ajouter(t, "--formats", default="txt,json", metavar="LISTE",
+             aide="txt, json, srt, vtt, horodatage, séparés par des virgules ; défaut : txt,json.")
+    _ajouter(t, "--langue", default="", metavar="CODE", aide="Langue parlée (fr, en...) ou auto ; défaut : le réglage.")
+    _ajouter(t, "--preset", choices=("qualite", "rapide"), metavar="qualite|rapide",
+             aide="large-v3 ou turbo ; défaut : le réglage.")
+    _ajouter(t, "--moteur", choices=("auto", "openvino", "ctranslate2"), default="auto",
+             metavar="auto|openvino|ctranslate2", aide="Moteur imposé ; défaut : le réglage du poste.")
+    _ajouter(t, "--peripherique", choices=("CPU", "GPU", "NPU", "cpu", "gpu", "npu"), metavar="CPU|GPU|NPU",
+             aide="Périphérique d'OpenVINO (implique --moteur openvino).")
+    _ajouter(t, "--rythme", choices=rythmes, metavar="|".join(rythmes), aide="Part du poste laissée à l'utilisateur.")
+    _ajouter(t, "--locuteurs", default="", metavar="auto|non|N",
+             aide="Séparer les voix (extension installée), N : nombre attendu.")
+    _ajouter(t, "--noms", default="", metavar="Alice,Bob", aide="Noms des voix séparées, dans l'ordre, ou « Locuteur 2=Bob ».")
+    _ajouter(t, "--vocabulaire", action="append", default=[], metavar="F.toml",
+             aide="Vocabulaire d'équipe en plus du personnel ; répétable.")
+    _ajouter(t, "--sans-vocabulaire", action="store_true", aide="Ni amorce ni corrections du vocabulaire.")
+    _ajouter(t, "--recursif", action="store_true", aide="Sous-dossiers compris.")
+    _ajouter(t, "--telecharger", action="store_true", aide="Permet de télécharger un modèle absent.")
+    _ajouter(t, "--ecraser", action="store_true", aide="Refait un fichier déjà transcrit.")
     t.add_argument("--json", action="store_true")
 
-    r = s.add_parser("reprendre", add_help=False)
-    r.add_argument("cible", nargs="?", default="")
-    r.add_argument("--sortie", default="")
-    r.add_argument("--formats", default="txt,json")
-    r.add_argument("--rythme", choices=("vitesse", "equilibre", "discret", "auto"))
-    r.add_argument("--telecharger", action="store_true")
+    r = commande("reprendre", "[CLE|FICHIER] [options]", "reprendre une transcription interrompue",
+                 "Reprend une transcription interrompue au segment près, avec tout ce que la demande de départ "
+                 "prévoyait (formats, dossier de sortie, langue, vocabulaire, voix, noms, rythme).")
+    _ajouter(r, "cible", nargs="?", default="", metavar="CLE|FICHIER", aide="Défaut : la plus récente (scribouille etat).")
+    _ajouter(r, "--sortie", default="", metavar="DOSSIER", aide="Autre dossier de sortie que celui de départ.")
+    _ajouter(r, "--formats", default="txt,json", metavar="LISTE", aide="Formats écrits ; défaut : txt,json.")
+    _ajouter(r, "--rythme", choices=rythmes, metavar="|".join(rythmes), aide="Autre rythme que celui de départ.")
+    _ajouter(r, "--telecharger", action="store_true", aide="Permet de télécharger le modèle de départ s'il manque.")
     r.add_argument("--json", action="store_true")
 
-    e = s.add_parser("etat", add_help=False)
+    e = commande("etat", "", "transcriptions en cours et reprenables, moteurs actifs")
     e.add_argument("--json", action="store_true")
 
-    lire = s.add_parser("lire", add_help=False)
-    lire.add_argument("fichier")
-    lire.add_argument("--depuis", type=float, default=None)
-    lire.add_argument("--jusqua", type=float, default=None)
-    lire.add_argument("--limite", type=int, default=2000)
-    lire.add_argument("--decalage", type=int, default=0)
-    lire.add_argument("--douteux", action="store_true")
-    lire.add_argument("--texte", action="store_true")
+    lire = commande("lire", "SORTIE.json|SORTIE.txt [options]", "lire une transcription par pages",
+                    "Lecture bornée d'un compagnon .json : au plus --limite mots à partir du segment --decalage.")
+    _ajouter(lire, "fichier", metavar="SORTIE.json|SORTIE.txt", aide="Transcription à lire.")
+    _ajouter(lire, "--depuis", type=float, default=None, metavar="S", aide="Segments qui finissent après S secondes.")
+    _ajouter(lire, "--jusqua", type=float, default=None, metavar="S", aide="Segments qui commencent avant S secondes.")
+    _ajouter(lire, "--limite", type=int, default=2000, metavar="N", aide="Mots au plus par page ; défaut : 2000.")
+    _ajouter(lire, "--decalage", type=int, default=0, metavar="N", aide="Premier segment de la page ; défaut : 0.")
+    _ajouter(lire, "--douteux", action="store_true", aide="Seulement les segments qui ont des mots sous le seuil.")
+    _ajouter(lire, "--texte", action="store_true", aide="Texte lisible horodaté au lieu du JSON (sans --json).")
     lire.add_argument("--json", action="store_true")
 
-    x = s.add_parser("exporter", add_help=False)
-    x.add_argument("fichier")
-    x.add_argument("--format", default="md", choices=("md",))
+    x = commande("exporter", "SORTIE.txt [--format md] [--remplacer|--nouveau]", "exporter en Markdown",
+                 "Export Markdown à côté de la transcription ; un export retouché n'est jamais écrasé.")
+    _ajouter(x, "fichier", metavar="SORTIE.txt", aide="Transcription à exporter.")
+    _ajouter(x, "--format", default="md", choices=("md",), metavar="md", aide="Format de l'export ; défaut : md.")
     choix = x.add_mutually_exclusive_group()
-    choix.add_argument("--remplacer", action="store_true")
-    choix.add_argument("--nouveau", action="store_true")
+    choix.add_argument("--remplacer", action="store_true", help="Remplace l'export existant, même retouché.")
+    choix.add_argument("--nouveau", action="store_true", help="Écrit toujours une variante numérotée (-2.md).")
     x.add_argument("--json", action="store_true")
 
-    g = s.add_parser("reglages", add_help=False)
-    g.add_argument("action", nargs="?", default="liste", choices=("liste", "lire", "definir", "defaut"))
-    g.add_argument("valeurs", nargs="*")
+    g = commande("reglages", "[liste|lire CLE|definir CLE=VALEUR...|defaut CLE...]", "lire et changer les réglages",
+                 "Chaque réglage, sa valeur par défaut et son effet : docs/reglages.md.")
+    _ajouter(g, "action", nargs="?", default="liste", choices=("liste", "lire", "definir", "defaut"),
+             metavar="liste|lire|definir|defaut", aide="Défaut : liste.")
+    _ajouter(g, "valeurs", nargs="*", metavar="CLE|CLE=VALEUR", aide="Clés, ou paires pour definir.")
     g.add_argument("--json", action="store_true")
 
-    d = s.add_parser("diagnostic", add_help=False)
-    d.add_argument("--materiel", action="store_true")
+    d = commande("diagnostic", "[--materiel]", "prêt ou non, et pourquoi")
+    _ajouter(d, "--materiel", action="store_true", aide="Relance d'abord la détection lente du matériel.")
     d.add_argument("--json", action="store_true")
 
-    a = s.add_parser("agent", add_help=False)
-    a.add_argument("action", nargs="?", default="afficher", choices=("afficher", "installer"))
-    a.add_argument("--cible", choices=("claude", "codex"), default="claude")
-    a.add_argument("--dossier", default="")
-    a.add_argument("--ecraser", action="store_true")
+    a = commande("agent", "[afficher|installer [--cible claude|codex] [--dossier D] [--ecraser]]",
+                 "fiche d'usage pour Claude Code ou Codex")
+    _ajouter(a, "action", nargs="?", default="afficher", choices=("afficher", "installer"),
+             metavar="afficher|installer", aide="Défaut : afficher.")
+    _ajouter(a, "--cible", choices=("claude", "codex"), default=None, metavar="claude|codex",
+             aide="installer : outil visé ; défaut : claude.")
+    _ajouter(a, "--dossier", default="", metavar="D", aide="installer : dossier personnel ; défaut : celui de Windows.")
+    _ajouter(a, "--ecraser", action="store_true", aide="installer : remplace une fiche retouchée.")
     a.add_argument("--json", action="store_true")
 
-    es = s.add_parser("espace", add_help=False)
+    es = commande("espace", "", "ce que Scribouille occupe, par poste")
     es.add_argument("--json", action="store_true")
 
-    ef = s.add_parser("effacer", add_help=False)
-    ef.add_argument("cles", nargs="*")
-    ef.add_argument("--liberable", action="store_true")
-    ef.add_argument("--complet", action="store_true")
-    ef.add_argument("--avec-transcriptions", action="store_true")
-    ef.add_argument("--garder-programme", action="store_true")
-    ef.add_argument("--apercu", action="store_true")
-    ef.add_argument("--resume", default="")
-    ef.add_argument("--oui", action="store_true")
+    ef = commande("effacer", "CLE...|--liberable|--complet [options]", "libérer de la place, ou tout effacer",
+                  "Liste et tailles d'abord ; rien n'est effacé sans --oui ou « oui » tapé dans un terminal.")
+    _ajouter(ef, "cles", nargs="*", metavar="CLE", aide="Postes de « scribouille espace ».")
+    _ajouter(ef, "--liberable", action="store_true", aide="Tout ce qui se libère sans rien perdre.")
+    _ajouter(ef, "--complet", action="store_true", aide="Tout ce que Scribouille a écrit, sauf les transcriptions.")
+    _ajouter(ef, "--avec-transcriptions", action="store_true", aide="--complet : les transcriptions aussi.")
+    _ajouter(ef, "--garder-programme", action="store_true", aide="--complet : sans désinstaller le programme.")
+    _ajouter(ef, "--resume", default="", metavar="F", aide="--complet : résumé pour le désinstalleur.")
+    _ajouter(ef, "--apercu", action="store_true", aide="Montre seulement.")
+    _ajouter(ef, "--oui", action="store_true", aide="Confirme sans question.")
     ef.add_argument("--json", action="store_true")
 
-    v = s.add_parser("vocabulaire", add_help=False)
-    v.add_argument("action", nargs="?", default="etat",
-                   choices=("etat", "appliquer", "importer", "exporter", "apprendre"))
-    v.add_argument("fichier", nargs="?", default="")
-    v.add_argument("--sortie", default="")
-    v.add_argument("--ecraser", action="store_true")
-    v.add_argument("--brut", action="append", default=[])
-    v.add_argument("--propre", action="append", default=[])
-    v.add_argument("--cr", action="append", default=[])
-    v.add_argument("--importer", action="store_true")
+    v = commande("vocabulaire", "[etat|appliquer F|importer F|exporter F|apprendre ...] [options]",
+                 "vocabulaire personnel et d'équipe")
+    _ajouter(v, "action", nargs="?", default="etat", choices=("etat", "appliquer", "importer", "exporter", "apprendre"),
+             metavar="etat|appliquer|importer|exporter|apprendre", aide="Défaut : etat.")
+    _ajouter(v, "fichier", nargs="?", default="", metavar="F", aide="Fichier lu ou écrit.")
+    _ajouter(v, "--sortie", default="", metavar="F", aide="appliquer, apprendre : fichier écrit.")
+    _ajouter(v, "--ecraser", action="store_true", aide="appliquer, exporter : remplace un fichier existant.")
+    _ajouter(v, "--brut", action="append", default=[], metavar="B.txt", aide="apprendre : transcription brute.")
+    _ajouter(v, "--propre", action="append", default=[], metavar="RELUE.txt", aide="apprendre : la même, relue.")
+    _ajouter(v, "--cr", action="append", default=[], metavar="CR", aide="apprendre : compte rendu, facultatif.")
+    _ajouter(v, "--importer", action="store_true", aide="apprendre : verse les propositions, à relire.")
     v.add_argument("--json", action="store_true")
 
-    m = s.add_parser("mesurer", add_help=False)
-    m.add_argument("quoi", choices=("campagne", "banc", "endurance", "comparer", "vocabulaire", "rythmes"))
+    m = commande("mesurer", "campagne|banc|rythmes|endurance|comparer|vocabulaire [options d'origine]",
+                 "outils de mesure")
+    _ajouter(m, "quoi", choices=MESURES, metavar="|".join(MESURES), aide="Outil de mesure.")
     m.add_argument("reste", nargs=argparse.REMAINDER)
 
-    ma = s.add_parser("materiel", add_help=False)
-    ma.add_argument("action", nargs="?", default="detecter", choices=("detecter", "proposer"))
-    ma.add_argument("--appliquer", action="store_true")
+    ma = commande("materiel", "[detecter|proposer [--appliquer]]", "matériel détecté, réglage proposé")
+    _ajouter(ma, "action", nargs="?", default="detecter", choices=("detecter", "proposer"),
+             metavar="detecter|proposer", aide="Défaut : detecter.")
+    _ajouter(ma, "--appliquer", action="store_true", aide="proposer : enregistre le réglage proposé.")
     ma.add_argument("--json", action="store_true")
 
-    do = s.add_parser("donnees", add_help=False)
-    do.add_argument("action", choices=("revenir-whiscribe",))
+    do = commande("donnees", "revenir-whiscribe", "revenir à l'ancien dossier de données")
+    _ajouter(do, "action", choices=("revenir-whiscribe",), metavar="revenir-whiscribe",
+             aide="Remet les données dans WhiScribe, pour une version antérieure à la 2.4.")
+    do.add_argument("--json", action="store_true")
 
-    for nom in ("verifier", "aide", "version"):
-        x = s.add_parser(nom, add_help=False)
+    for nom, resume in (("verifier", "bilan de l'installation"), ("version", "numéro de version"),
+                        ("aide", "cette aide, ou celle d'une commande")):
+        x = commande(nom, "[COMMANDE]" if nom == "aide" else "", resume)
+        if nom == "aide":
+            _ajouter(x, "sujet", nargs="?", default="", metavar="COMMANDE", aide="Commande à décrire.")
         x.add_argument("--json", action="store_true")
     return p
 
 
-AIDE = """Scribouille {version}, transcription locale, sans fenêtre.
+#: Outils de `mesurer`, et les options de chacun (celles de leur forme d'origine).
+MESURES = ("campagne", "banc", "rythmes", "endurance", "comparer", "vocabulaire")
+OPTIONS_MESURES = {
+    "campagne": ("--appliquer", "--corpus", "--debut", "--duree", "--limite-extraits", "--peripherique",
+                 "--proprietes-ov", "--recommencer", "--reglages", "--reunion", "--sans-temoin", "--telecharger"),
+    "banc": ("--appliquer", "--npu", "--telecharger"),
+    "rythmes": ("--moteur", "--peripherique", "--repetitions", "--rythmes", "--sans-enregistrer",
+                "--sans-temoin-passif", "--variantes-ov"),
+    "endurance": ("--corpus", "--memoire-libre", "--passages", "--peripherique", "--pression", "--recommencer",
+                  "--reglage", "--sans-diagnostic"),
+    "comparer": ("--debut", "--duree", "--faisceau-ctranslate2", "--faisceau-openvino", "--glossaire", "--ouvrir",
+                 "--peripherique", "--preset", "--reference", "--sans-corrections", "--sans-glossaire", "--sortie"),
+    "vocabulaire": ("--corpus", "--corpus-paquet", "--peripherique", "--recommencer", "--reference", "--reglage",
+                    "--reunion", "--vocabulaire"),
+}
 
-  scribouille transcrire FICHIER|DOSSIER... [--sortie D] [--formats txt,json,srt,vtt]
-                         [--langue fr] [--preset qualite|rapide] [--moteur auto|openvino|ctranslate2]
-                         [--peripherique CPU|GPU|NPU] [--rythme vitesse|equilibre|discret|auto]
-                         [--locuteurs auto|non|N] [--noms Alice,Bob] [--vocabulaire F.toml] [--sans-vocabulaire]
-                         [--recursif] [--telecharger] [--ecraser]
-  scribouille reprendre [CLE|FICHIER]          reprendre une transcription interrompue
-  scribouille etat                             transcriptions en cours et reprenables, moteurs actifs
-  scribouille lire SORTIE.json [--depuis S --jusqua S] [--limite N --decalage N] [--douteux] [--texte]
-  scribouille exporter SORTIE.txt [--format md] [--remplacer|--nouveau]
-                                               export à côté ; remplace un export intact de Scribouille
-  scribouille reglages [liste|lire CLE|definir CLE=VALEUR...|defaut CLE]
-  scribouille diagnostic [--materiel]          prêt ou non, et pourquoi
-  scribouille espace                           ce que Scribouille occupe, par poste
-  scribouille effacer [CLE...|--liberable|--complet [--avec-transcriptions]] [--apercu] [--oui]
-  scribouille vocabulaire [etat|appliquer F|importer F|exporter F|apprendre --brut B --propre P]
-  scribouille agent [afficher|installer --cible claude|codex]
-  scribouille mesurer campagne|banc|endurance|comparer|vocabulaire|rythmes [options d'origine]
-  scribouille materiel [detecter|proposer [--appliquer]]
-  scribouille donnees revenir-whiscribe
-  scribouille verifier                         bilan de l'installation
 
-  --json sur toute commande : sortie structurée (docs/ligne-de-commande.md).
-  Codes de retour : 0 fait, 1 échec partiel, 2 arguments, 3 pas prêt, 4 sortie existante,
-  5 interrompu (reprenable), 6 disque ou mémoire.
-"""
+def options_de(nom: str) -> list[str]:
+    """Options d'une commande telles que l'analyseur les accepte (sans --json)."""
+    if nom == "mesurer":
+        return sorted({o for liste in OPTIONS_MESURES.values() for o in liste})
+    parseur = _sous_commandes(_analyseur()).get(nom)
+    if parseur is None:
+        return []
+    return sorted(o for action in parseur._actions for o in action.option_strings if o != "--json")
+
+
+def aide_commande(nom: str) -> str:
+    """Aide d'une commande, générée depuis son analyseur : usage, effet, chaque option."""
+    import textwrap
+
+    parseur = _sous_commandes(_analyseur())[nom]
+    lignes = [f"scribouille {nom} {parseur.usage or ''}".rstrip(), "",
+              textwrap.fill(parseur.description or "", 100), "", "Arguments et options :"]
+    options = []
+    for action in parseur._actions:
+        if action.dest in ("json", "reste") or not (action.help or action.option_strings):
+            continue
+        if action.option_strings:
+            gauche = ", ".join(action.option_strings)
+            if action.nargs != 0:
+                gauche += f" {action.metavar or action.dest.upper()}"
+        else:
+            gauche = str(action.metavar or action.dest)
+        options.append((gauche, action.help or ""))
+    if nom == "mesurer":
+        for quoi, liste in OPTIONS_MESURES.items():
+            options.append((quoi, ", ".join(liste)))
+    options += [("--json", "Sortie structurée (docs/ligne-de-commande.md)."), (", ".join(AIDES), "Cette aide.")]
+    largeur = min(30, max(len(g) for g, _ in options) + 2)
+    for gauche, texte in options:
+        lignes.append(f"  {gauche:<{largeur}}{texte}" if len(gauche) < largeur else f"  {gauche}\n  {'':<{largeur}}{texte}")
+    return "\n".join(lignes).replace("\n\n\n", "\n\n").rstrip() + "\n"
+
+
+def aide_generale() -> str:
+    """Résumé de toutes les commandes, généré depuis les analyseurs."""
+    lignes = [f"Scribouille {VERSION}, transcription locale, sans fenêtre.", ""]
+    for nom, parseur in _sous_commandes(_analyseur()).items():
+        lignes.append(f"  scribouille {nom} {parseur.usage or ''}".rstrip())
+        lignes.append(f"      {parseur.resume}")  # type: ignore[attr-defined]
+    lignes += ["", "  scribouille COMMANDE --aide : les options d'une commande (aussi -h, --help, « aide COMMANDE »).",
+               "  --json sur toute commande : sortie structurée (docs/ligne-de-commande.md).",
+               "  Codes de retour : 0 fait, 1 échec partiel, 2 arguments, 3 pas prêt, 4 sortie existante,",
+               "  5 interrompu (reprenable), 6 disque ou mémoire.", ""]
+    return "\n".join(lignes)
+
+
+def _commande_vue(arguments: list[str]) -> str:
+    """Premier mot qui n'est pas une option : la commande demandée (« » s'il n'y en a pas)."""
+    return next((a for a in arguments if not a.startswith("-")), "")
+
+
+def _usage(sortie_commande: str, en_json: bool, message: str, suggestion: str = "") -> int:
+    sortie = Sortie(sortie_commande or "?", en_json)
+    sortie.erreur(Echec("arguments", message, ARGUMENTS, suggestion))
+    return ARGUMENTS
 
 
 def principal(arguments: list[str]) -> int:
+    import difflib
+
+    _flux_en_utf8()
     en_json = "--json" in arguments
+    vue = _commande_vue(arguments)
+    aide = any(a in AIDES for a in arguments)
+    if not vue:
+        if aide or not [a for a in arguments if a != "--json"]:
+            Sortie("aide", en_json).donnees({"commandes": list(COMMANDES), "aide": aide_generale()}, aide_generale())
+            return OK
+        if arguments and all(a in ("--json", "--version") for a in arguments):
+            Sortie("version", en_json).donnees({"version": VERSION, "schema": SCHEMA}, f"Scribouille {VERSION}")
+            return OK
+        inconnues = [a for a in arguments if a not in ("--json", "--version")]
+        return _usage("", en_json, f"option inconnue : {' '.join(inconnues)}", "scribouille aide")
+    if vue not in COMMANDES:
+        proches = difflib.get_close_matches(vue, COMMANDES, n=1)
+        return _usage("", en_json, f"commande inconnue : « {vue} »"
+                      + (f" ; vouliez-vous dire « {proches[0]} » ?" if proches else ""),
+                      "commandes : " + ", ".join(COMMANDES) + " (scribouille aide)")
+    if vue == "aide" or aide:
+        sujet = vue
+        if vue == "aide":
+            suite = [a for a in arguments[arguments.index("aide") + 1:] if not a.startswith("-")]
+            sujet = suite[0] if suite else ("aide" if aide else "")
+            if sujet and sujet not in COMMANDES:
+                return _usage("aide", en_json, f"commande inconnue : « {sujet} »", "scribouille aide")
+        texte = aide_commande(sujet) if sujet else aide_generale()
+        Sortie("aide", en_json).donnees({"commande": sujet, "aide": texte, "options": options_de(sujet) if sujet else [],
+                                         "commandes": list(COMMANDES)}, texte)
+        return OK
     try:
         options = _analyseur().parse_args(arguments)
-    except SystemExit:
-        sortie = Sortie("?", en_json)
-        sortie.erreur(Echec("arguments", "arguments invalides (scribouille aide)", ARGUMENTS))
-        return ARGUMENTS
+    except ErreurUsage as erreur:
+        return _usage(vue, en_json, erreur.message, f"scribouille {vue} --aide")
     options.json = en_json
-    commande = options.commande or ("version" if options.version else "aide")
+    commande = options.commande
     sortie = Sortie(commande, en_json)
-    if commande == "aide" or options.help:
-        sortie.donnees({"commandes": list(COMMANDES), "aide": AIDE.format(version=VERSION)},
-                       AIDE.format(version=VERSION))
-        return OK
     if commande == "version":
         sortie.donnees({"version": VERSION, "schema": SCHEMA}, f"Scribouille {VERSION}")
         return OK
     from . import journal
 
+    try:
+        _controler_options(commande, options)
+    except ErreurUsage as erreur:
+        return _usage(commande, en_json, erreur.message, erreur.suggestion or f"scribouille {commande} --aide")
     if commande in SANS_ECRITURE:
         journal.sans_fichier()
     else:
@@ -375,6 +567,8 @@ def principal(arguments: list[str]) -> int:
     config_cli(commande)  # pose la langue de l'interface
     try:
         return _COMMANDES[commande](options, sortie)
+    except ErreurUsage as erreur:
+        return _usage(commande, en_json, erreur.message, erreur.suggestion or f"scribouille {commande} --aide")
     except Echec as echec:
         sortie.erreur(echec)
         return echec.code_retour
@@ -385,6 +579,125 @@ def principal(arguments: list[str]) -> int:
         journal.exception(f"Commande {commande} en échec", exc)
         sortie.erreur(Echec("erreur", f"{type(exc).__name__}: {exc}", ECHEC_PARTIEL))
         return ECHEC_PARTIEL
+
+
+def _flux_en_utf8() -> None:
+    """Sorties en UTF-8, que la console, un tube ou un fichier les reçoive."""
+    for flux in (sys.stdout, sys.stderr):
+        try:
+            flux.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+        except Exception:
+            pass
+
+
+#: Langues de Whisper (faster_whisper.tokenizer._LANGUAGE_CODES), recopiées :
+#: les lire chargerait la bibliothèque de calcul dans ce processus.
+LANGUES_PAROLE = tuple(
+    "af am ar as az ba be bg bn bo br bs ca cs cy da de el en es et eu fa fi fo fr gl gu ha haw he hi hr ht hu hy "
+    "id is it ja jw ka kk km kn ko la lb ln lo lt lv mg mi mk ml mn mr ms mt my ne nl nn no oc pa pl ps pt ro ru sa "
+    "sd si sk sl sn so sq sr su sv sw ta te tg th tk tl tr tt uk ur uz vi yi yo zh yue".split())
+
+
+def _instant(texte: str, option: str) -> float | None:
+    """« 90 », « 1:30 », « 00:01:30 » ou « 90.5 » en secondes ; None si vide."""
+    texte = str(texte or "").strip().replace(",", ".")
+    if not texte:
+        return None
+    try:
+        morceaux = [float(x) for x in texte.split(":")]
+    except ValueError:
+        raise ErreurUsage(f"{option} : « {texte} » n'est pas un instant (HH:MM:SS ou secondes)") from None
+    if len(morceaux) > 3 or any(x < 0 for x in morceaux):
+        raise ErreurUsage(f"{option} : « {texte} » n'est pas un instant (HH:MM:SS ou secondes)")
+    secondes = 0.0
+    for x in morceaux:
+        secondes = secondes * 60 + x
+    return secondes
+
+
+def _controler_options(commande: str, o) -> None:
+    """Combinaisons contradictoires et valeurs impossibles, avant tout travail."""
+    def refuser(message: str) -> None:
+        raise ErreurUsage(message)
+
+    if commande == "transcrire":
+        formats = [f.strip().lower() for f in (o.formats or "").split(",") if f.strip()]
+        inconnus = sorted(set(formats) - {"txt", "json", "srt", "vtt", "horodatage"})
+        if not formats:
+            refuser("--formats : au moins un format (txt, json, srt, vtt, horodatage)")
+        if inconnus:
+            refuser(f"--formats : format inconnu : {', '.join(inconnus)} (txt, json, srt, vtt, horodatage)")
+        if o.langue and o.langue.lower() not in (*LANGUES_PAROLE, "auto"):
+            refuser(f"--langue : « {o.langue} » n'est pas une langue connue (fr, en, de... ou auto)")
+        if o.sans_vocabulaire and o.vocabulaire:
+            refuser("--sans-vocabulaire et --vocabulaire ne vont pas ensemble")
+        if o.moteur == "ctranslate2" and o.peripherique:
+            refuser("--peripherique vaut pour OpenVINO : il ne va pas avec --moteur ctranslate2")
+        locuteurs = str(o.locuteurs or "").strip().lower()
+        if locuteurs and locuteurs not in ("auto", "non", "0") and not locuteurs.isdigit():
+            refuser(f"--locuteurs : auto, non ou un nombre (pas « {o.locuteurs} »)")
+        if o.noms and locuteurs in ("non", "0"):
+            refuser("--noms demande des voix séparées : il ne va pas avec --locuteurs non")
+    elif commande == "reprendre":
+        if o.formats:
+            formats = [f.strip().lower() for f in o.formats.split(",") if f.strip()]
+            inconnus = sorted(set(formats) - {"txt", "json", "srt", "vtt", "horodatage"})
+            if not formats or inconnus:
+                refuser("--formats : txt, json, srt, vtt, horodatage")
+    elif commande == "lire":
+        if o.limite < 1:
+            refuser("--limite : un nombre de mots supérieur à 0")
+        if o.decalage < 0:
+            refuser("--decalage : un rang de segment, 0 ou plus")
+        if o.depuis is not None and o.jusqua is not None and o.depuis > o.jusqua:
+            refuser("--depuis est après --jusqua")
+        if o.texte and o.json:
+            refuser("--texte et --json ne vont pas ensemble : l'un ou l'autre")
+    elif commande == "reglages":
+        if o.action == "liste" and o.valeurs:
+            refuser(f"reglages liste ne prend pas d'argument (« {' '.join(o.valeurs)} »)")
+        if o.action == "lire" and len(o.valeurs) != 1:
+            refuser("reglages lire CLE : une seule clé")
+        if o.action in ("lire", "defaut") and any("=" in v for v in o.valeurs):
+            refuser(f"reglages {o.action} CLE : la clé seule, sans « = »")
+    elif commande == "effacer":
+        if o.complet and (o.cles or o.liberable):
+            refuser("--complet ne va ni avec --liberable ni avec des clés")
+        if o.liberable and o.cles:
+            refuser("--liberable ne va pas avec des clés : l'un ou l'autre")
+        sans_complet = [n for n, v in (("--avec-transcriptions", o.avec_transcriptions),
+                                       ("--garder-programme", o.garder_programme), ("--resume", o.resume)) if v]
+        if sans_complet and not o.complet:
+            refuser(f"{', '.join(sans_complet)} : seulement avec --complet")
+        if o.apercu and o.oui:
+            refuser("--apercu et --oui ne vont pas ensemble : regarder, ou effacer")
+    elif commande == "vocabulaire":
+        par_action = {"etat": (), "importer": (), "exporter": ("ecraser",), "appliquer": ("sortie", "ecraser"),
+                      "apprendre": ("sortie", "brut", "propre", "cr", "importer")}
+        en_trop = [n for n in ("sortie", "ecraser", "brut", "propre", "cr", "importer")
+                   if getattr(o, n) and n not in par_action[o.action]]
+        if en_trop:
+            refuser(f"vocabulaire {o.action} : " + ", ".join("--" + n for n in en_trop) + " sans objet ici")
+        if o.action in ("etat", "apprendre") and o.fichier:
+            refuser(f"vocabulaire {o.action} ne prend pas de fichier (« {o.fichier} »)")
+        if o.action in ("importer", "exporter", "appliquer") and not o.fichier:
+            refuser(f"vocabulaire {o.action} FICHIER : fichier manquant")
+    elif commande == "agent":
+        en_trop = [n for n, v in (("--cible", o.cible), ("--dossier", o.dossier), ("--ecraser", o.ecraser)) if v]
+        if o.action == "afficher" and en_trop:
+            refuser(f"{', '.join(en_trop)} : seulement avec « agent installer »")
+        o.cible = o.cible or "claude"
+    elif commande == "materiel":
+        if o.appliquer and o.action != "proposer":
+            refuser("--appliquer : seulement avec « materiel proposer »")
+    elif commande == "mesurer":
+        reste = [a for a in (o.reste or []) if a != "--json"]
+        connues = OPTIONS_MESURES[o.quoi]
+        inconnues = [a for a in reste if a.startswith("--") and a.split("=")[0] not in connues]
+        if inconnues:
+            raise ErreurUsage(f"mesurer {o.quoi} : option inconnue : {', '.join(inconnues)}",
+                              f"options : {', '.join(connues)}")
+        o.reste = reste
 
 
 # ---------------------------------------------------------------------------
