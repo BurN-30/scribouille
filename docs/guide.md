@@ -27,7 +27,40 @@ guitte lab => GitLab
 cubernetes => Kubernetes
 ```
 
-Both files are plain text. Edit them by hand or from the panels in the app. The **My data** panel exports them, with your settings and your AI template if you have one, as a single `scribouille-donnees-YYYY-MM-DD.zip` you can put on a USB stick or in a company backup. An import shows a preview of what would change and writes nothing before you confirm, and the previous state is saved next to it first.
+### Vocabulary, format 2 (`vocabulaire.toml`)
+
+The **Vocabulary: terms, errors and suggestions** button opens a screen that gathers both settings in a single file, `vocabulaire.toml`, readable and editable by hand (a subset of TOML). Each term carries its correct form, its category (person, company, acronym, product or tool, trade term, English word), what the model writes instead, a weight from 1 to 5, its origin and its state: **active**, **suggested** or **rejected**. Only active terms are used. Fictitious example:
+
+```toml
+format = "scribouille-vocabulaire"
+version = 2
+
+[[terme]]
+forme = "Martin Lebrun"
+categorie = "personne"
+fautes = [
+  "martin le brun",
+  { forme = "martin", voisins = ["monsieur", "lebrun"] },   # only near these words
+]
+poids = 3
+etat = "actif"
+```
+
+What the app does with it, in three stages:
+
+1. **Prompt.** Terms are fed to the model within the 224-token limit. When they do not all fit, those suggested by the file name come first, then the heaviest; with OpenVINO, the prompt is rebuilt for each 30-second window from what the previous window just said.
+2. **Correction afterwards**, deterministic: listed errors are brought back to their form (always, or only near their neighbours), casing is restored ("rgpd" becomes "RGPD"), and a form that **sounds** like a term ("Aokland" for "Auckland") is matched, with safeguards: never a common French word, never a term under four sounds, never when two terms are equally close. An error made of common words ("mon entreprise") is only applied in its context, or if you force it. Every replacement is listed in the reading view, with an **Undo** button.
+3. **Clean-up by a small language model**: not included, studied only.
+
+**Several files.** A team or project vocabulary is added under **Shared files**: it is read on top of yours, which has the last word. **Export** writes a file to share; **Import suggestions** pours a file into your vocabulary as suggestions.
+
+**Learning from your corrections.** A correction made in the reading view without remembering a rule becomes a suggestion. And `scribouille-verifier.exe --apprendre-vocabulaire --brut RAW.txt --propre REVIEWED.docx [--cr MINUTES.docx] [--importer]` compares raw transcripts with their reviewed versions (text, Word, Markdown, text PDF) and suggests systematic errors (with their counts of occurrences and meetings), plus the proper nouns and acronyms of the clean documents. Nothing is used before it is accepted in the Vocabulary screen. The numbers-only report that comes with it contains no term.
+
+**The old format is still read.** As long as `vocabulaire.txt` and `corrections.txt` contain terms, they are used as they are. **Convert** moves them into `vocabulaire.toml` without losing anything and keeps a copy of the old files.
+
+**Measuring.** `scribouille-verifier.exe --mesurer-vocabulaire --vocabulaire V.toml --reunion AUDIO --reference REVIEWED` transcribes each meeting without, then with the prompt, applies the correction, and reports the word error rate, recall and precision of the terms by category, and the number of wrong corrections. Measure on meetings that were not used to learn the vocabulary.
+
+The two format 1 files are plain text. Edit them by hand or from the panels in the app. The **My data** panel exports them, with your settings and your AI template if you have one, as a single `scribouille-donnees-YYYY-MM-DD.zip` you can put on a USB stick or in a company backup. An import shows a preview of what would change and writes nothing before you confirm, and the previous state is saved next to it first.
 
 ---
 
@@ -245,7 +278,14 @@ app/
   moteur.py           faster-whisper, loading and release
   diarisation.py      pyannote, token, speaker attribution
   extensions.py       speaker separation install, embedded pip
-  vocabulaire.py      glossary, prompt, corrections
+  vocabulaire.py      glossary, prompt, corrections (format 1)
+  vocabulaire_v2.py   vocabulary format 2: file, merge, migration, review
+  vocabulaire_usage.py prompt selection, correction afterwards and safeguards
+  vocabulaire_interface.py Vocabulary screen
+  lexique.py          common French words, phonetic key
+  apprentissage.py    suggestions learned from reviewed transcripts
+  documents.py        document text (Word, text PDF, Markdown, subtitles)
+  mesure_vocabulaire.py gain of each stage, against a reference
   sorties.py          txt, srt, vtt, headers
   nommage.py          output file name pattern
   surveillance.py     watched folder, polling and memory

@@ -27,7 +27,40 @@ guitte lab => GitLab
 cubernetes => Kubernetes
 ```
 
-Les deux fichiers sont du texte brut. Ils s'éditent à la main ou depuis les panneaux de l'application. Le panneau **« Mes données »** les exporte, avec vos réglages et votre gabarit pour l'IA s'il existe, dans une archive `scribouille-donnees-AAAA-MM-JJ.zip` que vous rangez où vous voulez, clé USB ou sauvegarde d'entreprise. Un import affiche un aperçu de ce qui va changer et n'écrit rien avant votre confirmation, l'état précédent étant sauvegardé à côté au préalable.
+### Le vocabulaire, format 2 (`vocabulaire.toml`)
+
+Le bouton **« Vocabulaire : termes, fautes et propositions »** ouvre un écran qui réunit les deux leviers dans un seul fichier, `vocabulaire.toml`, lisible et modifiable à la main (un sous-ensemble de TOML). Chaque terme y porte sa forme correcte, sa catégorie (personne, société, sigle, produit ou outil, terme métier, anglicisme), ce que le modèle écrit à sa place, un poids de 1 à 5, son origine et son état : **actif**, **proposé** ou **refusé**. Seuls les termes actifs servent. Exemple fictif :
+
+```toml
+format = "scribouille-vocabulaire"
+version = 2
+
+[[terme]]
+forme = "Martin Lebrun"
+categorie = "personne"
+fautes = [
+  "martin le brun",
+  { forme = "martin", voisins = ["monsieur", "lebrun"] },   # seulement près de ces mots
+]
+poids = 3
+etat = "actif"
+```
+
+Ce que l'application en fait, en trois étages :
+
+1. **Amorce.** Les termes sont soufflés au modèle dans la limite des 224 jetons. Quand ils n'y tiennent pas tous, passent d'abord ceux qu'évoque le nom du fichier, puis les plus lourds ; avec OpenVINO, l'amorce est refaite à chaque fenêtre de 30 secondes d'après ce que la fenêtre précédente vient de dire.
+2. **Correction après coup**, déterministe : les fautes listées sont ramenées à leur forme (toujours, ou seulement près de leurs voisins), la casse est rétablie (« rgpd » devient « RGPD »), et une forme qui **sonne** comme un terme (« Aokland » pour « Auckland ») est rapprochée, avec des garde-fous : jamais un mot du français courant, jamais un terme de moins de quatre sons, jamais quand deux termes sont aussi proches. Une faute faite de mots courants (« mon entreprise ») n'est appliquée que dans son contexte, ou si vous la forcez. Chaque remplacement est listé dans la vue de relecture, avec un bouton **Annuler**.
+3. **Remise en forme par un petit modèle de langue** : non incluse, étudiée seulement (voir le rapport de la version).
+
+**Plusieurs fichiers.** Un vocabulaire d'équipe ou de projet s'ajoute dans **Fichiers partagés** : il est lu en plus du vôtre, qui a le dernier mot (un terme que vous avez refusé le reste). **Exporter** produit un fichier à partager ; **Importer des propositions** verse un fichier dans votre vocabulaire, à l'état « proposé ».
+
+**Apprendre à partir de vos corrections.** Une correction faite dans la vue de relecture sans mémoriser de règle devient une proposition. Et `scribouille-verifier.exe --apprendre-vocabulaire --brut BRUT.txt --propre RELUE.docx [--cr COMPTE-RENDU.docx] [--importer]` compare des transcriptions brutes à leurs versions relues (texte, Word, Markdown, PDF texte) et propose les fautes systématiques (avec leur nombre d'occurrences et de réunions), ainsi que les noms propres et sigles des documents propres. Rien ne sert avant d'avoir été accepté dans l'écran Vocabulaire (accepter, refuser, modifier, par lots). Le rapport de chiffres qui l'accompagne ne contient aucun terme.
+
+**L'ancien format reste lu.** Tant que `vocabulaire.txt` et `corrections.txt` contiennent des termes, ils servent tels quels. Le bouton **Convertir** les intègre à `vocabulaire.toml` sans rien perdre et garde une copie des anciens fichiers à côté.
+
+**Mesurer.** `scribouille-verifier.exe --mesurer-vocabulaire --vocabulaire V.toml --reunion AUDIO --reference RELUE` transcrit chaque réunion sans puis avec amorce, applique la correction, et donne le taux d'erreur, le rappel et la précision des termes par catégorie, et le nombre de fausses corrections. Mesurez sur des réunions qui n'ont pas servi à apprendre le vocabulaire.
+
+Les deux fichiers du format 1 sont du texte brut. Ils s'éditent à la main ou depuis les panneaux de l'application. Le panneau **« Mes données »** les exporte, avec vos réglages et votre gabarit pour l'IA s'il existe, dans une archive `scribouille-donnees-AAAA-MM-JJ.zip` que vous rangez où vous voulez, clé USB ou sauvegarde d'entreprise. Un import affiche un aperçu de ce qui va changer et n'écrit rien avant votre confirmation, l'état précédent étant sauvegardé à côté au préalable.
 
 ---
 
@@ -243,7 +276,14 @@ app/
   moteur.py           faster-whisper, chargement et libération
   diarisation.py      pyannote, jeton, attribution des locuteurs
   extensions.py       installation de la séparation des locuteurs, pip embarqué
-  vocabulaire.py      glossaire, amorce, corrections
+  vocabulaire.py      glossaire, amorce, corrections (format 1)
+  vocabulaire_v2.py   vocabulaire format 2 : fichier, fusion, migration, revue
+  vocabulaire_usage.py amorce choisie, correction après coup et garde-fous
+  vocabulaire_interface.py écran Vocabulaire
+  lexique.py          mots courants du français, clé phonétique
+  apprentissage.py    propositions tirées des transcriptions relues
+  documents.py        texte des documents (Word, PDF texte, Markdown, sous-titres)
+  mesure_vocabulaire.py gain de chaque étage, avec référence
   sorties.py          txt, srt, vtt, en-têtes
   nommage.py          motif de nom des fichiers produits
   surveillance.py     dossier surveillé, scrutation et mémoire
