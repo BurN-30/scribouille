@@ -118,6 +118,155 @@ def _mots_en_dict(segment) -> list[dict]:
     return resultat
 
 
+# ---------------------------------------------------------------------------
+# Les mots disent le texte
+#
+# Règle tenue partout où un compagnon s'écrit : les mots d'un segment (« m »),
+# mis bout à bout, redonnent son texte (« t ») au caractère près, blancs mis à
+# part, et aucun mot ne contient de blanc. C'est sur eux que reposent l'écoute
+# mot à mot, les mots douteux et `scribouille lire` : un mot perdu, dupliqué
+# ou amputé de sa ponctuation ferait dire au compagnon autre chose que le
+# fichier. Le moteur ne la garantit pas (vocabulaire appliqué au texte seul,
+# mots d'OpenVINO rangés par l'heure) : `aligner_mots` la rétablit.
+# ---------------------------------------------------------------------------
+
+def _sans_blancs(texte) -> str:
+    return "".join(str(texte or "").split())
+
+
+def mots_conformes(segment: dict) -> bool:
+    """Les mots de ce segment redonnent-ils exactement son texte ?"""
+    mots = segment.get("m") if isinstance(segment, dict) else None
+    if not mots:
+        return True
+    if not isinstance(mots, list) or any(
+            not isinstance(m, dict) or not str(m.get("t") or "") or _sans_blancs(m["t"]) != str(m["t"])
+            for m in mots):
+        return False
+    return "".join(str(m["t"]) for m in mots) == _sans_blancs(segment.get("t"))
+
+
+def ecart_mots(donnees: dict | None) -> str:
+    """Premier segment dont les mots ne redonnent pas le texte, décrit ; chaîne vide sinon."""
+    for rang, segment in enumerate((donnees or {}).get("segments") or []):
+        if isinstance(segment, dict) and not mots_conformes(segment):
+            mots = " ".join(str(m.get("t", "")) for m in segment.get("m") or [] if isinstance(m, dict))
+            return f"mots du segment {rang + 1} : « {mots[:80]} » pour « {str(segment.get('t', ''))[:80]} »"
+    return ""
+
+
+def _chercher(texte: str, jeton: str, depart: int, portee: int = 200) -> int:
+    """Le jeton dans le texte, à partir de `depart`, sans couper un mot ni sauter trop loin."""
+    position = texte.find(jeton, depart)
+    while 0 <= position <= depart + portee:
+        avant = texte[position - 1] if position > 0 else ""
+        apres = texte[position + len(jeton):position + len(jeton) + 1]
+        if not (jeton[:1].isalnum() and avant.isalnum()) and not (jeton[-1:].isalnum() and apres.isalnum()):
+            return position
+        position = texte.find(jeton, position + 1)
+    return -1
+
+
+def aligner_mots(texte: str, mots: list, debut: float = 0.0, fin: float = 0.0, corrige: bool = False) -> list[dict]:
+    """
+    Mots d'un segment recalés sur son texte. Chaque mot du moteur retrouvé à
+    sa place garde son heure et sa confiance ; un mot qui n'y est plus est
+    retiré ; un morceau du texte que nul mot ne porte rejoint le mot auquel
+    il est collé (ponctuation, suffixe), sinon devient un mot à lui, placé
+    entre ses voisins, sans confiance (`p` -1) et marqué corrigé (`c`) quand
+    le vocabulaire l'a écrit. Un mot qui contenait un blanc est coupé.
+    """
+    candidats: list[dict] = []
+    for mot in mots or []:
+        if not isinstance(mot, dict) or not str(mot.get("t") or "").strip():
+            continue
+        morceaux = str(mot["t"]).split()
+        if len(morceaux) == 1:
+            candidats.append({**mot, "t": morceaux[0]})
+            continue
+        d, f = float(mot.get("d", 0) or 0), float(mot.get("f", 0) or 0)
+        total = sum(len(m) for m in morceaux)
+        cumul = 0
+        for morceau in morceaux:
+            a = d + (f - d) * cumul / total
+            cumul += len(morceau)
+            candidats.append({**mot, "t": morceau, "d": round(a, 2), "f": round(d + (f - d) * cumul / total, 2)})
+    places: list[list] = []   # [début, fin, mot]
+    position = 0
+    for mot in candidats:
+        trouve = _chercher(texte, mot["t"], position)
+        if trouve < 0:
+            continue
+        places.append([trouve, trouve + len(mot["t"]), mot])
+        position = trouve + len(mot["t"])
+    # Les morceaux du texte que nul mot ne porte, de gauche à droite.
+    import re
+
+    resultat: list[list] = []
+    rang = 0
+    couverts = [(a, b) for a, b, _ in places]
+
+    def suivant_a_partir(n: int) -> int | None:
+        return places[n][0] if n < len(places) else None
+
+    morceaux_libres = []
+    curseur = 0
+    for a, b in couverts + [(len(texte), len(texte))]:
+        if a > curseur:
+            for trouve in re.finditer(r"\S+", texte[curseur:a]):
+                morceaux_libres.append((curseur + trouve.start(), curseur + trouve.end()))
+        curseur = max(curseur, b)
+    libres = iter(morceaux_libres)
+    prochain = next(libres, None)
+    while rang < len(places) or prochain is not None:
+        if prochain is not None and (rang >= len(places) or prochain[0] < places[rang][0]):
+            a, b = prochain
+            colle_avant = resultat and resultat[-1][1] == a
+            colle_apres = rang < len(places) and places[rang][0] == b
+            if colle_avant:
+                resultat[-1][1] = b
+                resultat[-1][2] = {**resultat[-1][2], "t": texte[resultat[-1][0]:b]}
+            elif colle_apres:
+                mot = places[rang][2]
+                places[rang][0] = a
+                places[rang][2] = {**mot, "t": texte[a:places[rang][1]]}
+            else:
+                avant = float(resultat[-1][2].get("f", debut) or debut) if resultat else float(debut or 0)
+                apres = suivant_a_partir(rang)
+                limite = float(places[rang][2].get("d", fin) or fin) if apres is not None else float(fin or avant)
+                nouveau = {"t": texte[a:b], "d": round(avant, 2), "f": round(max(avant, limite), 2), "p": -1.0}
+                if corrige:
+                    nouveau["c"] = 1
+                resultat.append([a, b, nouveau])
+            prochain = next(libres, None)
+            continue
+        resultat.append(places[rang])
+        rang += 1
+    return [mot for _, _, mot in resultat]
+
+
+def aligner_segments(donnees: dict | None) -> int:
+    """Recale les mots de chaque segment qui ne redit pas son texte ; renvoie le nombre recalé."""
+    if not donnees:
+        return 0
+    corriges = {
+        int(r.get("s", -1)) for r in ((donnees.get("vocabulaire") or {}).get("remplacements") or [])
+        if isinstance(r, dict) and not r.get("annule")
+    }
+    recales = 0
+    for rang, segment in enumerate(donnees.get("segments") or []):
+        if not isinstance(segment, dict) or mots_conformes(segment):
+            continue
+        mots = aligner_mots(str(segment.get("t") or ""), segment.get("m") or [], float(segment.get("d", 0) or 0),
+                            float(segment.get("f", 0) or 0), corrige=rang in corriges)
+        if mots:
+            segment["m"] = mots
+        else:
+            segment.pop("m", None)
+        recales += 1
+    return recales
+
+
 def construire(source: Path, segments, details: dict) -> dict:
     """Assemble le contenu du compagnon à partir des segments transcrits."""
     liste: list[dict] = []
@@ -167,6 +316,8 @@ def construire(source: Path, segments, details: dict) -> dict:
     remplacements = details.get("remplacements_vocabulaire") or []
     if remplacements:
         contenu["vocabulaire"] = {"remplacements": [dict(r) for r in remplacements]}
+    # Les mots redisent le texte : vocabulaire appliqué, mots rangés par l'heure.
+    aligner_segments(contenu)
     return contenu
 
 

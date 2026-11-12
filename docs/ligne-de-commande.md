@@ -195,6 +195,8 @@ Résultat structuré : le compagnon `.json` (`format: scribouille-transcription`
 
 `p` vaut -1 quand le moteur ne donne pas de probabilité (OpenVINO) : `douteux.methode` vaut alors `indisponible` et `nombre` `null`.
 
+Les mots `m` d'un segment, mis bout à bout, redonnent son texte `t` au caractère près (blancs mis à part), et aucun ne contient de blanc ; c'est tenu à l'écriture et après chaque modification faite en relecture. Un mot écrit par le vocabulaire porte `c: 1` et `p: -1`.
+
 ## Exemples
 
 Sorties réelles du paquet gelé (turbo par CTranslate2, processeur, extrait FLEURS de 43 s) ; chemins raccourcis en `…`.

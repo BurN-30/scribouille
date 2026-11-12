@@ -1312,6 +1312,157 @@ def essai_mots_corriges(base: Path) -> None:
              f"{len(gardes)} mots notés après, {len([m for m in mots if m['p'] >= 0])} avant")
 
 
+def _mots_du_fichier(txt: Path) -> str:
+    """Écart entre les mots du compagnon et le texte de leur segment, ou chaîne vide."""
+    import json
+
+    donnees = json.loads(txt.with_suffix(".json").read_text(encoding="utf-8"))
+    for rang, s in enumerate(donnees.get("segments") or []):
+        mots = s.get("m") or []
+        if not mots:
+            continue
+        if any(not m.get("t") or len(m["t"].split()) != 1 or m["t"] != m["t"].strip() for m in mots):
+            return f"segment {rang} : mot vide ou avec un blanc {[m.get('t') for m in mots]}"
+        if "".join(m["t"] for m in mots) != "".join(str(s.get("t", "")).split()):
+            return f"segment {rang} : mots {[m['t'] for m in mots]} pour « {s.get('t')} »"
+    return ""
+
+
+def essai_mots_du_compagnon(base: Path) -> None:
+    """Les mots du compagnon redisent le texte de leur segment, après toute modification."""
+    import json
+    import random
+
+    from app import relecture
+
+    titre("Compagnon : les mots redisent le texte, après chaque correction et chaque annulation")
+    dossier = base / "mots-compagnon"
+    dossier.mkdir()
+
+    # Les trois écarts relevés par la recette (12/11).
+    # Mots tels que faster-whisper les rend : la ponctuation collée au mot.
+    txt = ecrire(dossier, [segment(60.0, 66.0, [(" Donc,", 0.9), (" d'accord,", 0.6), (" on", 0.9), (" note", 0.9),
+                                                (" la", 0.9), (" relance.", 0.9)])])
+    vue = lecture.charger(txt)
+    texte = vue["paragraphes"][0]["texte"]
+    a = texte.index("d'accord,")
+    lecture.editer_passage(txt, 0, a, a + len("d'accord,"), "d'accord,", "d’accord,")
+    mots = json.loads(txt.with_suffix(".json").read_text(encoding="utf-8"))["segments"][0]["m"]
+    verifier(_mots_du_fichier(txt) == "" and any(m["t"] == "d’accord," for m in mots),
+             "« d'accord, » corrigé en « d’accord, » : la virgule reste dans les mots", _mots_du_fichier(txt))
+    heure = next((m["d"] for m in mots if m["t"] == "d’accord,"), None)
+    verifier(heure is not None and heure < 62.0, "et le mot corrigé garde l'heure du mot d'origine", str(heure))
+    lecture.editer_passage(txt, 0, 0, len("Donc,"), "Donc,", "Alors,K3")
+    verifier(_mots_du_fichier(txt) == "" and "Alors,K3" in [m["t"] for m in json.loads(
+        txt.with_suffix(".json").read_text(encoding="utf-8"))["segments"][0]["m"]],
+             "« Donc, » réécrit en « Alors,K3 » : le suffixe est dans les mots", _mots_du_fichier(txt))
+    lecture.editer_passage(txt, 0, 0, len("Alors,K3 d’accord,"), "Alors,K3 d’accord,", "peut être")
+    verifier(_mots_du_fichier(txt) == "" and lecture.controler(txt) == "",
+             "deux mots remplacés par deux mots : aucun mot ne contient d'espace", _mots_du_fichier(txt))
+
+    # Vocabulaire appliqué à la transcription : les mots suivent le texte, et
+    # « Annuler ce remplacement » ne laisse ni mot en trop ni mot perdu.
+    dossier_voc = base / "mots-vocabulaire"
+    dossier_voc.mkdir()
+    seg = segment(0.0, 4.0, jetons("Donc, la streinte du week-end tourne."))
+    seg.texte = "Donc, L'astreinte du week-end tourne."
+    txt = ecrire(dossier_voc, [seg, segment(4.5, 8.0, jetons("On passe au budget."))],
+                 details={"remplacements_vocabulaire": [{"s": 0, "d": 0.0, "o": 6, "a": "la streinte",
+                                                          "b": "L'astreinte", "terme": "L'astreinte",
+                                                          "categorie": "metier", "regle": "faute", "distance": 0}]})
+    donnees = json.loads(txt.with_suffix(".json").read_text(encoding="utf-8"))
+    corrige = [m for m in donnees["segments"][0]["m"] if m.get("c")]
+    verifier(_mots_du_fichier(txt) == "" and [m["t"] for m in corrige] == ["L'astreinte"] and corrige[0]["p"] < 0,
+             "vocabulaire à la transcription : « L'astreinte » est un mot, marqué corrigé, sans confiance",
+             f"{_mots_du_fichier(txt)} {donnees['segments'][0]['m']}")
+    mots_vus = [m for p in lecture.charger(txt)["paragraphes"] for m in p["mots"] if m.get("c")]
+    verifier([m["t"] for m in mots_vus] == ["L'astreinte"], "la relecture le montre comme mot corrigé",
+             str(mots_vus))
+    retour = lecture.annuler_remplacement(txt, 0)
+    segment0 = json.loads(txt.with_suffix(".json").read_text(encoding="utf-8"))["segments"][0]
+    verifier(retour.get("ok") and segment0["t"] == "Donc, la streinte du week-end tourne."
+             and [m["t"] for m in segment0["m"]] == ["Donc", ",", "la", "streinte", "du", "week", "-end", "tourne", "."]
+             and _mots_du_fichier(txt) == "" and lecture.controler(txt) == "",
+             "« Annuler ce remplacement » : les mots redeviennent ceux du texte, sans doublon",
+             f"{retour} {[m['t'] for m in segment0.get('m', [])]}")
+
+    # Propriété : des centaines de modifications au hasard sur une longue
+    # réunion (avec des remplacements du vocabulaire), annulations comprises.
+    dossier_long = base / "mots-hasard"
+    dossier_long.mkdir()
+    segments = reunion_longue(8000)
+    remplacements = []
+    for rang in range(3, len(segments), 41):
+        mots = segments[rang].texte.split()
+        if len(mots) > 3:
+            avant = mots[1]
+            segments[rang].texte = segments[rang].texte.replace(avant, "Kubernetes", 1)
+            remplacements.append({"s": rang, "d": segments[rang].debut, "o": segments[rang].texte.index("Kubernetes"),
+                                  "a": avant, "b": "Kubernetes", "terme": "Kubernetes", "categorie": "produit",
+                                  "regle": "faute", "distance": 0})
+    txt = ecrire(dossier_long, segments, {"txt": True, "srt": True, "vtt": True},
+                 details={"nb_locuteurs": 3, "duree": 4000.0, "remplacements_vocabulaire": remplacements})
+    verifier(_mots_du_fichier(txt) == "" and lecture.controler(txt) == "",
+             "réunion longue avec vocabulaire appliqué : les mots redisent le texte dès l'écriture", _mots_du_fichier(txt))
+    hasard = random.Random(11)
+    textes = ["", "X", "d’accord,", "K3", "peut être", "week-end", ",", "  deux mots  ", "L'astreinte", "😀",
+              "a-b", "l'", "Budget.", "« cité »", "aujourd'hui,", "-être", "…", "12h30", "Ça", "rgpd"]
+    ecarts, refus_ecart, faites, annulees = [], 0, 0, 0
+    for n in range(260):
+        tirage = hasard.random()
+        if tirage < 0.18:
+            if lecture.annuler_correction(txt).get("ok"):
+                annulees += 1
+        elif tirage < 0.25 and remplacements:
+            lecture.annuler_remplacement(txt, hasard.randrange(len(remplacements)))
+        elif tirage < 0.35:
+            vue = lecture.charger(txt)
+            mots = [m["t"] for p in vue["paragraphes"] for m in p["mots"] if m["t"]]
+            forme = hasard.choice(mots)
+            cible = hasard.choice([forme.upper(), forme + ",", forme.replace("'", "’"), "Truc"])
+            occ = relecture.occurrences(txt, forme, cible)
+            if occ.get("ok"):
+                retour = relecture.corriger(txt, forme, cible, [0])
+                faites += bool(retour.get("ok"))
+                refus_ecart += retour.get("code") == "ecart"
+        else:
+            etat = lecture._etat(txt)
+            k = hasard.randrange(len(etat["plan"]))
+            p = etat["plan"][k]
+            texte = etat["corps"][p["debut"]:p["fin"]]
+            a = hasard.randrange(len(texte) + 1)
+            b = min(len(texte), a + hasard.choice([0, 1, 2, 5, 9, 20, 40]))
+            nouveau = hasard.choice(textes + [texte[a:b].upper(), texte[a:b] + ".", texte[a:b][::-1]])
+            retour = lecture.editer_passage(txt, k, a, b, texte[a:b], nouveau)
+            faites += bool(retour.get("ok"))
+            refus_ecart += retour.get("code") == "ecart"
+        ecart = _mots_du_fichier(txt) or lecture.controler(txt)
+        if not ecart and n % 13 == 0:
+            ecart = egalite_ecran_fichier(txt)
+            md = relecture.markdown(txt)
+            corps = lecture.separer_entete(txt.read_text(encoding="utf-8"))[1]
+            import re as _re
+
+            for paragraphe in lecture.charger(txt)["paragraphes"][:40]:
+                if paragraphe["texte"] not in md:
+                    ecart = f"export Markdown : paragraphe absent « {paragraphe['texte'][:60]} »"
+                    break
+            if not ecart and _re.sub(r"\s+", "", corps)[:20] == "":
+                ecart = "fichier vide"
+        if ecart:
+            ecarts.append(f"opération {n} : {ecart}")
+            break
+    verifier(not ecarts and faites > 150 and annulees > 20,
+             f"260 opérations au hasard ({faites} écrites, {annulees} annulées) : écran, .txt, segments, mots, "
+             "sous-titres et export toujours d'accord", "; ".join(ecarts)[:300])
+    verifier(refus_ecart == 0, "aucune modification refusée pour écart (le contrôle n'a rien eu à rattraper)",
+             str(refus_ecart))
+    while lecture.annuler_correction(txt).get("ok"):
+        pass
+    verifier(_mots_du_fichier(txt) == "" and lecture.controler(txt) == "",
+             "après toutes les annulations, les mots redisent toujours le texte")
+
+
 def essai_passage_libre(base: Path) -> None:
     """Réécrire ou supprimer un passage : même règle d'égalité, même annulation."""
     titre("Passage réécrit ou supprimé : l'écran reste le fichier")
@@ -1384,6 +1535,7 @@ def principal() -> int:
         essai_annulation_profonde(base)
         essai_vocabulaire_sur_demande(base)
         essai_passage_libre(base)
+        essai_mots_du_compagnon(base)
         essai_mots_corriges(base)
         essai_position_relecture(base)
         essai_heures_et_avis(base)

@@ -315,6 +315,7 @@ def _paragraphes_situes(donnees: dict, corps: str, plan: list[dict]) -> list[dic
                     "t": str(mot["t"]),
                     "p": round(float(mot.get("p", 1) or 0), 3),
                     "d": round(float(mot.get("d", 0) or 0), 2),
+                    **({"c": 1} if mot.get("c") else {}),
                 }
                 for mot in segment.get("m") or []
                 if isinstance(mot, dict) and mot.get("t")
@@ -873,6 +874,8 @@ def _corriger_mots(mots: list, avant: str, apres: str, debut: int, fin: int) -> 
     nouveau = apres[a:len(apres) - (len(avant) - b)].strip()
     touches = [entree for entree in mots if entree[1] < b and entree[2] > a]
     for n, (mot, _, _) in enumerate(touches):
+        # Réécrit à la main : ce n'est plus le vocabulaire qui l'a écrit.
+        mot.pop("c", None)
         if n == 0 and nouveau:
             mot["t"] = nouveau
         else:
@@ -1000,11 +1003,13 @@ def _sous_titres_attendus(fichier: Path, donnees: dict, suffixe: str) -> str:
             pass
 
 
-def controler(fichier: str | Path) -> str:
+def controler(fichier: str | Path, mots: bool = True) -> str:
     """
     Vérifie la règle d'or sur les fichiers tels qu'ils sont sur le disque :
-    texte affiché, `.txt`, compagnon et sous-titres disent la même chose.
-    Renvoie une description de l'écart, ou une chaîne vide.
+    texte affiché, `.txt`, compagnon (segments ET mots) et sous-titres disent
+    la même chose. Renvoie une description de l'écart, ou une chaîne vide.
+    `mots=False` : seulement pour remettre un état d'origine écrit par une
+    version qui ne tenait pas encore les mots.
     """
     fichier = Path(fichier)
     try:
@@ -1016,6 +1021,10 @@ def controler(fichier: str | Path) -> str:
     corps, plan = etat["corps"], etat["plan"]
     if plan and _reconstruire(corps, plan, {}) != corps:
         return "paragraphes"
+    if mots and etat["situe"]:
+        ecart = compagnon.ecart_mots(etat["donnees"])
+        if ecart:
+            return ecart
     for k, paragraphe in enumerate(_paragraphes(etat)):
         rendu = "".join(m.get("e", "") + m["t"] for m in _reunir_elisions(paragraphe["mots"]))
         if rendu != paragraphe["texte"] or paragraphe["texte"] != corps[plan[k]["debut"]:plan[k]["fin"]]:
@@ -1039,6 +1048,9 @@ def _ecrire(etat: dict, nouveau_corps: str, donnees: dict | None) -> dict:
     avant = _photo(fichier)
     if avant[".txt"] != etat["contenu"]:
         return {"ok": False, "code": "modifie_dehors"}
+    if donnees is not None:
+        # Les mots redisent le texte de chaque segment, avant toute écriture.
+        compagnon.aligner_segments(donnees)
     try:
         if donnees is not None:
             _ecrire_atomique(compagnon.chemin_pour(fichier), json.dumps(donnees, ensure_ascii=False))
@@ -1490,7 +1502,13 @@ def revenir_original(chemin: str | Path) -> dict:
     except OSError as exc:
         journal.attention("Original non remis dans %s : %s", fichier, exc)
         return {"ok": False, "code": "non_reecrit", "message": langues.t("lect.non_reecrit")}
-    ecart = controler(fichier)
+    # L'original est remis à l'octet : ses mots sont ceux qu'il avait, même
+    # écrits par une version antérieure qui ne les tenait pas encore.
+    try:
+        tenus = not compagnon.ecart_mots(json.loads(original.get(".json") or "null"))
+    except ValueError:
+        tenus = False
+    ecart = controler(fichier, mots=tenus)
     if ecart:
         _remettre(fichier, avant)
         return {"ok": False, "code": "ecart", "message": langues.t("lect.refus.ecart")}
