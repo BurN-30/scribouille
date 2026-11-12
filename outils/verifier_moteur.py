@@ -36,6 +36,10 @@ TEMPORAIRE = Path(tempfile.mkdtemp(prefix="scribouille-moteur-"))
 os.environ["SCRIBOUILLE_DONNEES"] = str(TEMPORAIRE / "donnees")
 os.environ["LOCALAPPDATA"] = str(TEMPORAIRE / "localappdata")
 (TEMPORAIRE / "localappdata").mkdir()
+# Dossier personnel factice : Documents\Transcriptions par défaut, fiches
+# d'agent, bureau. Rien de réel n'est lu ni écrit.
+os.environ["USERPROFILE"] = str(TEMPORAIRE / "maison")
+(TEMPORAIRE / "maison").mkdir()
 if str(RACINE) not in sys.path:
     sys.path.insert(0, str(RACINE))
 
@@ -422,6 +426,9 @@ def cli(*arguments, essai: dict | None = None, env_en_plus: dict | None = None) 
     env.pop("SCRIBOUILLE_MOTEUR_ESSAI", None)
     if essai is not None:
         env["SCRIBOUILLE_MOTEUR_ESSAI"] = json.dumps(essai)
+    # Dossier personnel factice : le dossier de sortie par défaut
+    # (Documents\Transcriptions) et la fiche d'agent ne touchent rien de réel.
+    env["USERPROFILE"] = str(TEMPORAIRE / "maison")
     env.update(env_en_plus or {})
     p = subprocess.run([PYTHON, str(RACINE / "transcriber.pyw"), *arguments], capture_output=True, timeout=300,
                        env=env, cwd=str(TEMPORAIRE))
