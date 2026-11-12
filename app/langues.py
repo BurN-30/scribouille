@@ -1245,6 +1245,118 @@ Transcription :
     "camp.cli.fichier": "Rapport : {fichier}",
     "camp.cli.applique": "Réglage {code} appliqué : il sert dès la prochaine transcription.",
     "camp.cli.rien_a_appliquer": "Aucun verdict : rien n'est appliqué.",
+
+    # Épreuve d'endurance (app/endurance.py)
+    "end.rapport.titre": "{nom} {version} : épreuve d'endurance ({date})",
+    "end.rapport.reglage": "Réglage éprouvé : {code} ({reglage})",
+    "end.rapport.plan": (
+        "Passages : {n}, de {minutes} min en moyenne, pris dans le corpus public (SUMM-RE ASRU) ; "
+        "un seul processus, pipeline ouvert puis libéré à chaque passage, comme dans l'application"
+    ),
+    "end.rapport.plan_pression": (
+        "Pression mémoire, un passage sur deux : CTranslate2 large-v3 chargé et passé sur {secondes} s "
+        "(réglages « Qualité maximale »), puis mémoire libre ramenée vers {cible} Go ; le tout reste en "
+        "place pendant l'ouverture et le passage d'OpenVINO"
+    ),
+    "end.rapport.section.resultat": "Résultat",
+    "end.rapport.panne_avant": (
+        "Passages avec au moins une erreur du moteur (avant rejeu) : {k} sur {n} ({pct} %, "
+        "borne haute à 95 % : {borne} %)"
+    ),
+    "end.rapport.panne_apres": (
+        "Passages que le rejeu n'a pas sauvés (repli sur CTranslate2 ou échec) : {k} sur {n} ({pct} %, "
+        "borne haute à 95 % : {borne} %)"
+    ),
+    "end.rapport.issues": (
+        "Rejeux réussis : {rejeux} ; replis sur CTranslate2 : {replis} ; échecs non rattrapés : {erreurs} ; "
+        "processus tombés ou bloqués : {plantages}"
+    ),
+    "end.rapport.pression_ratee": "Passages sans mesure, la mise sous pression ayant échoué : {n}",
+    "end.rapport.repetitions": (
+        "Fenêtres qui bouclaient : {fenetres}, refaites {reprises} fois ; reprises en échec : {echecs}"
+    ),
+    "end.rapport.vitesse": (
+        "Vitesse : facteur médian {mediane} (de {min} à {max}) ; ouverture du modèle : médiane {ouv} s, "
+        "au plus {ouv_max} s"
+    ),
+    "end.rapport.memoire": (
+        "Mémoire libre du poste avant l'ouverture : au plus bas {min} Go, médiane {med} Go ; "
+        "avant le passage : au plus bas {min2} Go"
+    ),
+    "end.rapport.par_mode": (
+        "{mode} : passages {n}, avec erreur {k}, non sauvés {perdus} ; mémoire libre avant "
+        "l'ouverture : médiane {med} Go, au plus bas {min} Go"
+    ),
+    "end.mode.normal": "normal",
+    "end.mode.pression": "sous pression",
+    "end.mode.diagnostic": "diagnostic",
+    "end.rapport.section.erreurs": "Erreurs relevées, texte exact",
+    "end.rapport.aucune_erreur": "aucune",
+    "end.rapport.erreur": "{id} ({phase}, {issue}) : {erreur}",
+    "end.phase.ouverture": "ouverture du pipeline",
+    "end.phase.transcription": "transcription",
+    "end.phase.garde": "reprise d'une fenêtre qui bouclait",
+    "end.phase.passage": "passage",
+    "end.issue.rejeu": "rejoué",
+    "end.issue.rejeu_reussi": "rejeu réussi",
+    "end.issue.repli": "repli sur CTranslate2",
+    "end.issue.premiere_version_gardee": "première version gardée",
+    "end.rapport.section.diagnostic": "Diagnostic de l'échec du 12/11",
+    "end.rapport.diag_journal_aucun": "Journal du processus tombé : introuvable (purgé ou effacé).",
+    "end.rapport.diag_journal": (
+        "Journal {date} : erreur levée dans moteur_openvino.py, ligne {lignes} ({lieu}) ; "
+        "fenêtre qui bouclait juste avant : {repetitive} ; pipeline ouvert : {ouvert} ; "
+        "fenêtres prévues : {fenetres}"
+    ),
+    "end.lieu.glouton": "décodage glouton d'une fenêtre",
+    "end.lieu.garde_faisceau": "garde-fou des répétitions, faisceau de 5",
+    "end.lieu.ouverture": "ouverture du pipeline",
+    "end.lieu.inconnu": "autre endroit",
+    "end.oui": "oui",
+    "end.non": "non",
+    "end.rapport.diag_ancien": (
+        "Réunion {reunion}, ancien garde-fou (faisceau de 5) : {etat} ; fenêtres qui bouclaient : {fenetres} ; "
+        "reprises en échec : {echecs} ; facteur {facteur}"
+    ),
+    "end.rapport.diag_nouveau": (
+        "Réunion {reunion}, nouveau garde-fou (température) : {etat} ; fenêtres qui bouclaient : {fenetres} ; "
+        "reprises en échec : {echecs} ; facteur {facteur}"
+    ),
+    "end.rapport.diag_conclusion_oui": (
+        "L'ancien garde-fou reproduit l'erreur du 12/11 sur cette réunion et le nouveau la passe : "
+        "cause confirmée."
+    ),
+    "end.rapport.diag_conclusion_non": (
+        "L'ancien garde-fou ne reproduit pas l'erreur sur cette réunion, ou le nouveau ne la passe "
+        "pas : cause non confirmée."
+    ),
+    "end.rapport.section.detail": "Détail par passage",
+    "end.rapport.ligne": (
+        "{id} {mode} : {etat} ; libre {libre_ouv} Go avant l'ouverture, {libre_pass} Go avant le passage ; "
+        "ouverture {ouv} s ; facteur {facteur} ; fenêtres qui bouclaient {boucles}"
+    ),
+    "end.etat.ok": "réussi",
+    "end.etat.rejeu_reussi": "réussi après rejeu",
+    "end.etat.repli": "repli sur CTranslate2",
+    "end.etat.erreur": "échec",
+    "end.etat.plantage": "processus tombé",
+    "end.etat.bloque": "bloqué, arrêté",
+    "end.etat.pression_ratee": "mise sous pression impossible",
+    "end.rapport.remarque": "Rapport de chiffres : aucun mot transcrit, aucun nom, aucun chemin.",
+    "end.rapport.duree": "Durée de l'épreuve : {duree}",
+    "end.refuse.titre": "Épreuve d'endurance impossible",
+    "end.refuse.absent": "Le réglage {code} demande OpenVINO, qui n'est pas installé sur ce poste.",
+    "end.refuse.faisceau": "Le réglage {code} n'est pas pris en charge sur {peripherique} (faisceau).",
+    "end.refuse.modele": (
+        "Un modèle manque pour le réglage {code} (ou pour la pression mémoire, CTranslate2 large-v3) : "
+        "lancer d'abord la campagne, qui les télécharge."
+    ),
+    "end.etape.plan": "{code} : {n} passages prévus, {faits} déjà faits",
+    "end.etape.passage": "{id} ({n} sur {total}) : {etat}, facteur {facteur}, ouverture {ouv} s, {libre} Go libres",
+    "end.etape.relance": "nouveau processus pour les {n} passages restants",
+    "end.etape.abandon": "le processus s'arrête sans rien faire ({issue}) : épreuve arrêtée",
+    "end.erreur.bloque": "aucun signe de vie pendant {s} s, processus arrêté",
+    "end.erreur.plantage": "processus terminé sans résultat (code {code})",
 }
 
 
@@ -2393,6 +2505,118 @@ Transcript:
     "camp.cli.fichier": "Report: {fichier}",
     "camp.cli.applique": "Setting {code} applied: it is used from the next transcription.",
     "camp.cli.rien_a_appliquer": "No verdict: nothing applied.",
+
+    # Endurance test (app/endurance.py)
+    "end.rapport.titre": "{nom} {version}: endurance test ({date})",
+    "end.rapport.reglage": "Setting under test: {code} ({reglage})",
+    "end.rapport.plan": (
+        "Runs: {n}, {minutes} min long on average, taken from the public corpus (SUMM-RE ASRU); "
+        "a single process, pipeline opened then released for each run, as in the app"
+    ),
+    "end.rapport.plan_pression": (
+        "Memory pressure, every other run: CTranslate2 large-v3 loaded and run on {secondes} s "
+        "(\"Maximum quality\" settings), then free memory brought down to about {cible} GB; all of it stays "
+        "in place while OpenVINO opens and runs"
+    ),
+    "end.rapport.section.resultat": "Result",
+    "end.rapport.panne_avant": (
+        "Runs with at least one engine error (before replay): {k} of {n} ({pct} %, "
+        "95 % upper bound: {borne} %)"
+    ),
+    "end.rapport.panne_apres": (
+        "Runs the replay did not save (fallback to CTranslate2 or failure): {k} of {n} ({pct} %, "
+        "95 % upper bound: {borne} %)"
+    ),
+    "end.rapport.issues": (
+        "Successful replays: {rejeux}; fallbacks to CTranslate2: {replis}; uncaught failures: {erreurs}; "
+        "crashed or stuck processes: {plantages}"
+    ),
+    "end.rapport.pression_ratee": "Runs not measured because memory pressure could not be set up: {n}",
+    "end.rapport.repetitions": (
+        "Looping windows: {fenetres}, redone {reprises} times; failed redos: {echecs}"
+    ),
+    "end.rapport.vitesse": (
+        "Speed: median factor {mediane} (from {min} to {max}); model opening: median {ouv} s, "
+        "at most {ouv_max} s"
+    ),
+    "end.rapport.memoire": (
+        "Free memory before opening: lowest {min} GB, median {med} GB; "
+        "before the run: lowest {min2} GB"
+    ),
+    "end.rapport.par_mode": (
+        "{mode}: runs {n}, with an error {k}, not saved {perdus}; free memory before "
+        "opening: median {med} GB, lowest {min} GB"
+    ),
+    "end.mode.normal": "normal",
+    "end.mode.pression": "under pressure",
+    "end.mode.diagnostic": "diagnostic",
+    "end.rapport.section.erreurs": "Errors seen, exact text",
+    "end.rapport.aucune_erreur": "none",
+    "end.rapport.erreur": "{id} ({phase}, {issue}): {erreur}",
+    "end.phase.ouverture": "pipeline opening",
+    "end.phase.transcription": "transcription",
+    "end.phase.garde": "redo of a looping window",
+    "end.phase.passage": "run",
+    "end.issue.rejeu": "replayed",
+    "end.issue.rejeu_reussi": "replay succeeded",
+    "end.issue.repli": "fallback to CTranslate2",
+    "end.issue.premiere_version_gardee": "first version kept",
+    "end.rapport.section.diagnostic": "Diagnosis of the 12/11 failure",
+    "end.rapport.diag_journal_aucun": "Log of the crashed process: not found (purged or deleted).",
+    "end.rapport.diag_journal": (
+        "Log {date}: error raised in moteur_openvino.py, line {lignes} ({lieu}); "
+        "looping window just before: {repetitive}; pipeline opened: {ouvert}; "
+        "planned windows: {fenetres}"
+    ),
+    "end.lieu.glouton": "greedy decoding of a window",
+    "end.lieu.garde_faisceau": "repetition guard, beam of 5",
+    "end.lieu.ouverture": "pipeline opening",
+    "end.lieu.inconnu": "elsewhere",
+    "end.oui": "yes",
+    "end.non": "no",
+    "end.rapport.diag_ancien": (
+        "Meeting {reunion}, old guard (beam of 5): {etat}; looping windows: {fenetres}; "
+        "failed redos: {echecs}; factor {facteur}"
+    ),
+    "end.rapport.diag_nouveau": (
+        "Meeting {reunion}, new guard (temperature): {etat}; looping windows: {fenetres}; "
+        "failed redos: {echecs}; factor {facteur}"
+    ),
+    "end.rapport.diag_conclusion_oui": (
+        "The old guard reproduces the 12/11 error on this meeting and the new one gets through: "
+        "cause confirmed."
+    ),
+    "end.rapport.diag_conclusion_non": (
+        "The old guard does not reproduce the error on this meeting, or the new one does not get "
+        "through: cause not confirmed."
+    ),
+    "end.rapport.section.detail": "Run by run",
+    "end.rapport.ligne": (
+        "{id} {mode}: {etat}; {libre_ouv} GB free before opening, {libre_pass} GB before the run; "
+        "opening {ouv} s; factor {facteur}; looping windows {boucles}"
+    ),
+    "end.etat.ok": "succeeded",
+    "end.etat.rejeu_reussi": "succeeded after replay",
+    "end.etat.repli": "fallback to CTranslate2",
+    "end.etat.erreur": "failed",
+    "end.etat.plantage": "process crashed",
+    "end.etat.bloque": "stuck, stopped",
+    "end.etat.pression_ratee": "memory pressure not possible",
+    "end.rapport.remarque": "Report of figures only: no transcribed word, no name, no path.",
+    "end.rapport.duree": "Test duration: {duree}",
+    "end.refuse.titre": "Endurance test not possible",
+    "end.refuse.absent": "Setting {code} needs OpenVINO, which is not installed on this computer.",
+    "end.refuse.faisceau": "Setting {code} is not supported on {peripherique} (beam search).",
+    "end.refuse.modele": (
+        "A model is missing for setting {code} (or for memory pressure, CTranslate2 large-v3): "
+        "run the campaign first, it downloads them."
+    ),
+    "end.etape.plan": "{code}: {n} runs planned, {faits} already done",
+    "end.etape.passage": "{id} ({n} of {total}): {etat}, factor {facteur}, opening {ouv} s, {libre} GB free",
+    "end.etape.relance": "new process for the {n} remaining runs",
+    "end.etape.abandon": "the process stops without doing anything ({issue}): test stopped",
+    "end.erreur.bloque": "no sign of life for {s} s, process stopped",
+    "end.erreur.plantage": "process ended without a result (code {code})",
 }
 
 

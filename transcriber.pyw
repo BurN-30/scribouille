@@ -28,6 +28,10 @@ Comparaison des deux moteurs sur un vrai enregistrement (voir `app/comparaison.p
 Campagne de mesure des réglages sur un corpus public avec référence (voir `app/campagne.py`) :
 
     transcriber.pyw --campagne [--appliquer] [--reunion FICHIER --debut 00:05:00 --duree 600]
+
+Épreuve d'endurance du réglage retenu (voir `app/endurance.py`) :
+
+    transcriber.pyw --endurance [--passages 30] [--pression] [--reglage CLE]
 """
 
 from __future__ import annotations
@@ -81,6 +85,17 @@ if "--campagne" in sys.argv[1:] or "--campagne-essai" in sys.argv[1:]:
         journal.demarrer()
     journal.silence_bibliotheques()
     sys.exit(_campagne.principal_cli(sys.argv[1:]))
+
+# Épreuve d'endurance (voir `app/endurance.py`) : le réglage retenu, passé de
+# nombreuses fois d'affilée. « --endurance-essai » est le processus qui enchaîne
+# les passages. Version installée : « scribouille-verifier.exe --endurance ».
+if "--endurance" in sys.argv[1:] or "--endurance-essai" in sys.argv[1:]:
+    from app import endurance as _endurance
+
+    if "--endurance" in sys.argv[1:]:
+        journal.demarrer()
+    journal.silence_bibliotheques()
+    sys.exit(_endurance.principal_cli(sys.argv[1:]))
 
 # Comparaison des deux moteurs sur un vrai fichier, en ligne de commande, même
 # organisation que le banc : « --comparer-essai » est le processus d'un moteur.

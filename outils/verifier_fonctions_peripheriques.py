@@ -64,7 +64,7 @@ ce soit et **sans le moindre appel réseau** :
   27. OpenVINO sur la puce graphique : faisceau non pris en charge (campagne,
       réglage du poste), garde-fou des répétitions à température, filet de la
       transcription (rejeu puis repli) sur un moteur simulé, réglage de
-      comparaison des réunions.
+      comparaison des réunions ; épreuve d'endurance (taux, rapport sans texte).
 
 Rien de ce que fait ce script ne touche à l'installation : tout se passe dans
 un dossier temporaire, effacé à la fin.
@@ -2398,6 +2398,192 @@ def essai_filet_openvino() -> None:
         mo.MoteurAvecRepli.PAUSE_RECREATION_S = pause
 
 
+
+def essai_endurance(base: Path) -> None:
+    """Épreuve d'endurance : plan, taux, diagnostic du 12/11, chute d'un processus, rapport sans texte."""
+    titre("Épreuve d'endurance")
+    import copy
+
+    import numpy as np
+
+    from app import campagne as cp, corpus, endurance as en, moteur
+
+    # Plan : deux extraits de réunions différentes, environ 2 min, pression un passage sur deux.
+    extraits = [{"id": f"r{k // 2}-{k % 2}", "wav": f"r{k}.wav", "reunion": f"r{k // 2}", "duree_s": 55.0 + k}
+                for k in range(20)]
+    plan = en.planifier(extraits, 30, pression=True)
+    verifier(len(plan) == 30 and all(len(p["wavs"]) >= 2 for p in plan)
+             and all(100.0 <= p["duree_s"] <= 180.0 for p in plan)
+             and all(len({extraits[[e["wav"] for e in extraits].index(w)]["reunion"] for w in p["wavs"]})
+                     == len(p["wavs"]) for p in plan),
+             "30 passages d'environ 2 min, chacun fait de réunions différentes")
+    verifier([p["mode"] for p in plan[:4]] == ["normal", "pression", "normal", "pression"]
+             and all(p["mode"] == "normal" for p in en.planifier(extraits, 6, pression=False)),
+             "pression mémoire un passage sur deux, seulement si elle est demandée")
+
+    # Taux : borne haute de Wilson, panne avant et après rejeu.
+    verifier(11.0 <= en.borne_haute(0, 30) <= 11.6 and en.borne_haute(0, 0) == 0.0
+             and en.borne_haute(1, 30) > 100 / 30,
+             "zéro panne sur 30 : taux réel sous 11 % environ (intervalle de Wilson)",
+             str(en.borne_haute(0, 30)))
+    lignes = [{"id": "a", "etat": "ok", "facteur": 0.1, "ouverture_s": 5, "libre_avant_ouverture_go": 9.0,
+               "libre_avant_passage_go": 8.0},
+              {"id": "b", "etat": "rejeu_reussi", "facteur": 0.2, "ouverture_s": 6,
+               "libre_avant_ouverture_go": 4.0, "libre_avant_passage_go": 3.5},
+              {"id": "c", "etat": "repli", "facteur": 0.6},
+              {"id": "d", "etat": "plantage"},
+              {"id": "e", "etat": "pression_ratee"}]
+    b = en.bilan(lignes)
+    verifier(b["n"] == 4 and b["avant"] == 3 and b["apres"] == 2 and b["rejeu_reussi"] == 1
+             and b["pression_ratee"] == 1 and b["libre_ouv_min"] == 4.0 and b["facteur_med"] == 0.2,
+             "panne avant rejeu, après rejeu, et pression ratée mise à part")
+
+    # Diagnostic du 12/11 : réunion en échec retrouvée, journal lu sans en recopier une ligne.
+    campagnes_reelles = cp.DOSSIER_CAMPAGNES
+    cp.DOSSIER_CAMPAGNES = base / "endurance-campagnes"
+    try:
+        for nom, erreur in (("reunion-aaa", "RuntimeError: Exception from src\\core\\src\\runtime\\tensor.cpp:125:"
+                                            "\nException from runtime/iremote_tensor.hpp:32:\nNot Implemented"),
+                            ("reunion-bbb", "")):
+            dossier = cp.DOSSIER_CAMPAGNES / nom / "reglages"
+            dossier.mkdir(parents=True)
+            (dossier / "ov-turbo-f1.json").write_text(json.dumps(
+                {"etat": "erreur" if erreur else "ok", "erreur": erreur}), encoding="utf-8")
+            np.save(cp.DOSSIER_CAMPAGNES / nom / "extrait.npy", np.zeros(160, dtype=np.float32))
+        diag = en.diagnostics("ov-turbo-f1")
+        verifier([(p["id"], p["garde"]) for p in diag] == [("r1-ancien", "faisceau"), ("r1-nouveau", "auto")]
+                 and "reunion-aaa" in diag[0]["npy"],
+                 "la réunion du 12/11 en échec est rejouée avec l'ancien puis le nouveau garde-fou")
+    finally:
+        cp.DOSSIER_CAMPAGNES = campagnes_reelles
+    journaux = base / "endurance-logs"
+    journaux.mkdir()
+    (journaux / "2026-11-12_101500.log").write_text(
+        "10:15:00  INFO  Chargement OpenVINO OpenVINO/whisper-large-v3-turbo-int8-ov sur GPU (x)\n"
+        "10:15:09  INFO  Transcription OpenVINO : GPU, langue=fr, faisceau=1, 23 fenêtre(s), amorce=0 caractères\n"
+        "10:16:10  WARNING  Fenêtre répétitive (taux 2.71), refaite avec un faisceau de 5\n"
+        "10:16:11  ERROR  Campagne : réglage en échec\nTraceback (most recent call last):\n"
+        '  File "app\\campagne.py", line 223, in executer_reglage\n'
+        '  File "app\\moteur_openvino.py", line 414, in transcrire\n'
+        "RuntimeError: Exception from src\\core\\src\\runtime\\tensor.cpp:125:\n"
+        "Exception from runtime/iremote_tensor.hpp:32:\nNot Implemented\n", encoding="utf-8")
+    (journaux / "2026-11-13_090000.log").write_text(
+        "Reprise d'une fenêtre répétitive impossible\n  File \"app\\moteur_openvino.py\", line 430\n"
+        "iremote_tensor.hpp:32 Not Implemented\n", encoding="utf-8")
+    traces = en.lire_journaux(journaux)
+    verifier(len(traces) == 1 and traces[0]["lignes"] == [414] and traces[0]["lieu"] == "garde_faisceau"
+             and traces[0]["repetitive"] and traces[0]["ouvert"] and traces[0]["fenetres"] == 23,
+             "journal du processus tombé : ligne de l'erreur, fenêtre qui bouclait juste avant ; "
+             "les journaux de l'épreuve elle-même sont ignorés")
+
+    # Un passage, avec un moteur simulé : classement, mémoire, pression ratée.
+    class FauxFilet:
+        def __init__(self, incidents, sur_openvino=True, lever=None):
+            self.incidents, self.sur_openvino, self.lever = incidents, sur_openvino, lever
+            self.liberations = 0
+
+        def charger(self, modele, signaler=None):
+            pass
+
+        def transcrire(self, signal, duree, langue, reglages, amorce=""):
+            if self.lever:
+                raise self.lever
+            return [object()], {"fenetres_repetitives": 1, "reprises": 2, "echecs_garde": 0}
+
+        def liberer(self):
+            self.liberations += 1
+
+    fabriquer_reel, signal_reel, pression_reelle = en.fabriquer, en._signal, en._pression
+    mat = copy.deepcopy(materiel.detecter())
+    reglage = cp.PAR_CLE["ov-turbo-f1"]
+    try:
+        en._signal = lambda passage: np.zeros(16000 * 10, dtype=np.float32)
+        cas = {
+            "ok": FauxFilet([]),
+            "rejeu_reussi": FauxFilet([{"phase": "transcription", "issue": "rejeu_reussi", "erreur": "E"}]),
+            "repli": FauxFilet([{"phase": "transcription", "issue": "repli", "erreur": "E"}], sur_openvino=False),
+            "erreur": FauxFilet([], lever=RuntimeError("panne")),
+        }
+        rendus = {}
+        for attendu, faux in cas.items():
+            en.fabriquer = lambda r, m, p, faux=faux: faux
+            rendus[attendu] = en.jouer_passage({"id": "p01", "mode": "normal"}, reglage, mat, {}, "GPU", 4.0)
+        verifier(all(rendus[e]["etat"] == e for e in cas) and all(f.liberations == 1 for f in cas.values()),
+                 "passage classé réussi, réussi après rejeu, repli ou échec ; moteur toujours libéré")
+        ok = rendus["ok"]
+        verifier(ok["libre_avant_ouverture_go"] > 0 and ok["libre_avant_passage_go"] > 0
+                 and ok["fenetres_repetitives"] == 1 and ok["reprises"] == 2 and "facteur" in ok,
+                 "mémoire libre relevée avant l'ouverture et avant le passage")
+
+        def pression_impossible(*_a):
+            raise MemoryError("plus de mémoire")
+        en._pression = pression_impossible
+        en.fabriquer = lambda r, m, p: FauxFilet([])
+        ratee = en.jouer_passage({"id": "p02", "mode": "pression"}, reglage, mat, {}, "GPU", 4.0)
+        verifier(ratee["etat"] == "pression_ratee", "pression impossible : pas comptée comme une panne du moteur")
+    finally:
+        en.fabriquer, en._signal, en._pression = fabriquer_reel, signal_reel, pression_reelle
+
+    # Orchestration : un processus qui tombe est noté, la file repart ; une relance reprend.
+    reels = (en._lancer, en.DOSSIER, corpus.preparer, moteur.etat_modele, cp._peripherique_ov,
+             cp.dernier_verdict, en.lire_journaux, en.diagnostics)
+    en.DOSSIER = base / "endurance"
+    corpus.preparer = lambda *a, **k: [corpus.Extrait(ident=e["id"], reunion=e["reunion"], duree=e["duree_s"],
+                                                      wav=Path(e["wav"]), reference={}) for e in extraits]
+    moteur.etat_modele = lambda depot: {"etat": "complet"}
+    cp._peripherique_ov = lambda force="": "GPU"
+    cp.dernier_verdict = lambda: {"cle": "ov-turbo-f1"}
+    en.lire_journaux = lambda dossier=None: []
+    en.diagnostics = lambda cle: []
+    lancements: list[list[str]] = []
+
+    def lancer_simule(fichier, recevoir, interrompu):
+        restants = json.loads(Path(fichier).read_text(encoding="utf-8"))["passages"]
+        lancements.append([p["id"] for p in restants])
+        for p in restants:
+            if p["id"] == "p03" and len(lancements) == 1:
+                return "fin:3221225477", "p03"
+            recevoir({"id": p["id"], "mode": p["mode"], "etat": "ok", "facteur": 0.12, "ouverture_s": 5.0,
+                      "libre_avant_ouverture_go": 6.0, "libre_avant_passage_go": 5.5, "duree_s": 130.0,
+                      "incidents": []})
+        return "fin:0", ""
+
+    en._lancer = lancer_simule
+    try:
+        resultat = en.executer(passages=6, pression=True)
+        verifier(lancements == [["p01", "p02", "p03", "p04", "p05", "p06"], ["p04", "p05", "p06"]]
+                 and resultat["complet"] and resultat["bilan"]["plantage"] == 1
+                 and resultat["bilan"]["avant"] == 1 and resultat["bilan"]["n"] == 6,
+                 "processus tombé : passage noté « processus tombé », la file repart au suivant")
+        lancements.clear()
+        resultat = en.executer(passages=6, pression=True)
+        verifier(lancements == [] and resultat["complet"],
+                 "relance : les passages déjà enregistrés ne sont pas refaits")
+        rapport = resultat["rapport"]
+        verifier("3221225477" in rapport and str(Path.home()) not in rapport and str(base) not in rapport,
+                 "le rapport donne le code de sortie du processus tombé, sans chemin")
+    finally:
+        (en._lancer, en.DOSSIER, corpus.preparer, moteur.etat_modele, cp._peripherique_ov,
+         cp.dernier_verdict, en.lire_journaux, en.diagnostics) = reels
+
+    # Rapport : diagnostic concluant, aucun texte.
+    diag_lignes = [
+        {"id": "r1-ancien", "mode": "diagnostic", "etat": "ok", "fenetres_repetitives": 1, "echecs_garde": 1,
+         "erreur_garde": "RuntimeError: ... iremote_tensor.hpp:32 Not Implemented", "facteur": 0.13,
+         "incidents": []},
+        {"id": "r1-nouveau", "mode": "diagnostic", "etat": "ok", "fenetres_repetitives": 1, "echecs_garde": 0,
+         "facteur": 0.12, "incidents": []},
+        {"id": "p01", "mode": "normal", "etat": "ok", "facteur": 0.12, "duree_s": 130.0, "incidents": []}]
+    rapport = en.rediger_rapport(mat, "ov-turbo-f1", "GPU", diag_lignes,
+                                 [{"date": "2026-11-12_1015", "lignes": [414], "lieu": "garde_faisceau",
+                                   "repetitive": True, "ouvert": True, "faisceau": 1, "fenetres": 23}],
+                                 False, 4.0, 60.0)
+    verifier("cause confirmée" in rapport and "414" in rapport and "faisceau de 5" in rapport,
+             "diagnostic : l'ancien garde-fou reproduit l'erreur, le nouveau la passe, cause confirmée")
+    verifier(en.options_reconnues(["--endurance"]) and en.options_reconnues(["--endurance-essai", "x"]),
+             "options de la ligne de commande")
+
+
 def principal() -> int:
     print(f"Vérification des fonctions périphériques de Scribouille\n{'=' * 54}")
     with tempfile.TemporaryDirectory(prefix="scribouille-verif-") as brut:
@@ -2432,6 +2618,7 @@ def principal() -> int:
         essai_campagne_limites(base)
         essai_openvino_faisceau()
         essai_filet_openvino()
+        essai_endurance(base)
 
     print(f"\n{'=' * 54}")
     if _echecs:
