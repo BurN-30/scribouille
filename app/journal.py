@@ -58,6 +58,22 @@ def demarrer(niveau: int = logging.INFO) -> Path:
     return _fichier_courant
 
 
+def sans_fichier() -> None:
+    """
+    Journal sans fichier, pour les commandes qui ne doivent rien écrire
+    (regarder l'espace occupé, effacer) : les lignes sont perdues.
+    """
+    global _logger, _fichier_courant
+
+    logger = logging.getLogger("transcripteur")
+    logger.propagate = False
+    for ancien in list(logger.handlers):
+        logger.removeHandler(ancien)
+    logger.addHandler(logging.NullHandler())
+    _logger = logger
+    _fichier_courant = Path("aucun-journal.log")
+
+
 def fichier() -> Path:
     if _fichier_courant is None:
         return demarrer()

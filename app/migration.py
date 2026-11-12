@@ -57,6 +57,8 @@ MOTIFS = (
 DOSSIERS = (
     "logs", "modeles", "reprises", "extensions", "cache-pip", "extensions-openvino", "cache-openvino",
     "paquets-hors-ligne", "rapports-banc", "comparaisons", "campagnes", "corpus-campagne",
+    # Profil du composant d'affichage (WebView2), depuis la 2.6.
+    "webview",
 )
 
 

@@ -2,6 +2,8 @@
 
 [Retour au README](../README.fr.md)
 
+Sans fenêtre : [la ligne de commande](ligne-de-commande.md). Chaque réglage : [reglages.md](reglages.md). Processus et dossiers : [architecture.md](architecture.md).
+
 ---
 
 ## Vocabulaire et corrections
@@ -54,11 +56,11 @@ Ce que l'application en fait, en trois étages :
 
 **Plusieurs fichiers.** Un vocabulaire d'équipe ou de projet s'ajoute dans **Fichiers partagés** : il est lu en plus du vôtre, qui a le dernier mot (un terme que vous avez refusé le reste). **Exporter** produit un fichier à partager ; **Importer des propositions** verse un fichier dans votre vocabulaire, à l'état « proposé ».
 
-**Apprendre à partir de vos corrections.** Une correction faite dans la vue de relecture sans mémoriser de règle devient une proposition. Et `scribouille-verifier.exe --apprendre-vocabulaire --brut BRUT.txt --propre RELUE.docx [--cr COMPTE-RENDU.docx] [--importer]` compare des transcriptions brutes à leurs versions relues (texte, Word, Markdown, PDF texte) et propose les fautes systématiques (avec leur nombre d'occurrences et de réunions), ainsi que les noms propres et sigles des documents propres. Rien ne sert avant d'avoir été accepté dans l'écran Vocabulaire (accepter, refuser, modifier, par lots). Le rapport de chiffres qui l'accompagne ne contient aucun terme.
+**Apprendre à partir de vos corrections.** Une correction faite dans la vue de relecture sans mémoriser de règle devient une proposition. Et `scribouille.com --apprendre-vocabulaire --brut BRUT.txt --propre RELUE.docx [--cr COMPTE-RENDU.docx] [--importer]` compare des transcriptions brutes à leurs versions relues (texte, Word, Markdown, PDF texte) et propose les fautes systématiques (avec leur nombre d'occurrences et de réunions), ainsi que les noms propres et sigles des documents propres. Rien ne sert avant d'avoir été accepté dans l'écran Vocabulaire (accepter, refuser, modifier, par lots). Le rapport de chiffres qui l'accompagne ne contient aucun terme.
 
 **L'ancien format reste lu.** Tant que `vocabulaire.txt` et `corrections.txt` contiennent des termes, ils servent tels quels. Le bouton **Convertir** les intègre à `vocabulaire.toml` sans rien perdre et garde une copie des anciens fichiers à côté.
 
-**Mesurer.** `scribouille-verifier.exe --mesurer-vocabulaire --vocabulaire V.toml --reunion AUDIO --reference RELUE` transcrit chaque réunion sans puis avec amorce, applique la correction, et donne le taux d'erreur, le rappel et la précision des termes par catégorie, et le nombre de fausses corrections. Mesurez sur des réunions qui n'ont pas servi à apprendre le vocabulaire.
+**Mesurer.** `scribouille.com --mesurer-vocabulaire --vocabulaire V.toml --reunion AUDIO --reference RELUE` transcrit chaque réunion sans puis avec amorce, applique la correction, et donne le taux d'erreur, le rappel et la précision des termes par catégorie, et le nombre de fausses corrections. Mesurez sur des réunions qui n'ont pas servi à apprendre le vocabulaire.
 
 Les deux fichiers du format 1 sont du texte brut. Ils s'éditent à la main ou depuis les panneaux de l'application. Le panneau **« Mes données »** les exporte, avec vos réglages et votre gabarit pour l'IA s'il existe, dans une archive `scribouille-donnees-AAAA-MM-JJ.zip` que vous rangez où vous voulez, clé USB ou sauvegarde d'entreprise. Un import affiche un aperçu de ce qui va changer et n'écrit rien avant votre confirmation, l'état précédent étant sauvegardé à côté au préalable.
 
@@ -112,7 +114,7 @@ Sur un portable de 15 W sans carte dédiée, le processeur seul peut mettre plus
 - **Le moteur OpenVINO** (Intel, licence Apache 2.0, environ 90 Mo depuis PyPI) transcrit sur la puce graphique intégrée. Seule mesure publiée sur un processeur de la même famille (Core Ultra 7 265U) : 0,12 x avec le modèle Rapide sur la puce graphique, contre 1,04 x sur son processeur, texte identique. Les modèles au format OpenVINO (0,8 Go pour Rapide, 1,6 Go pour Qualité) se téléchargent au premier usage. Ce que l'on perd : la probabilité de chaque mot, que ce moteur ne donne pas (la vue de relecture ne surligne alors aucun mot incertain). Tout le reste est gardé : segments horodatés, horodatage des mots pour les locuteurs, glossaire, reprise après coupure, arrêt. En cas de panne d'OpenVINO, le moteur habituel prend le relais sans perdre ce qui est déjà transcrit.
 - **Le banc d'essai** transcrit un extrait de 44 s livré avec l'application sous plusieurs réglages (fils de calcul, lots, modèle Rapide et modèle Qualité, chaque moteur et périphérique disponible), compare le texte obtenu à la référence, puis conseille le plus rapide qui reste juste. Il dure cinq à dix minutes. Rien ne change tant que vous n'avez pas cliqué sur **Appliquer le réglage conseillé** ; **Revenir au réglage automatique** défait tout. Le rapport (`rapports-banc\` dans le dossier de données) ne contient ni nom d'utilisateur, ni nom de machine, ni chemin : il peut être envoyé tel quel. Branchez le portable sur secteur avant de le lancer.
 
-En ligne de commande, sans fenêtre : `scribouille-verifier.exe --banc` dans le dossier d'installation (ou `.venv\Scripts\python transcriber.pyw --banc` depuis les sources) ; ajoutez `--telecharger` pour récupérer les modèles manquants, `--npu` pour essayer le NPU, `--appliquer` pour appliquer le conseil.
+En ligne de commande, sans fenêtre : `scribouille.com --banc` dans le dossier d'installation (ou `.venv\Scripts\python transcriber.pyw --banc` depuis les sources) ; ajoutez `--telecharger` pour récupérer les modèles manquants, `--npu` pour essayer le NPU, `--appliquer` pour appliquer le conseil.
 
 **Comparer les deux moteurs sur vos propres enregistrements.** Le banc mesure la vitesse sur 44 s de phrases lues d'une seule voix : il ne dit rien de la justesse sur une vraie réunion (plusieurs voix, phrases coupées, mots avalés, mots anglais, vocabulaire de l'équipe). La comparaison transcrit le même extrait d'un de vos fichiers avec CTranslate2 et avec OpenVINO, chacun dans son réglage Qualité, avec votre langue, votre glossaire et vos corrections, puis écrit dans `comparaisons\` du dossier de données :
 
@@ -122,7 +124,7 @@ En ligne de commande, sans fenêtre : `scribouille-verifier.exe --banc` dans le 
 Depuis la fenêtre : section **Vitesse de cette machine**, bloc **Comparer les deux moteurs** (visible une fois OpenVINO installé). En ligne de commande :
 
 ```
-scribouille-verifier.exe --comparer "D:\Réunions\point-hebdo.m4a" --debut 00:05:00 --duree 600 --ouvrir
+scribouille.com --comparer "D:\Réunions\point-hebdo.m4a" --debut 00:05:00 --duree 600 --ouvrir
 ```
 
 `--debut` et `--duree` (secondes, ou `hh:mm:ss`) choisissent l'extrait ; ses bords sont ramenés sur la pause la plus proche, pour ne pas couper une phrase. `--reference FICHIER` ajoute une transcription déjà relue du même enregistrement (texte, SRT, VTT, export texte ou compagnon `.json` de Scribouille ; horodatages et noms de locuteurs ignorés) : le rapport donne alors le taux d'erreur de chaque moteur, et la page une troisième colonne. Sur un extrait, la référence doit être horodatée (SRT, ou export avec horodatage) : sans horodatages, la comparaison à la référence n'est possible que sur le fichier entier. Une référence produite par Scribouille puis peu corrigée favorise CTranslate2, qui l'a écrite. Autres options : `--peripherique GPU|CPU|NPU` (par défaut la puce graphique Intel si OpenVINO la voit), `--preset rapide`, `--sans-glossaire`, `--sans-corrections`, `--faisceau-openvino 5`. Compter deux à trois fois la durée de l'extrait sur un portable, beaucoup moins avec la puce graphique.
@@ -132,18 +134,18 @@ Ce que l'on sait déjà, mesuré sur trois réunions publiques à trois ou quatr
 **Choisir le réglage sur des réunions transcrites à la main : la campagne.** La comparaison montre où deux moteurs divergent, sans dire lequel a raison. La campagne le mesure, sur 22,8 minutes de réunions publiques en français à trois ou quatre voix, transcrites à la main (corpus SUMM-RE ASRU, Laboratoire Parole et Langage et LINAGORA, licence CC BY-SA 4.0) :
 
 ```
-scribouille-verifier.exe --campagne
+scribouille.com --campagne
 ```
 
 Sept réglages passent l'un après l'autre (CTranslate2 et OpenVINO, large-v3 et turbo, faisceaux 1 et 5), glossaire et corrections éteints. Le rapport, sans un mot transcrit ni chemin, donne pour chacun le taux d'erreur de mots avec son intervalle de confiance, les mots perdus quand deux personnes parlent en même temps, les insertions longues, la vitesse, puis le verdict : parmi les réglages plus rapides que la réunion et aussi justes que le meilleur, le plus rapide. `--appliquer` l'enregistre comme réglage du poste ; sans lui, rien ne change. Le corpus est lu dans `corpus-campagne-v1.zip` posé à côté du programme, ou téléchargé (476 Mo, Hugging Face puis ORTOLANG). Une campagne interrompue reprend où elle s'est arrêtée ; le poste ne se met pas en veille pendant le calcul. Compter une heure et demie sur un portable Core Ultra avec la puce graphique. `--reunion FICHIER --debut 00:05:00 --duree 600` passe ensuite les mêmes réglages sur une de vos réunions et donne leur accord avec le réglage retenu, toujours sans un mot du texte. Autres options : `--reglages ov-v3-f1,ct2-v3-f5`, `--limite-extraits 3`, `--recommencer`, `--corpus PAQUET.zip`, `--telecharger`.
 
-**Vérifier que le réglage tient : l'épreuve d'endurance.** `scribouille-verifier.exe --endurance` passe le réglage retenu par la campagne trente fois d'affilée, sur des extraits d'environ deux minutes du même corpus, comme la file de l'application. Le rapport, toujours sans texte, donne le taux de panne avant et après le rejeu automatique, l'erreur exacte de chaque incident et la mémoire libre du poste à chaque ouverture du modèle. `--pression` charge en plus, un passage sur deux, le modèle CTranslate2 large-v3 et ne laisse que 4 Go libres (`--memoire-libre 4`), pour éprouver un poste chargé. Compter une demi-heure à trois quarts d'heure sur un portable Core Ultra. Autres options : `--passages 30`, `--reglage ov-turbo-f1`, `--recommencer`, `--sans-diagnostic`.
+**Vérifier que le réglage tient : l'épreuve d'endurance.** `scribouille.com --endurance` passe le réglage retenu par la campagne trente fois d'affilée, sur des extraits d'environ deux minutes du même corpus, comme la file de l'application. Le rapport, toujours sans texte, donne le taux de panne avant et après le rejeu automatique, l'erreur exacte de chaque incident et la mémoire libre du poste à chaque ouverture du modèle. `--pression` charge en plus, un passage sur deux, le modèle CTranslate2 large-v3 et ne laisse que 4 Go libres (`--memoire-libre 4`), pour éprouver un poste chargé. Compter une demi-heure à trois quarts d'heure sur un portable Core Ultra. Autres options : `--passages 30`, `--reglage ov-turbo-f1`, `--recommencer`, `--sans-diagnostic`.
 
 Sur la puce graphique Intel, OpenVINO ne décode qu'en glouton (faisceau 1) : c'est une limite d'OpenVINO GenAI 2026.4, et l'application n'applique jamais de faisceau plus large sur ce circuit. Si OpenVINO rate une fenêtre, l'application rouvre le modèle et reprend sur la puce graphique ; si cela se répète, elle termine la transcription avec le moteur habituel, sans rien perdre de ce qui était déjà transcrit.
 
 ### Réglage proposé pour ce poste
 
-Au premier lancement, et à chaque clic sur **Reconnaître ce poste** (section **Vitesse de cette machine**), l'application regarde le poste (processeur et familles de cœurs, mémoire, puce graphique Intel vue ou non par OpenVINO, carte NVIDIA, NPU, batterie ou secteur, mode d'alimentation de Windows) et propose un réglage, expliqué en une phrase, avec la durée attendue pour une heure de réunion. Si une campagne ou un banc d'essai a été mené sur le poste, son résultat passe devant la table ; s'il ne tient plus (puce graphique absente, pilote en panne, OpenVINO retiré), la proposition le dit et repart du matériel. Rien ne change sans **Appliquer**, rien n'est téléchargé ni installé d'office : un modèle manquant est annoncé avec sa taille et ne descend qu'au lancement d'une transcription ; le moteur Intel reste à installer par son propre bouton. En ligne de commande : `scribouille-verifier.exe --reconnaitre`, puis `--reconnaitre --appliquer`.
+Au premier lancement, et à chaque clic sur **Reconnaître ce poste** (section **Vitesse de cette machine**), l'application regarde le poste (processeur et familles de cœurs, mémoire, puce graphique Intel vue ou non par OpenVINO, carte NVIDIA, NPU, batterie ou secteur, mode d'alimentation de Windows) et propose un réglage, expliqué en une phrase, avec la durée attendue pour une heure de réunion. Si une campagne ou un banc d'essai a été mené sur le poste, son résultat passe devant la table ; s'il ne tient plus (puce graphique absente, pilote en panne, OpenVINO retiré), la proposition le dit et repart du matériel. Rien ne change sans **Appliquer**, rien n'est téléchargé ni installé d'office : un modèle manquant est annoncé avec sa taille et ne descend qu'au lancement d'une transcription ; le moteur Intel reste à installer par son propre bouton. En ligne de commande : `scribouille.com --reconnaitre`, puis `--reconnaitre --appliquer`.
 
 La table, lue de haut en bas : carte NVIDIA, Qualité maximale sur la carte ; puce graphique Intel vue par OpenVINO, Rapide sur la puce (une heure en 7 minutes environ, aussi juste que Qualité maximale sur le processeur d'après la campagne du PC de test) ; puce Intel présente mais inutilisable, Rapide avec OpenVINO sur le processeur ; moins de 10 Go de mémoire, Rapide ; processeur seul, OpenVINO s'il est installé, sinon Rapide sur un processeur modeste (moins de 12 fils ou série U) et Qualité maximale sur un processeur de bureau. Le rythme proposé est **Équilibré, qui s'adapte tout seul**.
 
@@ -162,7 +164,7 @@ La section **Pendant la transcription** des réglages borne ce que la transcript
 
 **S'adapter tout seul** : la transcription prend le rythme choisi pendant que vous vous servez du poste (clavier ou souris touchés depuis moins de deux minutes, autres programmes qui occupent plus de 30 % du processeur, plein écran ou présentation, micro ouvert pour un appel, portable sur batterie) et la vitesse maximale quand il est au repos. Les fils et les lots se fixent au chargement du modèle : ce sont alors ceux de la vitesse maximale, et la bascule se fait par la priorité, la qualité de service et les pauses. Sur batterie, le rythme choisi est gardé jusqu'à ce que le portable soit branché. Le temps restant affiché suit la cadence réellement observée, bascules comprises. Le choix vaut pour la prochaine transcription.
 
-Mesurer chaque rythme sur le poste : `scribouille-verifier.exe --banc --modes` (ajouter `--peripherique GPU` pour la puce graphique). Pour chaque rythme : vitesse, mémoire, processeur laissé libre, et gêne mesurée sur une petite tâche témoin qui joue le rôle de vos applications. Les rapports de durée mesurés remplacent ensuite les coefficients de départ des estimations.
+Mesurer chaque rythme sur le poste : `scribouille.com --banc --modes` (ajouter `--peripherique GPU` pour la puce graphique). Pour chaque rythme : vitesse, mémoire, processeur laissé libre, et gêne mesurée sur une petite tâche témoin qui joue le rôle de vos applications. Les rapports de durée mesurés remplacent ensuite les coefficients de départ des estimations.
 
 Pendant une transcription, le poste ne se met plus en veille faute d'activité (fermer le capot garde son effet), et fermer la fenêtre demande confirmation : ce qui est déjà transcrit est gardé et proposé à la reprise.
 
@@ -325,7 +327,7 @@ La publication est automatisée : poser un tag `vX.Y.Z` déclenche `.github/work
 ```bat
 pip install -r requirements.txt -r requirements-build.txt
 pyinstaller --noconfirm --clean --distpath dist --workpath build packaging\scribouille.spec
-dist\Scribouille\scribouille-verifier.exe
+dist\Scribouille\scribouille.com --verifier
 iscc /DVersionApp=2.3.0 packaging\setup.iss
 ```
 
@@ -349,13 +351,13 @@ Trois modes s'ajoutent pour la séparation des locuteurs, sans fenêtre eux non 
 
 ```bat
 REM Poser les composants, ici dans un dossier d'essai plutot que le dossier reel
-dist\Scribouille\scribouille-verifier.exe --installer-locuteurs --cible D:\essai --cpu
+dist\Scribouille\scribouille.com --installer-locuteurs --cible D:\essai --cpu
 
 REM Essayer l'import reel de torch et de pyannote. Code 0 si tout repond.
-dist\Scribouille\scribouille-verifier.exe --verifier-locuteurs --cible D:\essai
+dist\Scribouille\scribouille.com --verifier-locuteurs --cible D:\essai
 
 REM Tout effacer
-dist\Scribouille\scribouille-verifier.exe --retirer-locuteurs --cible D:\essai
+dist\Scribouille\scribouille.com --retirer-locuteurs --cible D:\essai
 ```
 
 `--paquets` remplace la liste par la sienne, ce qui permet d'éprouver le mécanisme avec un paquet léger sans télécharger plusieurs gigaoctets. Sans `--cible`, le dossier d'extensions réel est utilisé. Depuis les sources, les mêmes options existent sur `python -m app.extensions`.

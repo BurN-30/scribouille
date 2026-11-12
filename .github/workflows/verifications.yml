@@ -73,3 +73,7 @@ jobs:
       - name: Socle (décodage, démarrage, file, garde-fous, données)
         shell: pwsh
         run: python outils/verifier_socle.py
+
+      - name: Processus moteur, ligne de commande, inventaire
+        shell: pwsh
+        run: python outils/verifier_moteur.py

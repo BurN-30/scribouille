@@ -121,6 +121,7 @@ english.EspaceInsuffisant=Only about %1 GB is free on this drive.%n%nThe highest
 english.DossierModelesRefuse=This folder could not be created, or is not writable.%n%nPlease choose another location.
 english.DesinstallerModeles=Also delete the transcription models?%n%nThey take up %1 in:%n%2%n%nAnswer No to keep them: a reinstall will find them again and will have nothing to download.
 english.DesinstallerDonnees=Also delete your personal {#NomApp} data?%n%nThis would permanently erase your glossary, your correction rules, your settings, the logs and the speaker separation components (%2), in:%n%1%n%nAnswer No to keep them.
+english.EffacementComplet=Erase every file {#NomApp} wrote on this computer?%n%n%1%nYour transcriptions are NOT touched. Files that do not belong to {#NomApp} are left in place.%n%nAnswer No to keep everything: a reinstall will find your settings and models again.
 
 french.PageModelesTitre=Emplacement des modèles de transcription
 french.PageModelesDescription=Où faut-il ranger les fichiers de reconnaissance vocale ?
@@ -137,6 +138,7 @@ french.EspaceInsuffisant=Il ne reste qu'environ %1 Go de libre sur ce disque.%n%
 french.DossierModelesRefuse=Ce dossier n'a pas pu être créé, ou n'est pas accessible en écriture.%n%nChoisissez un autre emplacement.
 french.DesinstallerModeles=Supprimer aussi les modèles de transcription ?%n%nIls occupent %1 dans :%n%2%n%nRépondez Non pour les conserver : une réinstallation les retrouvera et n'aura rien à retélécharger.
 french.DesinstallerDonnees=Supprimer aussi vos données personnelles de {#NomApp} ?%n%nCela effacerait définitivement votre glossaire, vos règles de correction, vos réglages, les journaux et les composants de séparation des locuteurs (%2), dans :%n%1%n%nRépondez Non pour les conserver.
+french.EffacementComplet=Effacer tous les fichiers que {#NomApp} a écrits sur ce poste ?%n%n%1%nVos transcriptions ne sont PAS touchées. Les fichiers qui ne sont pas à {#NomApp} restent en place.%n%nRépondez Non pour tout garder : une réinstallation retrouvera vos réglages et vos modèles.
 
 [Tasks]
 ; Décochée par défaut : on ne pose pas d'icône sur le bureau sans le demander.
@@ -162,6 +164,9 @@ Type: dirifempty; Name: "{app}"
 var
   PageModeles: TInputDirWizardPage;
   PageTelechargement: TDownloadWizardPage;
+  { Vrai quand la question de l'effacement complet a été posée par la ligne
+    de commande de l'application (désinstallation). }
+  EffacementTraite: Boolean;
 
 { --------------------------------------------------------------------------
   Emplacements partagés avec l'application, voir app/chemins.py
@@ -498,6 +503,41 @@ begin
   SupprimerEntrees(AncienDossierDonnees(), PreserverModeles);
 end;
 
+{ Effacement complet par la ligne de commande de l'application, AVANT que le
+  programme ne soit retiré : elle seule tient l'inventaire de ce qu'elle a
+  écrit (app/inventaire.py), modèles, caches, moteur Intel, journaux et ancien
+  dossier compris, et elle ne touche ni aux transcriptions ni à ce qui n'est
+  pas à elle. La liste et les tailles sont montrées avant. Renvoie True si la
+  question a pu être posée (réponse Oui ou Non) ; False si la ligne de
+  commande ne répond pas : l'ancien parcours en deux questions prend le relais. }
+function EffacementParLigneDeCommande(): Boolean;
+var
+  Console, Resume, Liste: String;
+  Lignes: TArrayOfString;
+  I, Code: Integer;
+begin
+  Result := False;
+  Console := ExpandConstant('{app}\scribouille.com');
+  if not FileExists(Console) then
+    Exit;
+  Resume := AddBackslash(GetTempDir()) + 'scribouille-effacement.txt';
+  DeleteFile(Resume);
+  if not Exec(Console, 'effacer --complet --garder-programme --apercu --resume "' + Resume + '"',
+              ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, Code) then
+    Exit;
+  if (Code <> 0) or not LoadStringsFromFile(Resume, Lignes) then
+    Exit;
+  DeleteFile(Resume);
+  Liste := '';
+  for I := 0 to GetArrayLength(Lignes) - 1 do
+    Liste := Liste + '    ' + Lignes[I] + #13#10;
+  Result := True;
+  if MsgBox(FmtMessage(ExpandConstant('{cm:EffacementComplet}'), [Liste]),
+            mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+    Exec(Console, 'effacer --complet --garder-programme --oui', ExpandConstant('{app}'),
+         SW_HIDE, ewWaitUntilTerminated, Code);
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   DossierModeles: String;
@@ -506,11 +546,19 @@ var
   ModelesDansLesDonnees: Boolean;
   PoidsExtensions: Int64;
 begin
+  { Une désinstallation silencieuse ne pose aucune question et ne détruit rien
+    d'autre que le programme : c'est le comportement le moins surprenant. C'est
+    aussi elle que lance l'effacement complet demandé depuis l'application. }
+  if UninstallSilent then
+    Exit;
+  if CurUninstallStep = usUninstall then
+  begin
+    EffacementTraite := EffacementParLigneDeCommande();
+    Exit;
+  end;
   if CurUninstallStep <> usPostUninstall then
     Exit;
-  { Une désinstallation silencieuse ne pose aucune question et ne détruit rien
-    d'autre que le programme : c'est le comportement le moins surprenant. }
-  if UninstallSilent then
+  if EffacementTraite then
     Exit;
 
   DossierModeles := DossierModelesEffectif();

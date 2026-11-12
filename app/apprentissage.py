@@ -388,11 +388,11 @@ def rediger_rapport(bilan: dict, illisibles: int) -> str:
 # ---------------------------------------------------------------------------
 
 USAGE = """Usage :
-  scribouille-verifier.exe --apprendre-vocabulaire
+  scribouille.com --apprendre-vocabulaire
       --brut BRUT.txt --propre RELUE.docx [--cr CR.docx] [--brut ... --propre ... --cr ...]
       [--manifeste LISTE.txt] [--documents DOC1 DOC2 ...] [--sortie PROPOSITIONS.toml]
       [--rapport CHIFFRES.txt] [--importer] [--occurrences-min 2]
-  scribouille-verifier.exe --apprendre-vocabulaire --importer-propositions PROPOSITIONS.toml
+  scribouille.com --apprendre-vocabulaire --importer-propositions PROPOSITIONS.toml
 
   LISTE.txt : une réunion par ligne, « brut | relue | compte rendu » (le compte rendu est facultatif).
   --importer : verse les propositions dans le vocabulaire personnel, à l'état « propose »,

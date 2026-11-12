@@ -556,6 +556,16 @@ def _telecharger(modele: str) -> str:
         )
 
 
+#: Téléchargement des modèles permis. La ligne de commande le coupe tant que
+#: `--telecharger` n'est pas donné : un modèle absent est alors une erreur
+#: (`ModeleAbsent`), jamais un téléchargement de plusieurs gigaoctets surprise.
+TELECHARGEMENT_PERMIS = True
+
+
+class ModeleAbsent(ErreurLisible):
+    """Modèle absent ou incomplet alors que le téléchargement n'est pas permis."""
+
+
 def assurer_modele_telecharge(modele: str, etat: dict | None = None,
                               signaler: Callable[[str, str], None] | None = None,
                               annoncer: bool = True) -> dict:
@@ -578,6 +588,11 @@ def assurer_modele_telecharge(modele: str, etat: dict | None = None,
     # dépôt à interroger, on ne peut que dire ce qui manque.
     if Path(str(modele or "")).is_dir():
         _echouer(signaler, langues.t("err.modele.titre"), langues.t("err.modele.msg"))
+
+    if not TELECHARGEMENT_PERMIS:
+        raise ModeleAbsent(langues.t("err.modele.titre"), langues.t(
+            "moteur.telechargement_refuse", modele=nom_court(modele),
+            taille=taille_annoncee(modele)))
 
     racine = Path(chemins.DOSSIER_MODELES)
     requis = int(poids_attendu_octets(modele) * MARGE_DISQUE)

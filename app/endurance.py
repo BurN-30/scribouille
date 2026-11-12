@@ -38,7 +38,7 @@ repart dans un nouveau processus au passage suivant.
 
 Ligne de commande :
 
-    scribouille-verifier.exe --endurance [--passages 30] [--reglage CLE]
+    scribouille.com --endurance [--passages 30] [--reglage CLE]
         [--pression] [--memoire-libre 4] [--sans-diagnostic] [--recommencer]
         [--corpus PAQUET.zip] [--peripherique GPU|CPU]
 """
@@ -515,8 +515,7 @@ def rediger_rapport(mat, cle: str, peripherique: str, lignes: list[dict], traces
 def commande_essai(fichier_parametres: Path) -> tuple[list[str], str]:
     if chemins.EST_GELE:
         dossier = Path(sys.executable).resolve().parent
-        console = dossier / "scribouille-verifier.exe"
-        exe = console if console.is_file() else Path(sys.executable)
+        exe = chemins.executable_console() or Path(sys.executable)
         return [str(exe), "--endurance-essai", str(fichier_parametres)], str(dossier)
     racine = Path(__file__).resolve().parent.parent
     python = racine / ".venv" / "Scripts" / "python.exe"

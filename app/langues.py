@@ -260,6 +260,48 @@ _FR: dict[str, str] = {
     # -- moteur (app/moteur.py) --------------------------------------------
     "moteur.non_charge.titre": "Modèle non chargé",
     "moteur.non_charge.msg": "La transcription a été demandée avant le chargement du modèle.",
+    "moteur.telechargement_refuse": "Le modèle {modele} ({taille}) n'est pas sur ce poste, et le téléchargement n'est pas autorisé (option --telecharger).",
+    "superviseur.plantage": "Le moteur de calcul s'est arrêté brutalement ({cause}). La fenêtre n'est pas touchée.",
+    "superviseur.reprise_auto": "Reprise automatique de {nom} au segment près ({position}).",
+    "superviseur.repli_puce": "La puce graphique est écartée pour la suite : calcul sur le processeur.",
+    "superviseur.echec_definitif": "{nom} : le moteur s'est arrêté deux fois. La transcription reste reprenable.",
+    "superviseur.demarrage_impossible": "Le moteur de calcul n'a pas pu démarrer : {detail}",
+    "superviseur.veille": "Retour de veille : le moteur poursuit.",
+    "superviseur.bloque": "Le moteur ne répond plus depuis {minutes} min : il est arrêté, la transcription reste reprenable.",
+    "inv.programme.libelle": "Programme",
+    "inv.programme.description": "Le programme lui-même. Retiré par le désinstalleur, ou en supprimant le dossier de la version portable.",
+    "inv.modele.libelle": "Modèle {modele}",
+    "inv.modele.description": "Modèle de transcription utilisé par le réglage en cours.",
+    "inv.openvino.libelle": "Moteur Intel (OpenVINO)",
+    "inv.openvino.description": "Moteur optionnel pour la puce graphique Intel. Se réinstalle depuis les réglages.",
+    "inv.locuteurs.libelle": "Séparation des locuteurs",
+    "inv.locuteurs.description": "Extension optionnelle (PyTorch). Se réinstalle depuis les réglages.",
+    "inv.cache_openvino.libelle": "Cache d'OpenVINO",
+    "inv.cache_openvino.description": "Modèles compilés pour ce poste. Refaits au prochain chargement (40 s à 2 min sur la puce graphique).",
+    "inv.cache_pip.libelle": "Cache des téléchargements",
+    "inv.cache_pip.description": "Paquets téléchargés pendant l'installation des extensions.",
+    "inv.paquets_hors_ligne.libelle": "Paquets hors ligne",
+    "inv.paquets_hors_ligne.description": "Paquets déposés pour installer une extension sans réseau.",
+    "inv.affichage.libelle": "Profil d'affichage",
+    "inv.affichage.description": "Fichiers temporaires du composant d'affichage (WebView2), refaits au lancement.",
+    "inv.journaux.libelle": "Journaux",
+    "inv.journaux.description": "Journaux des sessions (30 gardés), utiles pour un diagnostic.",
+    "inv.reprises.libelle": "Transcriptions interrompues",
+    "inv.reprises.description": "Ce qui a été transcrit avant une coupure, pour reprendre au segment près.",
+    "inv.mesures.libelle": "Mesures",
+    "inv.mesures.description": "Banc d'essai, comparaisons, campagnes et durées apprises sur ce poste.",
+    "inv.vocabulaire.libelle": "Vocabulaire",
+    "inv.vocabulaire.description": "Glossaire, corrections, vocabulaire personnel et propositions apprises.",
+    "inv.reglages.libelle": "Réglages",
+    "inv.reglages.description": "Réglages et petits fichiers d'état de l'application.",
+    "inv.sauvegardes.libelle": "Sauvegardes",
+    "inv.sauvegardes.description": "Sauvegardes faites avant un import, doublons repris de l'ancien dossier.",
+    "inv.ancien_dossier.libelle": "Ancien dossier (WhiScribe)",
+    "inv.ancien_dossier.description": "Fichiers de Scribouille restés dans l'ancien dossier de données. Le reste de ce dossier n'est pas à nous et n'est jamais touché.",
+    "inv.installation.libelle": "Raccourcis et entrée de désinstallation",
+    "inv.installation.description": "Raccourcis du menu Démarrer et du bureau, clé de désinstallation. Retirés par le désinstalleur.",
+    "inv.modele.description.libre": "Modèle que le réglage en cours n'utilise pas : libérable, il sera retéléchargé au besoin.",
+    "inv.apercu_perime": "Cet aperçu a expiré ou n'existe pas : affichez de nouveau la liste avant d'effacer.",
     "moteur.premier_usage": (
         "Premier usage de ce modèle : téléchargement d'environ {taille}. Cela n'arrive "
         "qu'une fois, ensuite tout reste sur la machine."
@@ -654,7 +696,7 @@ _FR: dict[str, str] = {
     "adapt.cli.rythme": "Rythme : {rythme}, qui s'adapte tout seul (vitesse maximale quand le poste est au repos).",
     "adapt.cli.deja": "C'est déjà le réglage en service.",
     "adapt.cli.applique": "Réglage appliqué.",
-    "adapt.cli.pour_appliquer": "Rien n'a été modifié. Pour l'appliquer : scribouille-verifier.exe --reconnaitre --appliquer",
+    "adapt.cli.pour_appliquer": "Rien n'a été modifié. Pour l'appliquer : scribouille.com --reconnaitre --appliquer",
     "rbanc.modele_absent.titre": "Modèle absent",
     "rbanc.modele_absent.msg": "Le banc des rythmes utilise {modele}, qui n'est pas sur ce poste. Rien n'est téléchargé : lancez d'abord une transcription en « Rapide », ou le banc d'essai avec téléchargement.",
     "rbanc.etape.repos": "Mesure du poste au repos (6 s)",
@@ -1152,9 +1194,8 @@ _FR: dict[str, str] = {
         "Il va être renouvelé automatiquement, environ {taille} vers « {dossier} »."
     ),
     "app.arret": (
-        "Arrêt demandé : la transcription s'interrompt à la fin du lot de passages en "
-        "cours, ce qui peut prendre plus d'une minute sur processeur. Avec la "
-        "sauvegarde progressive, le texte déjà produit est conservé."
+        "Arrêté. Avec la sauvegarde progressive, le texte déjà produit est conservé : "
+        "relancer le fichier reprend où il en était."
     ),
     "app.fichier_disparu": "Ce fichier n'existe plus.",
     "app.copie_ia": (
@@ -1340,7 +1381,7 @@ Transcription :
     "camp.rapport.duree": "Durée de la campagne : {duree}",
     "camp.rapport.appliquer": (
         "Pour appliquer ce verdict, dans le dossier du programme : "
-        "scribouille-verifier.exe --campagne --appliquer (rien n'est recalculé)"
+        "scribouille.com --campagne --appliquer (rien n'est recalculé)"
     ),
     "camp.rapport.remarque": (
         "Ce rapport ne contient que des nombres : aucun mot transcrit, aucun nom, aucun chemin."
@@ -1702,6 +1743,48 @@ _EN: dict[str, str] = {
 
     "moteur.non_charge.titre": "Model not loaded",
     "moteur.non_charge.msg": "Transcription was requested before the model was loaded.",
+    "moteur.telechargement_refuse": "The {modele} model ({taille}) is not on this computer, and downloading is not allowed (--telecharger option).",
+    "superviseur.plantage": "The computing engine stopped abruptly ({cause}). The window is not affected.",
+    "superviseur.reprise_auto": "Resuming {nom} automatically from the last segment ({position}).",
+    "superviseur.repli_puce": "The graphics chip is set aside from now on: computing on the processor.",
+    "superviseur.echec_definitif": "{nom}: the engine stopped twice. The transcription can still be resumed.",
+    "superviseur.demarrage_impossible": "The computing engine could not start: {detail}",
+    "superviseur.veille": "Back from sleep: the engine carries on.",
+    "superviseur.bloque": "The engine has not answered for {minutes} min: it is stopped, the transcription can be resumed.",
+    "inv.programme.libelle": "Program",
+    "inv.programme.description": "The program itself. Removed by the uninstaller, or by deleting the folder of the portable version.",
+    "inv.modele.libelle": "Model {modele}",
+    "inv.modele.description": "Transcription model used by the current setting.",
+    "inv.openvino.libelle": "Intel engine (OpenVINO)",
+    "inv.openvino.description": "Optional engine for the Intel graphics chip. Can be reinstalled from the settings.",
+    "inv.locuteurs.libelle": "Speaker separation",
+    "inv.locuteurs.description": "Optional extension (PyTorch). Can be reinstalled from the settings.",
+    "inv.cache_openvino.libelle": "OpenVINO cache",
+    "inv.cache_openvino.description": "Models compiled for this computer. Rebuilt at the next load (40 s to 2 min on the graphics chip).",
+    "inv.cache_pip.libelle": "Download cache",
+    "inv.cache_pip.description": "Packages downloaded while installing the extensions.",
+    "inv.paquets_hors_ligne.libelle": "Offline packages",
+    "inv.paquets_hors_ligne.description": "Packages placed here to install an extension without a network.",
+    "inv.affichage.libelle": "Display profile",
+    "inv.affichage.description": "Temporary files of the display component (WebView2), rebuilt at start.",
+    "inv.journaux.libelle": "Logs",
+    "inv.journaux.description": "Session logs (30 kept), useful for a diagnosis.",
+    "inv.reprises.libelle": "Interrupted transcriptions",
+    "inv.reprises.description": "What was transcribed before an interruption, to resume from the last segment.",
+    "inv.mesures.libelle": "Measurements",
+    "inv.mesures.description": "Speed test, comparisons, campaigns and durations learnt on this computer.",
+    "inv.vocabulaire.libelle": "Vocabulary",
+    "inv.vocabulaire.description": "Glossary, corrections, personal vocabulary and learnt suggestions.",
+    "inv.reglages.libelle": "Settings",
+    "inv.reglages.description": "Settings and small state files of the application.",
+    "inv.sauvegardes.libelle": "Backups",
+    "inv.sauvegardes.description": "Backups made before an import, duplicates taken from the old folder.",
+    "inv.ancien_dossier.libelle": "Old folder (WhiScribe)",
+    "inv.ancien_dossier.description": "Scribouille files left in the old data folder. The rest of that folder is not ours and is never touched.",
+    "inv.installation.libelle": "Shortcuts and uninstall entry",
+    "inv.installation.description": "Start menu and desktop shortcuts, uninstall key. Removed by the uninstaller.",
+    "inv.modele.description.libre": "Model not used by the current setting: can be freed, it will be downloaded again if needed.",
+    "inv.apercu_perime": "This preview has expired or is unknown: show the list again before erasing.",
     "moteur.premier_usage": (
         "First use of this model: about {taille} will be downloaded. This happens only "
         "once, after that everything stays on the machine."
@@ -2090,7 +2173,7 @@ _EN: dict[str, str] = {
     "adapt.cli.rythme": "Pace: {rythme}, adapting automatically (maximum speed when the computer is idle).",
     "adapt.cli.deja": "This is already the setting in use.",
     "adapt.cli.applique": "Setting applied.",
-    "adapt.cli.pour_appliquer": "Nothing was changed. To apply it: scribouille-verifier.exe --reconnaitre --appliquer",
+    "adapt.cli.pour_appliquer": "Nothing was changed. To apply it: scribouille.com --reconnaitre --appliquer",
     "rbanc.modele_absent.titre": "Model missing",
     "rbanc.modele_absent.msg": "The pace benchmark uses {modele}, which is not on this computer. Nothing is downloaded: first run a transcription in \"Fast\", or the benchmark with download.",
     "rbanc.etape.repos": "Measuring the idle computer (6 s)",
@@ -2571,9 +2654,8 @@ _EN: dict[str, str] = {
         "It will be renewed automatically, about {taille} into \"{dossier}\"."
     ),
     "app.arret": (
-        "Stop requested: the transcription stops at the end of the current batch of "
-        "passages, which can take more than a minute on a CPU. With progressive "
-        "saving, text already produced is kept."
+        "Stopped. With progressive saving, text already produced is kept: running "
+        "the file again resumes where it was."
     ),
     "app.fichier_disparu": "This file no longer exists.",
     "app.copie_ia": (
@@ -2749,7 +2831,7 @@ Transcript:
     "camp.rapport.duree": "Campaign duration: {duree}",
     "camp.rapport.appliquer": (
         "To apply this verdict, in the program folder: "
-        "scribouille-verifier.exe --campagne --appliquer (nothing is computed again)"
+        "scribouille.com --campagne --appliquer (nothing is computed again)"
     ),
     "camp.rapport.remarque": (
         "This report holds numbers only: no transcribed word, no name, no path."

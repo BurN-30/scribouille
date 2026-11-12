@@ -2,7 +2,7 @@
 Choix automatique du réglage selon le poste.
 
 Au premier lancement, et sur demande (bouton « Reconnaître ce poste » des
-réglages, ou `scribouille-verifier --reconnaitre`), l'application regarde le
+réglages, ou `scribouille.com --reconnaitre`), l'application regarde le
 poste et PROPOSE un réglage, expliqué en une phrase. Rien n'est appliqué, rien
 n'est téléchargé ni installé sans un clic sur « Appliquer » (ou l'option
 `--appliquer`) ; si le modèle proposé manque, la phrase donne sa taille, et le

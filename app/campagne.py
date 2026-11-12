@@ -42,12 +42,12 @@ calcul, le poste ne se met pas en veille (`energie.sans_veille`).
 
 Ligne de commande :
 
-    scribouille-verifier.exe --campagne [--appliquer] [--recommencer]
+    scribouille.com --campagne [--appliquer] [--recommencer]
         [--reglages CLE,CLE] [--limite-extraits N] [--corpus PAQUET.zip]
         [--peripherique GPU|CPU] [--telecharger]
         [--peripherique HETERO:GPU,CPU] [--proprietes-ov CLE=VALEUR,...]   (essais du faisceau
         sur la puce graphique : dossier à part, jamais le verdict public du poste)
-    scribouille-verifier.exe --campagne --reunion FICHIER [--debut 00:05:00]
+    scribouille.com --campagne --reunion FICHIER [--debut 00:05:00]
         [--duree 600] [--reglages CLE,CLE]
 
 Modèles candidats (`MODELES_CANDIDATS`) : d'autres modèles que ceux du
@@ -454,8 +454,7 @@ def commande_essai(parametres: dict) -> tuple[list[str], str]:
     charge = json.dumps(parametres, ensure_ascii=False)
     if chemins.EST_GELE:
         dossier = Path(sys.executable).resolve().parent
-        console = dossier / "scribouille-verifier.exe"
-        exe = console if console.is_file() else Path(sys.executable)
+        exe = chemins.executable_console() or Path(sys.executable)
         return [str(exe), "--campagne-essai", charge], str(dossier)
     racine = Path(__file__).resolve().parent.parent
     python = racine / ".venv" / "Scripts" / "python.exe"

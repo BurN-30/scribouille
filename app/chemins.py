@@ -54,6 +54,13 @@ NOM_FICHIER_CHOIX_MODELES = "dossier-modeles.txt"
 #: Vrai quand l'application tourne depuis l'exécutable produit par PyInstaller.
 EST_GELE = bool(getattr(sys, "frozen", False))
 
+#: Exécutable console de la version gelée : la ligne de commande, le moteur et
+#: les travailleurs de fond. Windows le préfère à « Scribouille.exe » quand on
+#: tape « scribouille » (le .com passe avant le .exe). Avant la 2.6, il
+#: s'appelait « scribouille-verifier.exe » : ce nom est encore cherché.
+NOM_EXE_CONSOLE = "scribouille.com"
+ANCIEN_EXE_CONSOLE = "scribouille-verifier.exe"
+
 
 def _dossier_ressources() -> Path:
     """Dossier des fichiers livrés avec le programme, jamais écrit par l'application."""
@@ -103,6 +110,17 @@ def _dossier_donnees() -> Path:
 
 DOSSIER_RESSOURCES = _dossier_ressources()
 DOSSIER_PROGRAMME = _dossier_programme()
+
+
+def executable_console() -> Path | None:
+    """L'exécutable console à côté du programme gelé, ou None (sources, ou absent)."""
+    if not EST_GELE:
+        return None
+    for nom in (NOM_EXE_CONSOLE, ANCIEN_EXE_CONSOLE):
+        candidat = DOSSIER_PROGRAMME / nom
+        if candidat.is_file():
+            return candidat
+    return None
 
 #: Racine des données de l'utilisateur : configuration, journaux, modèles par défaut.
 RACINE = _dossier_donnees()

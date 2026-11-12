@@ -11,11 +11,15 @@ Mode « onedir » et non « onefile », volontairement :
   - le programme d'installation, lui, présente bien un seul fichier à télécharger.
 
 Deux exécutables sortent de la même analyse :
-  - Scribouille.exe          l'application, sans console ;
-  - scribouille-verifier.exe le même programme lancé avec « --verifier », avec
-                             console, pour valider une version construite sans
-                             aucune interaction. C'est ce que fait la chaîne de
-                           publication avant de fabriquer le programme d'installation.
+  - Scribouille.exe   l'application, sans console ;
+  - scribouille.com   le même programme avec une console : la ligne de commande
+                      (« scribouille transcrire ... »), le processus moteur et les
+                      travailleurs de fond. Windows prend le .com avant le .exe
+                      quand on tape « scribouille ». C'est un exécutable Windows
+                      ordinaire, renommé après la construction (PyInstaller
+                      ajoute toujours « .exe »). Jusqu'à la 2.5, il s'appelait
+                      « scribouille-verifier.exe » ; « scribouille.com --verifier »
+                      fait ce que faisait cet ancien exécutable lancé seul.
 
 Construction :
     .venv\\Scripts\\pyinstaller.exe --noconfirm --clean packaging\\scribouille.spec
@@ -289,17 +293,17 @@ application = EXE(
     version=VERSION_EXE,
 )
 
-verificateur = EXE(
+console = EXE(
     pyz,
     a.scripts,
     [],
     exclude_binaries=True,
-    name="scribouille-verifier",
+    name="scribouille-console",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    console=True,       # Bilan lisible dans les journaux d'intégration continue.
+    console=True,       # Ligne de commande, moteur, bilan lisible dans la CI.
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
@@ -311,7 +315,7 @@ verificateur = EXE(
 
 coll = COLLECT(
     application,
-    verificateur,
+    console,
     a.binaries,
     a.datas,
     strip=False,
@@ -319,3 +323,11 @@ coll = COLLECT(
     upx_exclude=[],
     name=NOM_APPLICATION,
 )
+
+# L'exécutable console prend son nom définitif : « scribouille.com ».
+_console = Path(DISTPATH) / NOM_APPLICATION / "scribouille-console.exe"
+if _console.is_file():
+    _cible = _console.with_name("scribouille.com")
+    if _cible.exists():
+        _cible.unlink()
+    _console.rename(_cible)

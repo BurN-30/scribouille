@@ -1,10 +1,20 @@
 """
 Scribouille : point d'entrée.
 
-Fenêtre pywebview, interface web dans `web/`, moteur faster-whisper.
+Fenêtre pywebview, interface web dans `web/`. Le calcul (décodage,
+faster-whisper, OpenVINO, séparation des locuteurs) tourne dans un processus
+moteur à part, supervisé (`app/superviseur.py`, `app/moteur_processus.py`) :
+la fenêtre ne charge aucune bibliothèque de calcul.
 Tout se passe sur la machine : aucun envoi vers un service en ligne.
 
 Lancement : double-clic sur ce fichier, ou « lancer.bat ».
+
+Ligne de commande, sans fenêtre (voir `app/cli.py`, `docs/ligne-de-commande.md`) :
+
+    transcriber.pyw transcrire FICHIER|DOSSIER [--json] ...
+    transcriber.pyw aide
+
+Version gelée : « scribouille.com COMMANDE ».
 
 Option de diagnostic, utilisée par la chaîne de publication :
 
@@ -76,8 +86,25 @@ extensions.activer()
 if extensions.options_reconnues(sys.argv[1:]):
     sys.exit(extensions.principal_cli(sys.argv[1:]))
 
+# Processus moteur (voir app/moteur_processus.py), lancé par la fenêtre ou par
+# la ligne de commande, jamais à la main : il lit ses ordres sur l'entrée standard.
+# Premier argument seulement : « transcrire ... --moteur openvino » est une
+# option de la ligne de commande, pas ce processus.
+if sys.argv[1:2] == ["--moteur"]:
+    from app import moteur_processus as _moteur_processus
+
+    sys.exit(_moteur_processus.principal(sys.argv[1:]))
+
+# Ligne de commande (voir app/cli.py) : « scribouille COMMANDE ... ». Rien de
+# l'interface n'est importé sur ce chemin. « scribouille.com » seul affiche l'aide.
+from app import cli as _cli  # noqa: E402
+
+if _cli.reconnue(sys.argv[1:]) or (
+        chemins.EST_GELE and not sys.argv[1:] and Path(sys.executable).suffix.lower() == ".com"):
+    sys.exit(_cli.principal(sys.argv[1:] or ["aide"]))
+
 # Retour arrière du dossier de données vers « WhiScribe », pour une ancienne
-# version (voir app/migration.py) : « scribouille-verifier.exe --revenir-whiscribe ».
+# version (voir app/migration.py) : « scribouille.com --revenir-whiscribe ».
 if "--revenir-whiscribe" in sys.argv[1:]:
     from app import migration as _migration
 
@@ -93,7 +120,7 @@ if "--detecter-materiel" in sys.argv[1:]:
 # Banc d'essai de vitesse, en ligne de commande. « --banc-essai » est le
 # processus travailleur d'un essai, lancé par le banc lui-même : comme pour les
 # extensions, il n'écrit pas dans le journal de la fenêtre. Dans la version
-# installée, c'est « scribouille-verifier.exe --banc » qu'il faut lancer : il a
+# installée, c'est « scribouille.com --banc » qu'il faut lancer : il a
 # une console, l'exécutable fenêtré n'en a pas.
 if "--banc" in sys.argv[1:] or "--banc-essai" in sys.argv[1:]:
     from app import banc as _banc
@@ -104,7 +131,7 @@ if "--banc" in sys.argv[1:] or "--banc-essai" in sys.argv[1:]:
 
 # Campagne de mesure (voir `app/campagne.py`) : chaque réglage candidat sur un
 # corpus public avec référence, puis verdict. « --campagne-essai » est le
-# processus d'un réglage. Version installée : « scribouille-verifier.exe --campagne ».
+# processus d'un réglage. Version installée : « scribouille.com --campagne ».
 if "--campagne" in sys.argv[1:] or "--campagne-essai" in sys.argv[1:]:
     from app import campagne as _campagne
 
@@ -115,7 +142,7 @@ if "--campagne" in sys.argv[1:] or "--campagne-essai" in sys.argv[1:]:
 
 # Épreuve d'endurance (voir `app/endurance.py`) : le réglage retenu, passé de
 # nombreuses fois d'affilée. « --endurance-essai » est le processus qui enchaîne
-# les passages. Version installée : « scribouille-verifier.exe --endurance ».
+# les passages. Version installée : « scribouille.com --endurance ».
 if "--endurance" in sys.argv[1:] or "--endurance-essai" in sys.argv[1:]:
     from app import endurance as _endurance
 
@@ -126,7 +153,7 @@ if "--endurance" in sys.argv[1:] or "--endurance-essai" in sys.argv[1:]:
 
 # Comparaison des deux moteurs sur un vrai fichier, en ligne de commande, même
 # organisation que le banc : « --comparer-essai » est le processus d'un moteur.
-# Version installée : « scribouille-verifier.exe --comparer FICHIER ».
+# Version installée : « scribouille.com --comparer FICHIER ».
 if "--comparer" in sys.argv[1:] or "--comparer-essai" in sys.argv[1:]:
     from app import comparaison as _comparaison
 
@@ -137,7 +164,7 @@ if "--comparer" in sys.argv[1:] or "--comparer-essai" in sys.argv[1:]:
 
 # Choix du réglage selon le poste (voir `app/adaptation.py`) : décrit le poste
 # et propose un réglage ; « --appliquer » l'enregistre. Rien n'est téléchargé
-# ni installé. Version installée : « scribouille-verifier.exe --reconnaitre ».
+# ni installé. Version installée : « scribouille.com --reconnaitre ».
 if "--reconnaitre" in sys.argv[1:]:
     from app import adaptation as _adaptation
 
@@ -147,7 +174,7 @@ if "--reconnaitre" in sys.argv[1:]:
 
 # Vocabulaire, format 2 (voir `app/apprentissage.py` et `app/mesure_vocabulaire.py`) :
 # apprendre des propositions à partir de transcriptions relues, et mesurer ce
-# que chaque étage gagne. Version installée : « scribouille-verifier.exe ... ».
+# que chaque étage gagne. Version installée : « scribouille.com ... ».
 if "--apprendre-vocabulaire" in sys.argv[1:]:
     from app import apprentissage as _apprentissage
 
@@ -307,7 +334,7 @@ def verification() -> int:
     return 0 if tout_va_bien else 1
 
 
-# L'exécutable « scribouille-verifier.exe » produit par PyInstaller n'a pas d'autre
+# L'exécutable « scribouille.com » produit par PyInstaller n'a pas d'autre
 # raison d'être : il déclenche la vérification même sans argument.
 _NOM_EXECUTABLE = Path(sys.argv[0] if sys.argv else "").stem.lower()
 if "--verifier" in sys.argv or _NOM_EXECUTABLE.endswith("verifier"):
@@ -370,6 +397,7 @@ from app import config as config_module  # noqa: E402
 from app import barre_taches, diarisation, donnees, ecoute, gabarit, lecture, maj  # noqa: E402
 from app import banc, materiel, nommage, presets, reglage_machine, reprise, rythme, stockage  # noqa: E402
 from app import surveillance, traitement, vocabulaire, vocabulaire_interface  # noqa: E402
+from app import inventaire, processus, superviseur  # noqa: E402
 
 _SANS_FENETRE = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
@@ -379,7 +407,53 @@ def _json(valeur) -> str:
 
 
 class Passerelle:
-    """Objet exposé à l'interface web sous le nom `pywebview.api`."""
+    """
+    Objet exposé à l'interface web sous le nom `pywebview.api`.
+
+    Fonctions du contrat de la version 2.6 (l'écran de l'espace disque et celui
+    du moteur se construisent contre ces noms ; formes stables, clés ajoutées
+    sans changer les anciennes) :
+
+    espace_inventaire() -> {postes: [{cle, libelle, octets, taille, liberable,
+        description, chemins, nombre}], total_octets, total, liberable_octets,
+        transcriptions_octets, transcriptions: {dossier, octets, nombre},
+        non_reconnus, donnees, modeles, installee}
+        Ce que Scribouille occupe, poste par poste (`app/inventaire.py`). Les
+        transcriptions sont comptées à part, jamais dans `total_octets`.
+        Parcourt le disque : appel lent (jusqu'à une seconde pour des modèles).
+
+    espace_liberer(cles: list[str]) -> {liberes: [{cle, octets}], octets,
+        restes, inconnus, inventaire}
+        Supprime les postes donnés (clés de `espace_inventaire`), sauf
+        « programme » et « installation ». Refusé pendant une transcription.
+
+    effacement_apercu(garder_transcriptions: bool = True) -> {jeton, postes,
+        total_octets, total, garder_transcriptions, transcriptions_octets,
+        transcriptions, non_reconnus, desinstalleur, valide_s}
+        Ce que l'effacement complet supprimerait, sans rien toucher. Le jeton
+        vaut 15 minutes et pour cette liste-là seulement.
+
+    effacement_executer(jeton: str) -> {ok, liberes, octets, restes,
+        desinstalleur, fermeture}
+        Efface la liste de l'aperçu, puis la fenêtre se ferme (`fermeture`
+        vaut true) : ses derniers fichiers ouverts (journal, profil
+        d'affichage) sont effacés juste après, et le désinstalleur de la
+        version installée retire programme, raccourcis et registre. Refusé
+        pendant une transcription.
+
+    moteur_etat() -> {etat, pid, modele, peripherique, sur_puce,
+        memoire_octets, prive_octets, depuis, file_ouverte, protocole,
+        derniere_panne}
+        etat : repos | demarrage | chargement | transcription | arrete | panne.
+        derniere_panne : {code, date, etat, peripherique, sur_puce} ou null.
+
+    usage_instantane() -> {fenetre: {pid, memoire_octets, prive_octets,
+        processeur_pct, processeur_poste_pct}, moteur: même forme ou null,
+        affichage: {processus, memoire_octets}, total_memoire_octets}
+        processeur_pct : part d'un cœur depuis l'appel précédent (null au
+        premier appel) ; processeur_poste_pct : part du poste entier.
+        « affichage » : les processus WebView2 de la fenêtre.
+    """
 
     def __init__(self):
         self._fenetre = None
@@ -387,11 +461,6 @@ class Passerelle:
         #: alors un réglage pour ce poste (voir `app/adaptation.py`).
         self._premier_lancement = not chemins.FICHIER_CONFIG.exists()
         self.config = config_module.charger()
-        # Rythme équilibré ou discret : les fils de CTranslate2 attendent sans
-        # tourner à vide (OpenMP lit cette variable une fois, au premier calcul,
-        # d'où sa place ici, avant tout chargement ; voir app/rythme.py).
-        if rythme.normaliser(self.config.get("rythme")) != "vitesse":
-            os.environ.setdefault("OMP_WAIT_POLICY", "PASSIVE")
         self._proposition: dict = {}
         #: Serveur local de l'audio pour la relecture (voir app/ecoute.py) :
         #: un seul fichier servi à la fois, démarré au premier besoin.
@@ -407,7 +476,12 @@ class Passerelle:
         self.materiel, self._materiel_provisoire = materiel.detecter_au_demarrage()
         # Réglage de vitesse mesuré par le banc d'essai et accepté sur ce poste.
         self._effet_reglage = reglage_machine.appliquer_au_materiel(self.config, self.materiel)
-        self.file = traitement.FileTraitement(self.materiel)
+        #: Processus moteur : lancé à la première file (ou pour mesurer des
+        #: durées), arrêté à la fin de la file. La fenêtre ne calcule jamais.
+        self.moteur = superviseur.Superviseur()
+        self.file = traitement.FileTraitement(self.materiel, distant=self.moteur)
+        #: Mesure de la mémoire et du processeur de la fenêtre (`usage_instantane`).
+        self._sonde_fenetre = processus.Sonde()
         self._rappels = traitement.Rappels(
             etat=self._sur_etat,
             progression=self._sur_progression,
@@ -914,6 +988,77 @@ class Passerelle:
             self._js(f"onStockage({_json(mesure)})")
 
         self._fond(travail)
+
+    # -- espace disque, effacement, moteur, usage (contrat 2.6) -------------
+
+    def espace_inventaire(self) -> dict:
+        try:
+            return inventaire.inventaire(self.config)
+        except Exception as exc:
+            journal.exception("Inventaire de l'espace occupé en échec", exc)
+            return {"postes": [], "total_octets": 0, "transcriptions_octets": 0, "erreur": str(exc)}
+
+    def espace_liberer(self, cles: list) -> dict:
+        if self.file.occupee:
+            return {"ok": False, "message": langues.t("app.banc.file_occupee"), "liberes": [], "octets": 0,
+                    "restes": [], "inconnus": []}
+        bilan = inventaire.liberer([str(c) for c in (cles or [])], self.config)
+        journal.info("Espace libéré : %s (%s octets)", ", ".join(str(c) for c in cles or []), bilan["octets"])
+        bilan["ok"] = True
+        bilan["inventaire"] = self.espace_inventaire()
+        return bilan
+
+    def effacement_apercu(self, garder_transcriptions: bool = True) -> dict:
+        return inventaire.apercu_effacement(bool(garder_transcriptions), self.config)
+
+    def effacement_executer(self, jeton: str) -> dict:
+        if self.file.occupee:
+            return {"ok": False, "message": langues.t("app.banc.file_occupee")}
+        self.moteur.quitter()
+        self.surveillant.configurer("", False)
+        bilan = inventaire.executer_effacement(str(jeton or ""))
+        if not bilan.get("ok"):
+            return bilan
+        journal.info("Effacement complet : %s octets, %s reste(s)", bilan["octets"], len(bilan["restes"]))
+        # La fenêtre tient encore son journal et son profil d'affichage : une
+        # fois fermée, la ligne de commande efface ces restes, puis le
+        # désinstalleur (version installée) retire programme, raccourcis et
+        # clé de registre.
+        bilan["fermeture"] = inventaire.nettoyer_apres(os.getpid(), bilan.get("desinstalleur") or "")
+        if bilan["fermeture"]:
+            threading.Timer(1.5, self._fermer_fenetre).start()
+        return bilan
+
+    def _fermer_fenetre(self) -> None:
+        try:
+            if self._fenetre is not None:
+                self._fenetre.destroy()
+        except Exception as exc:
+            journal.debug("Fermeture de la fenêtre : %s", exc)
+
+    def moteur_etat(self) -> dict:
+        return self.moteur.etat_public()
+
+    def usage_instantane(self) -> dict:
+        fenetre = self._sonde_fenetre.releve()
+        moteur_releve = self.moteur.usage()
+        affichage = {"processus": 0, "memoire_octets": 0}
+        try:
+            import psutil  # type: ignore
+
+            pid_moteur = self.moteur.pid
+            for enfant in psutil.Process().children(recursive=True):
+                if pid_moteur and enfant.pid == pid_moteur:
+                    continue
+                if "webview" in (enfant.name() or "").lower():
+                    affichage["processus"] += 1
+                    affichage["memoire_octets"] += int(enfant.memory_info().rss)
+        except Exception:
+            pass
+        total = sum(int((r or {}).get("memoire_octets") or 0) for r in (fenetre, moteur_releve))
+        total += affichage["memoire_octets"]
+        return {"fenetre": fenetre, "moteur": moteur_releve, "affichage": affichage,
+                "total_memoire_octets": total}
 
     # -- nom des fichiers produits -----------------------------------------
 
@@ -2226,9 +2371,16 @@ def principal() -> None:
     fenetre.events.shown += passerelle.fenetre_affichee
     fenetre.events.loaded += lambda: _au_demarrage(passerelle, fenetre)
     fenetre.events.closing += lambda: _avant_fermeture(passerelle, fenetre)
+    # Le moteur s'arrête avec la fenêtre ; s'il restait quoi que ce soit,
+    # l'objet de travail Windows le tuerait à la fin de ce processus.
+    fenetre.events.closed += passerelle.moteur.arreter
 
     try:
-        webview.start(debug=bool(os.environ.get("TRANSCRIPTEUR_DEBUG")))
+        # Profil du composant d'affichage dans nos données (inventorié et
+        # effaçable), au lieu d'un dossier temporaire anonyme ; mode privé
+        # gardé : rien n'y persiste d'une session à l'autre.
+        webview.start(debug=bool(os.environ.get("TRANSCRIPTEUR_DEBUG")),
+                      storage_path=str(chemins.RACINE / "webview"))
     except Exception as exc:
         journal.exception("La fenêtre n'a pas pu s'ouvrir", exc)
         _abandonner(
