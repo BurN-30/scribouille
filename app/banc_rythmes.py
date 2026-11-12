@@ -25,7 +25,7 @@ Ligne de commande :
 
     scribouille-verifier.exe --banc --modes [--rythmes vitesse,equilibre,discret]
         [--moteur ctranslate2|openvino] [--peripherique GPU|CPU] [--repetitions 3]
-        [--variantes-ov] [--sans-temoin-passif]
+        [--variantes-ov] [--sans-temoin-passif] [--sans-enregistrer]
 
 Sans plafond de priorité (variable `SCRIBOUILLE_BANC_PRIORITE_BASSE` absente),
 les rapports de durée par rapport à la vitesse maximale sont rangés dans
@@ -139,7 +139,7 @@ def coefficients(resultats: list[dict]) -> dict[str, float]:
 
 def executer(rythmes: list[str] | None = None, moteur_voulu: str = "", peripherique: str = "",
              repetitions: int = 3, variantes_ov: bool = False, passif_vitesse: bool = True,
-             rappel: Callable[[str], None] | None = None) -> dict:
+             rappel: Callable[[str], None] | None = None, enregistrer: bool = True) -> dict:
     from . import config as config_module, reglage_machine
 
     def dire(message: str) -> None:
@@ -160,6 +160,9 @@ def executer(rythmes: list[str] | None = None, moteur_voulu: str = "", peripheri
         raise journal.ErreurLisible(langues.t("rbanc.modele_absent.titre"),
                                     langues.t("rbanc.modele_absent.msg", modele=moteur.nom_court(depot)))
     plafond = bool(os.environ.get("SCRIBOUILLE_BANC_PRIORITE_BASSE"))
+    # Sans enregistrement (`--sans-enregistrer`), les coefficients sont dans le
+    # rapport seulement : les estimations du poste ne bougent pas.
+    garder = enregistrer and not plafond
 
     dire(langues.t("rbanc.etape.repos"))
     temoin = Temoin().demarrer()
@@ -203,7 +206,7 @@ def executer(rythmes: list[str] | None = None, moteur_voulu: str = "", peripheri
     famille = "puce" if (moteur_voulu == "openvino" and peripherique != "CPU") or mat.cuda_disponible \
         else "processeur"
     coef = coefficients(resultats)
-    if coef and not plafond:
+    if coef and garder:
         try:
             DOSSIER_RAPPORTS.mkdir(parents=True, exist_ok=True)
             chemin = DOSSIER_RAPPORTS / rythme.FICHIER_MESURES
@@ -216,7 +219,7 @@ def executer(rythmes: list[str] | None = None, moteur_voulu: str = "", peripheri
         except OSError as exc:
             journal.attention("Coefficients des rythmes non écrits : %s", exc)
     rapport = rediger(mat, moteur_voulu, peripherique, repos, resultats, coef, plafond,
-                      time.time() - depart, repetitions)
+                      time.time() - depart, repetitions, garder)
     fichier = ""
     try:
         DOSSIER_RAPPORTS.mkdir(parents=True, exist_ok=True)
@@ -230,7 +233,8 @@ def executer(rythmes: list[str] | None = None, moteur_voulu: str = "", peripheri
 
 
 def rediger(mat, moteur_voulu: str, peripherique: str, repos: dict, resultats: list[dict],
-            coef: dict, plafond: bool, duree_totale: float, repetitions: int) -> str:
+            coef: dict, plafond: bool, duree_totale: float, repetitions: int,
+            garder: bool = True) -> str:
     t = langues.t
     n = langues.nombre
     lignes = [t("rbanc.titre", nom=NOM_APPLICATION, version=VERSION,
@@ -272,7 +276,8 @@ def rediger(mat, moteur_voulu: str, peripherique: str, repos: dict, resultats: l
         lignes += ["", t("rbanc.section.coefficients")]
         for nom, valeur in coef.items():
             lignes.append("  - " + t("rbanc.coefficient", rythme=t(f"rythme.nom.{nom}"), valeur=n(valeur, 2)))
-        lignes.append("  - " + (t("rbanc.coefficients_non_ecrits") if plafond else t("rbanc.coefficients_ecrits")))
+        lignes.append("  - " + (t("rbanc.coefficients_ecrits") if garder else (
+            t("rbanc.coefficients_non_ecrits") if plafond else t("rbanc.coefficients_rapport_seul"))))
     lignes += ["", t("banc.duree_totale", duree=presets.formater_duree(duree_totale)), t("rbanc.lecture")]
     return _masquer("\n".join(lignes)) + "\n"
 
@@ -292,6 +297,7 @@ def principal_cli(arguments: list[str]) -> int:
             repetitions=int(valeur("--repetitions", "3") or 3),
             variantes_ov="--variantes-ov" in arguments,
             passif_vitesse="--sans-temoin-passif" not in arguments,
+            enregistrer="--sans-enregistrer" not in arguments,
             rappel=lambda message: print("  " + message, flush=True))
     except journal.ErreurLisible as exc:
         print(f"{exc.titre}\n{exc.message}")
