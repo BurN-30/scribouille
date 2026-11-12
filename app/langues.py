@@ -696,7 +696,7 @@ _FR: dict[str, str] = {
     "adapt.cli.rythme": "Rythme : {rythme}, qui s'adapte tout seul (vitesse maximale quand le poste est au repos).",
     "adapt.cli.deja": "C'est déjà le réglage en service.",
     "adapt.cli.applique": "Réglage appliqué.",
-    "adapt.cli.pour_appliquer": "Rien n'a été modifié. Pour l'appliquer : scribouille-verifier.exe --reconnaitre --appliquer",
+    "adapt.cli.pour_appliquer": "Rien n'a été modifié. Pour l'appliquer : scribouille.com --reconnaitre --appliquer",
     "rbanc.modele_absent.titre": "Modèle absent",
     "rbanc.modele_absent.msg": "Le banc des rythmes utilise {modele}, qui n'est pas sur ce poste. Rien n'est téléchargé : lancez d'abord une transcription en « Rapide », ou le banc d'essai avec téléchargement.",
     "rbanc.etape.repos": "Mesure du poste au repos (6 s)",
@@ -1382,7 +1382,7 @@ Transcription :
     "camp.rapport.duree": "Durée de la campagne : {duree}",
     "camp.rapport.appliquer": (
         "Pour appliquer ce verdict, dans le dossier du programme : "
-        "scribouille-verifier.exe --campagne --appliquer (rien n'est recalculé)"
+        "scribouille.com --campagne --appliquer (rien n'est recalculé)"
     ),
     "camp.rapport.remarque": (
         "Ce rapport ne contient que des nombres : aucun mot transcrit, aucun nom, aucun chemin."
@@ -2174,7 +2174,7 @@ _EN: dict[str, str] = {
     "adapt.cli.rythme": "Pace: {rythme}, adapting automatically (maximum speed when the computer is idle).",
     "adapt.cli.deja": "This is already the setting in use.",
     "adapt.cli.applique": "Setting applied.",
-    "adapt.cli.pour_appliquer": "Nothing was changed. To apply it: scribouille-verifier.exe --reconnaitre --appliquer",
+    "adapt.cli.pour_appliquer": "Nothing was changed. To apply it: scribouille.com --reconnaitre --appliquer",
     "rbanc.modele_absent.titre": "Model missing",
     "rbanc.modele_absent.msg": "The pace benchmark uses {modele}, which is not on this computer. Nothing is downloaded: first run a transcription in \"Fast\", or the benchmark with download.",
     "rbanc.etape.repos": "Measuring the idle computer (6 s)",
@@ -2833,7 +2833,7 @@ Transcript:
     "camp.rapport.duree": "Campaign duration: {duree}",
     "camp.rapport.appliquer": (
         "To apply this verdict, in the program folder: "
-        "scribouille-verifier.exe --campagne --appliquer (nothing is computed again)"
+        "scribouille.com --campagne --appliquer (nothing is computed again)"
     ),
     "camp.rapport.remarque": (
         "This report holds numbers only: no transcribed word, no name, no path."

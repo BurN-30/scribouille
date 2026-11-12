@@ -42,12 +42,12 @@ calcul, le poste ne se met pas en veille (`energie.sans_veille`).
 
 Ligne de commande :
 
-    scribouille-verifier.exe --campagne [--appliquer] [--recommencer]
+    scribouille.com --campagne [--appliquer] [--recommencer]
         [--reglages CLE,CLE] [--limite-extraits N] [--corpus PAQUET.zip]
         [--peripherique GPU|CPU] [--telecharger]
         [--peripherique HETERO:GPU,CPU] [--proprietes-ov CLE=VALEUR,...]   (essais du faisceau
         sur la puce graphique : dossier à part, jamais le verdict public du poste)
-    scribouille-verifier.exe --campagne --reunion FICHIER [--debut 00:05:00]
+    scribouille.com --campagne --reunion FICHIER [--debut 00:05:00]
         [--duree 600] [--reglages CLE,CLE]
 
 Modèles candidats (`MODELES_CANDIDATS`) : d'autres modèles que ceux du

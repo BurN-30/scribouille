@@ -26,10 +26,10 @@ témoin FLEURS du banc avec un vocabulaire de démonstration.
 Le rapport ne contient que des nombres : ni terme, ni nom, ni phrase, ni
 chemin. Les transcriptions restent dans le dossier de mesure, sur le poste.
 
-    scribouille-verifier.exe --mesurer-vocabulaire --vocabulaire VOCABULAIRE.toml
+    scribouille.com --mesurer-vocabulaire --vocabulaire VOCABULAIRE.toml
         --reunion AUDIO --reference RELUE [--reunion AUDIO --reference RELUE ...]
         [--reglage ov-turbo-f1] [--peripherique GPU|CPU] [--recommencer]
-    scribouille-verifier.exe --mesurer-vocabulaire --corpus [--reglage ov-turbo-f1]
+    scribouille.com --mesurer-vocabulaire --corpus [--reglage ov-turbo-f1]
         [--peripherique CPU] [--corpus-paquet PAQUET.zip]
 """
 
@@ -642,10 +642,10 @@ def principal_cli(arguments: list[str]) -> int:
 
 
 USAGE = """Usage :
-  scribouille-verifier.exe --mesurer-vocabulaire --vocabulaire VOCABULAIRE.toml
+  scribouille.com --mesurer-vocabulaire --vocabulaire VOCABULAIRE.toml
       --reunion AUDIO --reference RELUE [--reunion AUDIO --reference RELUE ...]
       [--reglage ov-turbo-f1] [--peripherique GPU|CPU] [--recommencer]
-  scribouille-verifier.exe --mesurer-vocabulaire --corpus [--reglage ov-turbo-f1] [--peripherique CPU]"""
+  scribouille.com --mesurer-vocabulaire --corpus [--reglage ov-turbo-f1] [--peripherique CPU]"""
 
 
 def options_reconnues(arguments: list[str]) -> bool:

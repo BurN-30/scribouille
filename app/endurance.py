@@ -38,7 +38,7 @@ repart dans un nouveau processus au passage suivant.
 
 Ligne de commande :
 
-    scribouille-verifier.exe --endurance [--passages 30] [--reglage CLE]
+    scribouille.com --endurance [--passages 30] [--reglage CLE]
         [--pression] [--memoire-libre 4] [--sans-diagnostic] [--recommencer]
         [--corpus PAQUET.zip] [--peripherique GPU|CPU]
 """

@@ -104,7 +104,7 @@ if _cli.reconnue(sys.argv[1:]) or (
     sys.exit(_cli.principal(sys.argv[1:] or ["aide"]))
 
 # Retour arrière du dossier de données vers « WhiScribe », pour une ancienne
-# version (voir app/migration.py) : « scribouille-verifier.exe --revenir-whiscribe ».
+# version (voir app/migration.py) : « scribouille.com --revenir-whiscribe ».
 if "--revenir-whiscribe" in sys.argv[1:]:
     from app import migration as _migration
 
@@ -120,7 +120,7 @@ if "--detecter-materiel" in sys.argv[1:]:
 # Banc d'essai de vitesse, en ligne de commande. « --banc-essai » est le
 # processus travailleur d'un essai, lancé par le banc lui-même : comme pour les
 # extensions, il n'écrit pas dans le journal de la fenêtre. Dans la version
-# installée, c'est « scribouille-verifier.exe --banc » qu'il faut lancer : il a
+# installée, c'est « scribouille.com --banc » qu'il faut lancer : il a
 # une console, l'exécutable fenêtré n'en a pas.
 if "--banc" in sys.argv[1:] or "--banc-essai" in sys.argv[1:]:
     from app import banc as _banc
@@ -131,7 +131,7 @@ if "--banc" in sys.argv[1:] or "--banc-essai" in sys.argv[1:]:
 
 # Campagne de mesure (voir `app/campagne.py`) : chaque réglage candidat sur un
 # corpus public avec référence, puis verdict. « --campagne-essai » est le
-# processus d'un réglage. Version installée : « scribouille-verifier.exe --campagne ».
+# processus d'un réglage. Version installée : « scribouille.com --campagne ».
 if "--campagne" in sys.argv[1:] or "--campagne-essai" in sys.argv[1:]:
     from app import campagne as _campagne
 
@@ -142,7 +142,7 @@ if "--campagne" in sys.argv[1:] or "--campagne-essai" in sys.argv[1:]:
 
 # Épreuve d'endurance (voir `app/endurance.py`) : le réglage retenu, passé de
 # nombreuses fois d'affilée. « --endurance-essai » est le processus qui enchaîne
-# les passages. Version installée : « scribouille-verifier.exe --endurance ».
+# les passages. Version installée : « scribouille.com --endurance ».
 if "--endurance" in sys.argv[1:] or "--endurance-essai" in sys.argv[1:]:
     from app import endurance as _endurance
 
@@ -153,7 +153,7 @@ if "--endurance" in sys.argv[1:] or "--endurance-essai" in sys.argv[1:]:
 
 # Comparaison des deux moteurs sur un vrai fichier, en ligne de commande, même
 # organisation que le banc : « --comparer-essai » est le processus d'un moteur.
-# Version installée : « scribouille-verifier.exe --comparer FICHIER ».
+# Version installée : « scribouille.com --comparer FICHIER ».
 if "--comparer" in sys.argv[1:] or "--comparer-essai" in sys.argv[1:]:
     from app import comparaison as _comparaison
 
@@ -164,7 +164,7 @@ if "--comparer" in sys.argv[1:] or "--comparer-essai" in sys.argv[1:]:
 
 # Choix du réglage selon le poste (voir `app/adaptation.py`) : décrit le poste
 # et propose un réglage ; « --appliquer » l'enregistre. Rien n'est téléchargé
-# ni installé. Version installée : « scribouille-verifier.exe --reconnaitre ».
+# ni installé. Version installée : « scribouille.com --reconnaitre ».
 if "--reconnaitre" in sys.argv[1:]:
     from app import adaptation as _adaptation
 
@@ -174,7 +174,7 @@ if "--reconnaitre" in sys.argv[1:]:
 
 # Vocabulaire, format 2 (voir `app/apprentissage.py` et `app/mesure_vocabulaire.py`) :
 # apprendre des propositions à partir de transcriptions relues, et mesurer ce
-# que chaque étage gagne. Version installée : « scribouille-verifier.exe ... ».
+# que chaque étage gagne. Version installée : « scribouille.com ... ».
 if "--apprendre-vocabulaire" in sys.argv[1:]:
     from app import apprentissage as _apprentissage
 
@@ -334,7 +334,7 @@ def verification() -> int:
     return 0 if tout_va_bien else 1
 
 
-# L'exécutable « scribouille-verifier.exe » produit par PyInstaller n'a pas d'autre
+# L'exécutable « scribouille.com » produit par PyInstaller n'a pas d'autre
 # raison d'être : il déclenche la vérification même sans argument.
 _NOM_EXECUTABLE = Path(sys.argv[0] if sys.argv else "").stem.lower()
 if "--verifier" in sys.argv or _NOM_EXECUTABLE.endswith("verifier"):

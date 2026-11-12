@@ -27,7 +27,7 @@ relue permet de compter.
 
 Ligne de commande (sans fenêtre) :
 
-    scribouille-verifier.exe --comparer FICHIER [--debut 00:05:00] [--duree 600]
+    scribouille.com --comparer FICHIER [--debut 00:05:00] [--duree 600]
         [--reference TRANSCRIPTION] [--sortie DOSSIER] [--peripherique GPU|CPU|NPU]
         [--preset qualite|rapide] [--faisceau-openvino N]
         [--faisceau-ctranslate2 N] [--glossaire FICHIER] [--sans-glossaire]

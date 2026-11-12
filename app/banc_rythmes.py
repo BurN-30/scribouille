@@ -23,7 +23,7 @@ application de l'utilisateur. On relève :
 
 Ligne de commande :
 
-    scribouille-verifier.exe --banc --modes [--rythmes vitesse,equilibre,discret]
+    scribouille.com --banc --modes [--rythmes vitesse,equilibre,discret]
         [--moteur ctranslate2|openvino] [--peripherique GPU|CPU] [--repetitions 3]
         [--variantes-ov] [--sans-temoin-passif] [--sans-enregistrer]
 
