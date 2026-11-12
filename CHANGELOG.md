@@ -60,6 +60,11 @@ Corrections issues d'une revue d'usage de l'application réelle (vérifiées par
   dernière correction s'annule (bouton ou Ctrl+Z), règle ajoutée comprise ; la
   règle pour les transcriptions suivantes n'est plus cochée d'office ; une
   forme déjà juste partout est dite comme telle.
+- **Après « Arrêter »** : les fichiers qui n'ont pas commencé restent en
+  attente ; « Reprendre » remet en file le fichier arrêté même s'il est encore
+  listé, et la carte ne disparaît plus sur un refus ; une ligne arrêtée ou en
+  échec se relance d'un clic ; redéposer un fichier arrêté, en échec ou terminé
+  le remet en attente, et un doublon est dit « déjà dans la file ».
 - **Correction depuis la relecture** : l'en-tête du fichier texte reste séparé
   du corps ; la barre de fin d'en-tête et la première phrase ne se retrouvent
   plus sur la même ligne.

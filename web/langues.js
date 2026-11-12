@@ -106,6 +106,7 @@ fr: {
   'ui.ligne.lire': 'Lire la transcription',
   'ui.ligne.journal': 'Ouvrir le journal',
   'ui.ligne.retirer': 'Retirer',
+  'ui.ligne.relancer': 'Relancer',
 
   /* -- réglages : qualité ----------------------------------------------- */
   'ui.section.qualite': 'Qualité de transcription',
@@ -670,6 +671,7 @@ en: {
   'ui.ligne.lire': 'Read the transcript',
   'ui.ligne.journal': 'Open the log',
   'ui.ligne.retirer': 'Remove',
+  'ui.ligne.relancer': 'Run again',
 
   'ui.section.qualite': 'Transcription quality',
 

@@ -1548,7 +1548,9 @@ class Passerelle:
     def _enregistrer_fichiers(self, liste: list[str]) -> None:
         ajoutes = self.file.ajouter(liste)
         if not ajoutes:
-            self._sur_journal("attention", langues.t("app.depot.aucun"))
+            doublons = self.file.derniers_doublons
+            self._sur_journal("attention", langues.tn("app.depot.deja", doublons) if doublons
+                              else langues.t("app.depot.aucun"))
             return
         self._js(f"onFichiersAjoutes({_json(ajoutes)})")
         self._sur_journal("info", langues.tn("app.ajoutes", len(ajoutes)))
@@ -1559,6 +1561,22 @@ class Passerelle:
 
     def retirer(self, identifiant: str) -> None:
         self.file.retirer(identifiant)
+
+    def relancer(self, identifiant: str) -> dict:
+        """
+        Remet en attente un fichier arrêté, en échec ou terminé. Un fichier
+        arrêté en route reprend où il en était, grâce à sa sauvegarde.
+        """
+        element = next((e for e in self.file.elements if e.identifiant == identifiant), None)
+        if element is None:
+            return {"ok": False, "message": langues.t("app.reprise.introuvable")}
+        cle = next((r["cle"] for r in reprise.lister()
+                    if Path(r["chemin"]).resolve() == Path(element.chemin).resolve()), "")
+        remis = self.file.relancer(identifiant, cle)
+        if not remis:
+            return {"ok": False, "message": langues.t("app.reprise.introuvable")}
+        self._sur_journal("info", langues.t("app.relance", nom=remis["nom"]))
+        return {"ok": True, "element": remis, "reprises": self._reprises()}
 
     def vider_file(self) -> None:
         self.file.vider()

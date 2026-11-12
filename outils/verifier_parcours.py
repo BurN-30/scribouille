@@ -214,6 +214,79 @@ def essai_apercu_et_annulation(base: Path) -> None:
              "un fichier modifié depuis n'est pas écrasé par l'annulation")
 
 
+# ---------------------------------------------------------------------------
+# File d'attente
+# ---------------------------------------------------------------------------
+
+class _MoteurInerte:
+    """Moteur de remplacement : la file n'en attend que la libération."""
+
+    cle_calcul = "cpu"
+    sur_puce = False
+
+    def liberer(self) -> None:
+        pass
+
+
+def essai_file_apres_arret(base: Path) -> None:
+    import copy
+    import threading
+
+    from app import config as config_module, materiel, moteur, traitement
+
+    titre("Après « Arrêter » : reprendre, relancer, redéposer")
+    dossier = base / "file"
+    dossier.mkdir()
+    un, deux = dossier / "un.wav", dossier / "deux.wav"
+    for f in (un, deux):
+        f.write_bytes(b"\0" * 64)
+
+    file = traitement.FileTraitement(materiel.detecter())
+    ajoutes = file.ajouter([str(un), str(deux)])
+    verifier(len(ajoutes) == 2, "deux fichiers en file")
+
+    # Le premier fichier est arrêté en route, comme par le bouton « Arrêter ».
+    def traiter(element, *_):
+        element.etat = "transcription"
+        file.arreter()
+        raise moteur.Interruption()
+
+    file._traiter = traiter
+    fabriquer = traitement.fabriquer_moteur
+    traitement.fabriquer_moteur = lambda *_: _MoteurInerte()
+    fini = threading.Event()
+    bilan: dict = {}
+    try:
+        config = copy.deepcopy(config_module.DEFAUTS)
+        file.demarrer(config, traitement.Rappels(
+            file_terminee=lambda d: (bilan.update(d), fini.set())))
+        fini.wait(60)
+    finally:
+        traitement.fabriquer_moteur = fabriquer
+    etats = [e.etat for e in file.elements]
+    verifier(etats == ["annule", "attente"],
+             "le fichier arrêté est « arrêté », le suivant reste en attente", str(etats))
+
+    remis = file.ajouter_pour_reprise(str(un), "cle-de-reprise")
+    verifier(bool(remis) and remis["etat"] == "attente" and file.elements[0].reprise == "cle-de-reprise",
+             "« Reprendre » remet en attente le fichier arrêté, avec sa reprise", str(remis))
+    verifier(file.ajouter([str(un)]) == [] and file.derniers_doublons == 1,
+             "un fichier déjà en attente n'est pas ajouté deux fois, et c'est compté")
+
+    file.elements[1].etat = "annule"
+    redepose = file.ajouter([str(deux)])
+    verifier(len(redepose) == 1 and redepose[0]["id"] == ajoutes[1]["id"]
+             and file.elements[1].etat == "attente",
+             "redéposer un fichier annulé le remet en attente, sans doublon", str(redepose))
+    file.elements[1].etat = "erreur"
+    relance = file.relancer(ajoutes[1]["id"])
+    verifier(bool(relance) and file.elements[1].etat == "attente", "« Relancer » depuis la ligne")
+    file.elements[1].etat = "transcription"
+    verifier(file.ajouter_pour_reprise(str(deux), "x") is None and file.relancer(ajoutes[1]["id"]) is None,
+             "un fichier en cours de calcul n'est jamais remis en attente")
+    verifier(len(file.elements) == 2, "toujours deux lignes, jamais de doublon")
+
+
 def principal() -> int:
     print(f"Vérification du parcours de l'utilisateur\n{'=' * 42}")
     with tempfile.TemporaryDirectory(prefix="scribouille-parcours-") as brut:
@@ -225,6 +298,7 @@ def principal() -> int:
         essai_vue_egale_fichier(base)
         essai_casse_et_doublons(base)
         essai_apercu_et_annulation(base)
+        essai_file_apres_arret(base)
 
     print(f"\n{'=' * 42}")
     if _echecs:

@@ -1253,6 +1253,7 @@ function ligneHTML(id) {
       ${sorties ? `<div class="sorties">${sorties}</div>` : ''}
     </div>
     ${texte ? `<button class="bouton-ligne" data-lire="${ech(texte.chemin)}" title="${ech(t('ui.ligne.lire'))}">${icone('i-loupe', 'icone-s')}</button>` : ''}
+    ${['annule', 'erreur'].includes(it.etat) ? `<button class="bouton-ligne" data-relancer title="${ech(t('ui.ligne.relancer'))}" aria-label="${ech(t('ui.ligne.relancer'))}">${icone('i-reprise', 'icone-s')}</button>` : ''}
     ${it.etat === 'erreur' ? `<button class="bouton-ligne" data-log title="${ech(t('ui.ligne.journal'))}">${icone('i-info', 'icone-s')}</button>` : ''}
     ${actif ? '' : `<button class="bouton-ligne" data-retirer title="${ech(t('ui.ligne.retirer'))}">${icone('i-croix', 'icone-s')}</button>`}
   </div>`;
@@ -1274,6 +1275,17 @@ function brancherLignes() {
       pywebview.api.retirer(id);
       dessinerFile();
       majBoutons();
+    };
+  });
+  $$('#vue-file [data-relancer]').forEach((b) => {
+    b.onclick = async (e) => {
+      e.stopPropagation();
+      const id = b.closest('.ligne').dataset.id;
+      const r = await pywebview.api.relancer(id);
+      if (!r.ok) { journaliser('attention', r.message); setEtat(r.message, 'erreur'); return; }
+      remettreEnAttente(r.element);
+      etat.reprises = r.reprises || etat.reprises;
+      dessinerReprises();
     };
   });
   $$('#vue-file [data-log]').forEach((b) => {
@@ -1603,9 +1615,10 @@ function dessinerReprises() {
       const cle = b.closest('.reprise-carte').dataset.cle;
       const r = await pywebview.api.reprendre(cle);
       if (!r.ok) {
+        // La carte reste : la reprise est toujours sur le disque, et le refus
+        // est dit la ou l'on regarde, pas seulement dans le journal replie.
         journaliser('attention', r.message);
-        etat.reprises = etat.reprises.filter((x) => x.cle !== cle);
-        dessinerReprises();
+        setEtat(r.message, 'erreur');
         return;
       }
       // La reprise reste sur le disque jusqu'a la fin du calcul, mais elle est
@@ -1679,6 +1692,14 @@ function majBoutons() {
 }
 
 /* ------------------------------------------- Rappels appeles par Python */
+
+/* Un fichier deja liste qui repasse en attente (relance, reprise, nouveau
+   depot) repart d'une ligne propre : rien de son passage precedent ne reste. */
+function remettreEnAttente(item) {
+  etat.fichiers.set(item.id, Object.assign({ pct: 0 }, item));
+  majLigne(item.id);
+  majBoutons();
+}
 
 window.onFichiersAjoutes = function (items) {
   items.forEach((it) => etat.fichiers.set(it.id, Object.assign({ pct: 0 }, it)));

@@ -1042,6 +1042,9 @@ _FR: dict[str, str] = {
     "app.depot.ignores": ", {n} entrée(s) ignorée(s)",
     "app.depot.sous_dossiers": ". Les sous-dossiers ne sont pas parcourus.",
     "app.depot.aucun": "Aucun fichier audio exploitable dans ce dépôt.",
+    "app.depot.deja.un": "Ce fichier est déjà dans la file, en attente ou en cours.",
+    "app.depot.deja.autres": "Ces {n} fichiers sont déjà dans la file, en attente ou en cours.",
+    "app.relance": "« {nom} » remis en attente.",
     "app.depot.chemin_illisible": (
         "Le chemin des fichiers déposés n'a pas pu être lu. Utilisez le bouton "
         "« Parcourir »."
@@ -2402,6 +2405,9 @@ _EN: dict[str, str] = {
     "app.depot.ignores": ", {n} item(s) ignored",
     "app.depot.sous_dossiers": ". Subfolders are not scanned.",
     "app.depot.aucun": "No usable audio file in what was dropped.",
+    "app.depot.deja.un": "This file is already in the queue, waiting or in progress.",
+    "app.depot.deja.autres": "These {n} files are already in the queue, waiting or in progress.",
+    "app.relance": "\"{nom}\" is waiting again.",
     "app.depot.chemin_illisible": (
         "The path of the dropped files could not be read. Use the \"Browse\" button."
     ),

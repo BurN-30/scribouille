@@ -93,6 +93,9 @@ class FileTraitement:
         self._session = reprise_module.session_inactive()
         #: Rythme de la file en cours : choisi, adaptation, régulateur.
         self._rythme: dict = {}
+        #: Fichiers du dernier ajout ignorés parce qu'ils attendent déjà ou
+        #: sont en cours : l'interface le dit au lieu de se taire.
+        self.derniers_doublons = 0
 
     # -- gestion de la file -------------------------------------------------
 
@@ -100,11 +103,28 @@ class FileTraitement:
     def occupee(self) -> bool:
         return self._en_cours
 
+    #: États d'un fichier déjà listé que l'on peut remettre en attente : il a
+    #: été arrêté, a échoué, ou est terminé et l'on veut le refaire.
+    ETATS_RELANCABLES = ("annule", "erreur", "termine")
+
+    def _remettre_en_attente(self, element: Element, cle_reprise: str = "") -> dict:
+        element.etat = "attente"
+        element.reprise = cle_reprise
+        return element.en_dict()
+
     def ajouter(self, chemins_fichiers: list[str]) -> list[dict]:
-        """Ajoute des fichiers, ignore les doublons et les formats non audio."""
+        """
+        Ajoute des fichiers, ignore les formats non audio.
+
+        Un fichier déjà listé mais arrêté, en échec ou terminé repasse en
+        attente au lieu d'être ignoré ; un fichier qui attend déjà ou qui est
+        en cours n'est pas ajouté une seconde fois, et il est compté dans
+        `derniers_doublons` pour que l'interface puisse le dire.
+        """
         ajoutes: list[dict] = []
+        self.derniers_doublons = 0
         with self._verrou:
-            deja = {e.chemin.lower() for e in self.elements}
+            deja = {e.chemin.lower(): e for e in self.elements}
             for brut in chemins_fichiers:
                 if not brut:
                     continue
@@ -114,7 +134,12 @@ class FileTraitement:
                 if not audio_module.est_audio(fichier):
                     journal.attention("Format ignoré : %s", fichier.name)
                     continue
-                if str(fichier).lower() in deja:
+                present = deja.get(str(fichier).lower())
+                if present is not None:
+                    if present.etat in self.ETATS_RELANCABLES:
+                        ajoutes.append(self._remettre_en_attente(present))
+                    else:
+                        self.derniers_doublons += 1
                     continue
                 element = Element(
                     identifiant=f"f{int(time.time() * 1000)}{len(self.elements)}",
@@ -123,16 +148,25 @@ class FileTraitement:
                     taille=fichier.stat().st_size,
                 )
                 self.elements.append(element)
-                deja.add(str(fichier).lower())
+                deja[str(fichier).lower()] = element
                 ajoutes.append(element.en_dict())
         return ajoutes
+
+    def relancer(self, identifiant: str, cle_reprise: str = "") -> dict | None:
+        """Remet en attente un fichier arrêté, en échec ou terminé, depuis sa ligne."""
+        with self._verrou:
+            for element in self.elements:
+                if element.identifiant == identifiant and element.etat in self.ETATS_RELANCABLES:
+                    return self._remettre_en_attente(element, cle_reprise)
+        return None
 
     def ajouter_pour_reprise(self, chemin: str, cle_reprise: str) -> dict | None:
         """
         Remet en file un fichier dont la transcription avait été interrompue.
 
-        Le fichier peut déjà être dans la file, auquel cas on se contente de lui
-        attacher la reprise plutôt que de créer un doublon.
+        Le fichier peut déjà être dans la file : il repasse alors en attente avec
+        sa reprise (c'est le cas juste après « Arrêter »), plutôt que de créer
+        un doublon. Seul un fichier en cours de calcul est refusé.
         """
         fichier = Path(chemin or "")
         if not fichier.is_file():
@@ -140,9 +174,8 @@ class FileTraitement:
         with self._verrou:
             for element in self.elements:
                 if element.chemin.lower() == str(fichier).lower():
-                    if element.etat == "attente":
-                        element.reprise = cle_reprise
-                        return element.en_dict()
+                    if element.etat == "attente" or element.etat in self.ETATS_RELANCABLES:
+                        return self._remettre_en_attente(element, cle_reprise)
                     return None
         ajoutes = self.ajouter([str(fichier)])
         if not ajoutes:
@@ -261,10 +294,10 @@ class FileTraitement:
                 if element.etat != "attente":
                     continue
                 if self._interrompu():
-                    element.etat = "annule"
-                    annules += 1
-                    rappels.etat(element.identifiant, "annule", langues.t("etat.annule"))
-                    continue
+                    # Arrêter interrompt le fichier en cours ; ceux qui n'ont
+                    # pas commencé restent en attente, prêts pour le prochain
+                    # lancement, au lieu de finir « annulés » sans issue.
+                    break
                 try:
                     self._traiter(element, config, reglages, instance, rappels)
                     reussis += 1
