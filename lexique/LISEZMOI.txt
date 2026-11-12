@@ -1,0 +1,24 @@
+Lexique du français courant de Scribouille
+==========================================
+
+fr-courant.txt donne les 40 000 formes les plus fréquentes du français, une par
+ligne, de la plus fréquente à la moins fréquente. Le vocabulaire s'en sert de
+deux façons (app/lexique.py) :
+
+  - garde-fou : une suite de mots courants n'est jamais remplacée par une
+    correction automatique sans un contexte qui le justifie ;
+  - repérage : un mot absent de la liste, répété dans des documents relus,
+    est proposé comme terme (nom propre, sigle, terme métier).
+
+Source : FrequencyWords, Hermit Dave, liste fr_50k de 2018, calculée sur les
+sous-titres OpenSubtitles2018 (opus.nlpl.eu).
+https://github.com/hermitdave/FrequencyWords
+Licence du contenu : Creative Commons Attribution, Partage dans les mêmes
+conditions 4.0 International (CC BY-SA 4.0),
+https://creativecommons.org/licenses/by-sa/4.0/
+
+Modifications : mots passés en minuscules, formes non alphabétiques retirées,
+40 000 premières formes gardées, fréquences retirées. Ce fichier est diffusé
+sous la même licence (CC BY-SA 4.0). Tiré de sous-titres, il contient aussi
+des prénoms et des noms propres : un terme qui y figure est simplement traité
+avec plus de prudence.
