@@ -752,6 +752,7 @@ def essai_ecrans() -> None:
                           ("N puis Entrée corrige le mot atteint", "selectionnerMot(lect.vise)"),
                           ("un clic sur un bouton de lecture ne lui laisse pas Espace",
                            "$('.rl-outils').addEventListener('mousedown'"),
+                          ("la position de relecture est gardée", "'memoriser_position'"),
                           ("clic sur un mot : l'écoute s'y place, sur ce mot", "placerA(lect.mots[i].d)"),
                           ("un double-clic qui sélectionne ne déplace pas l'écoute", "e.detail > 1")):
         verifier(preuve in js, f"relecture : {geste}")
@@ -1139,6 +1140,16 @@ def essai_vocabulaire_sur_demande(base: Path) -> None:
         vocabulaire_v2.FICHIER_PERSONNEL = personnel
 
 
+def essai_position_relecture(base: Path) -> None:
+    titre("Relecture : la position est retrouvée d'une ouverture à l'autre")
+    (base / "position").mkdir()
+    txt = ecrire(base / "position", [segment(0.0, 4.0, jetons("Une phrase pour se situer."))])
+    memoriser = getattr(lecture, "memoriser_position", None)
+    verifier(memoriser is not None and memoriser(txt, 754.36, 2400) is True
+             and lecture.position(txt)["t"] == 754.4 and lecture.position(txt)["haut"] == 2400,
+             "instant d'écoute et défilement gardés pour la prochaine ouverture")
+
+
 def essai_passage_libre(base: Path) -> None:
     """Réécrire ou supprimer un passage : même règle d'égalité, même annulation."""
     titre("Passage réécrit ou supprimé : l'écran reste le fichier")
@@ -1191,6 +1202,7 @@ def principal() -> int:
 
         chemins.FICHIER_CORRECTIONS = base / "corrections.txt"
         lecture.DOSSIER_HISTORIQUE = base / "historique-relecture"
+        lecture.FICHIER_POSITIONS = base / "relecture-positions.json"
         vocabulaire_v2.FICHIER_PERSONNEL = base / "vocabulaire.toml"
         essai_entete_apres_correction(base)
         essai_vue_egale_fichier(base)
@@ -1210,6 +1222,7 @@ def principal() -> int:
         essai_annulation_profonde(base)
         essai_vocabulaire_sur_demande(base)
         essai_passage_libre(base)
+        essai_position_relecture(base)
         essai_accessibilite()
         essai_ecrans()
 

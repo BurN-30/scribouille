@@ -1272,6 +1272,50 @@ def appliquer_correction(chemin: str | Path, source: str, cible: str,
     return retour
 
 
+# -- position de relecture ----------------------------------------------------
+
+#: Dernière position de chaque transcription relue (instant d'écoute,
+#: défilement), pour reprendre là où l'on s'était arrêté.
+FICHIER_POSITIONS = chemins.RACINE / "relecture-positions.json"
+_POSITIONS_MAX = 300
+
+
+def _lire_positions() -> dict:
+    try:
+        positions = json.loads(FICHIER_POSITIONS.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return positions if isinstance(positions, dict) else {}
+
+
+def memoriser_position(chemin: str | Path, temps: float, haut: int) -> bool:
+    fichier = Path(chemin or "")
+    if not fichier.name:
+        return False
+    positions = _lire_positions()
+    positions[str(fichier.resolve()).lower()] = {
+        "t": round(max(0.0, float(temps or 0)), 1), "haut": max(0, int(haut or 0)),
+        "date": datetime.now().isoformat(timespec="seconds"),
+    }
+    if len(positions) > _POSITIONS_MAX:
+        recentes = sorted(positions.items(), key=lambda e: str(e[1].get("date", "")), reverse=True)
+        positions = dict(recentes[:_POSITIONS_MAX])
+    try:
+        FICHIER_POSITIONS.parent.mkdir(parents=True, exist_ok=True)
+        _ecrire_atomique(FICHIER_POSITIONS, json.dumps(positions, ensure_ascii=False))
+        return True
+    except OSError:
+        return False
+
+
+def position(chemin: str | Path) -> dict | None:
+    fichier = Path(chemin or "")
+    if not fichier.name:
+        return None
+    trouvee = _lire_positions().get(str(fichier.resolve()).lower())
+    return trouvee if isinstance(trouvee, dict) else None
+
+
 def editer_passage(chemin: str | Path, k: int, debut: int, fin: int, attendu: str, texte: str,
                    empreinte_attendue: str = "") -> dict:
     """

@@ -1924,6 +1924,7 @@ class Passerelle:
         retour["niveaux"] = lecture.niveaux_annulables(chemin)
         retour["annulable"] = retour["niveaux"] > 0
         retour["original"] = lecture.original_disponible(chemin)
+        retour["position"] = lecture.position(chemin)
         # L'audio passe par le serveur local, jamais par un « file:// » que le
         # navigateur intégré refuse depuis une page servie en http.
         meta = retour.get("meta") or {}
@@ -1981,6 +1982,10 @@ class Passerelle:
                        empreinte: str = "") -> dict:
         """Réécrit ou supprime un passage choisi dans la relecture (annulable)."""
         return lecture.editer_passage(chemin, k, debut, fin, attendu, texte, str(empreinte or ""))
+
+    def memoriser_position(self, chemin: str, temps: float, haut: int) -> bool:
+        """Dernier instant d'écoute et défilement d'une transcription relue."""
+        return lecture.memoriser_position(chemin, temps, haut)
 
     def revenir_original(self, chemin: str) -> dict:
         """Remet la transcription dans son état d'avant toute modification (annulable)."""

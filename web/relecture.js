@@ -61,6 +61,12 @@ async function ouvrirLecture(chemin) {
   await chargerLecture(chemin, false);
   lect.mesures.ouverture_ms = Math.round(performance.now() - debut);
   $('#rl-titre').focus({ preventScroll: true });
+  // Reprise la ou l'on s'etait arrete : defilement tout de suite, ecoute
+  // des que l'enregistrement est charge.
+  const position = lect.d && lect.d.position;
+  lect.reprise = position && position.t > 1 ? position.t : 0;
+  lect.positionVue = '';
+  if (position && position.haut) $('#rl-defilement').scrollTop = position.haut;
   chargerAudio(chemin);
   clearInterval(lect.veille);
   lect.veille = setInterval(verifierFichier, 4000);
@@ -69,7 +75,21 @@ async function ouvrirLecture(chemin) {
 /* Un fichier retouche ailleurs (editeur de texte) pendant la relecture : il
    est relu, et on le dit. Verifie toutes les 4 s et au retour dans la
    fenetre, jamais pendant une ecriture de l'application. */
+/* Position de relecture (instant d'ecoute, defilement), gardee pour la
+   prochaine ouverture : a chaque verification et en quittant. */
+function memoriserPosition() {
+  if (!lect.d || !lect.chemin) return;
+  const s = son();
+  const temps = lect.audio ? (s.currentTime || 0) : (lect.reprise || 0);
+  const haut = Math.round($('#rl-defilement').scrollTop);
+  const cle = `${Math.round(temps)}:${haut}`;
+  if (cle === lect.positionVue) return;
+  lect.positionVue = cle;
+  appelPasserelle('memoriser_position', lect.chemin, temps, haut).catch(() => {});
+}
+
 async function verifierFichier() {
+  memoriserPosition();
   if (etat.vue !== 'relecture' || !lect.d || !lect.pret || lect.ecriture || document.hidden) return;
   const chemin = lect.chemin;
   let empreinte = '';
@@ -228,6 +248,7 @@ function relectureLangueChangee() {
 
 function quitterRelecture() {
   clearInterval(lect.veille);
+  memoriserPosition();
   arreterAudio();
   masquerBoutonCorrection();
   fermerMenuExport();
@@ -1083,6 +1104,11 @@ document.addEventListener('DOMContentLoaded', () => {
     lect.audio = true;
     activerLecteur(true);
     $('#rl-position').max = String(s.duration || 0);
+    if (lect.reprise) {
+      s.currentTime = Math.min(lect.reprise, s.duration || lect.reprise);
+      statutRelecture(t('ui.rl.reprise', { heure: formaterSecondes(lect.reprise) }));
+      lect.reprise = 0;
+    }
     suivreLecture(false);
   });
   s.addEventListener('error', () => {
