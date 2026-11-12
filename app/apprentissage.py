@@ -497,25 +497,40 @@ def principal_cli(arguments: list[str]) -> int:
     if not triplets and not documents_seuls:
         print(USAGE)
         return 2
+    occurrences_min = int(_valeur(arguments, "--occurrences-min", str(OCCURRENCES_MIN)) or OCCURRENCES_MIN)
+    resultat = executer(triplets, documents_seuls, sortie=_valeur(arguments, "--sortie"),
+                        rapport=_valeur(arguments, "--rapport"), importer="--importer" in arguments,
+                        occurrences_min=occurrences_min)
+    print(resultat["rapport"])
+    print(f"Propositions : {resultat['propositions']}")
+    print(f"Rapport      : {resultat['chiffres']}")
+    if resultat.get("importees"):
+        print(f"Versées dans le vocabulaire personnel, à relire : {resultat['importees']['ajoutees']} "
+              f"(déjà connues ou refusées : {resultat['importees']['ignorees']})")
+    return 0
+
+
+def executer(triplets, documents_seuls, sortie: str = "", rapport: str = "", importer: bool = False,
+             occurrences_min: int = OCCURRENCES_MIN) -> dict:
+    """Apprend, écrit les propositions et le rapport de chiffres ; rend les chemins et le bilan."""
+    from . import vocabulaire_v2
+
     reunions, illisibles = charger_reunions(triplets, documents_seuls)
     existant, _problemes = vocabulaire_v2.effectif()
-    occurrences_min = int(_valeur(arguments, "--occurrences-min", str(OCCURRENCES_MIN)) or OCCURRENCES_MIN)
     propositions, bilan = apprendre(reunions, existant, occurrences_min)
-    sortie = Path(_valeur(arguments, "--sortie") or (chemins.RACINE / f"vocabulaire-propositions-{datetime.now():%Y%m%d-%H%M}.toml"))
-    vocabulaire_v2.ecrire(propositions, sortie)
-    rapport = rediger_rapport(bilan, illisibles)
-    chemin_rapport = Path(_valeur(arguments, "--rapport") or sortie.with_name(sortie.stem + "-chiffres.txt"))
-    chemin_rapport.write_text(rapport, encoding="utf-8")
-    print(rapport)
-    print(f"Propositions : {sortie}")
-    print(f"Rapport      : {chemin_rapport}")
-    if "--importer" in arguments:
+    cible = Path(sortie or (chemins.RACINE / f"vocabulaire-propositions-{datetime.now():%Y%m%d-%H%M}.toml"))
+    vocabulaire_v2.ecrire(propositions, cible)
+    texte = rediger_rapport(bilan, illisibles)
+    chemin_rapport = Path(rapport or cible.with_name(cible.stem + "-chiffres.txt"))
+    chemin_rapport.write_text(texte, encoding="utf-8")
+    resultat = {"propositions": str(cible), "chiffres": str(chemin_rapport), "rapport": texte,
+                "bilan": bilan, "illisibles": illisibles, "importees": None}
+    if importer:
         personnel = vocabulaire_v2.charger_personnel()
         retour = vocabulaire_v2.importer_propositions(personnel, propositions)
         vocabulaire_v2.ecrire(personnel)
-        print(f"Versées dans le vocabulaire personnel, à relire : {retour['ajoutees']} "
-              f"(déjà connues ou refusées : {retour['ignorees']})")
-    return 0
+        resultat["importees"] = {"ajoutees": retour["ajoutees"], "ignorees": retour["ignorees"]}
+    return resultat
 
 
 def options_reconnues(arguments: list[str]) -> bool:

@@ -1515,7 +1515,29 @@ def cmd_materiel(options, sortie: Sortie) -> int:
     from . import adaptation, materiel
 
     if options.action == "proposer":
-        return adaptation.principal_cli(["--reconnaitre"] + (["--appliquer"] if options.appliquer else []))
+        from . import config as config_module
+
+        config = config_module.charger()
+        mat = materiel.detecter()
+        description = adaptation.decrire(adaptation.profil(mat))
+        proposition = adaptation.proposition_du_poste(mat)
+        deja = adaptation.deja_en_place(proposition, config, mat)
+        applique = False
+        if not deja and options.appliquer:
+            adaptation.appliquer(config, mat, proposition)
+            config_module.sauver(config)
+            applique = True
+        lignes = [langues.t("adapt.cli.titre"), *("  - " + x for x in description), "",
+                  langues.t("adapt.cli.source", source=langues.t(f"adapt.source.{proposition['source']}"),
+                            regle=proposition["regle"]),
+                  "  " + proposition["phrase"],
+                  "  " + langues.t("adapt.cli.rythme", rythme=langues.t(f"rythme.nom.{proposition['rythme']}")),
+                  *("  " + note for note in proposition["notes"]), "",
+                  langues.t("adapt.cli.deja") if deja else langues.t("adapt.cli.applique") if applique
+                  else langues.t("adapt.cli.pour_appliquer")]
+        sortie.donnees({"poste": description, "proposition": proposition, "deja_en_place": deja,
+                        "applique": applique}, "\n".join(lignes))
+        return OK
     lent = materiel.rafraichir()
     mat, provisoire = materiel.detecter_au_demarrage()
     sortie.donnees({"materiel": mat.en_dict(), "detection": lent, "provisoire": provisoire,
@@ -1645,8 +1667,13 @@ def cmd_vocabulaire(options, sortie: Sortie) -> int:
     if options.action == "etat":
         etat = vocabulaire_interface.etat(config, config.get("langue", "fr"))
         resume = vocabulaire_v2.resume(vocabulaire_v2.effectif(config)[0])
-        sortie.donnees({"etat": etat, "resume": resume, "fichier": str(vocabulaire_v2.FICHIER_PERSONNEL)},
-                       f"Vocabulaire : {json.dumps(resume, ensure_ascii=False)}\n  {vocabulaire_v2.FICHIER_PERSONNEL}")
+        categories = ", ".join(f"{c} {n}" for c, n in (resume.get("categories") or {}).items() if n)
+        texte = (f"Vocabulaire : {resume['actifs']} actifs, {resume['proposes']} à relire, "
+                 f"{resume['refuses']} refusés ; {resume['fautes']} fautes connues"
+                 + (f" ; {resume['conflits']} conflits" if resume.get("conflits") else "")
+                 + (f"\n  Par catégorie : {categories}" if categories else "")
+                 + f"\n  Fichier : {vocabulaire_v2.FICHIER_PERSONNEL}")
+        sortie.donnees({"etat": etat, "resume": resume, "fichier": str(vocabulaire_v2.FICHIER_PERSONNEL)}, texte)
         return OK
     if options.action in ("importer", "exporter", "appliquer") and not options.fichier:
         raise Echec("arguments", f"vocabulaire {options.action} FICHIER", ARGUMENTS)
@@ -1665,18 +1692,20 @@ def cmd_vocabulaire(options, sortie: Sortie) -> int:
     # apprendre : les options d'origine de « --apprendre-vocabulaire »
     from . import apprentissage
 
-    if not options.brut or len(options.brut) != len(options.propre):
-        raise Echec("arguments", "vocabulaire apprendre --brut B --propre P [--cr CR] (par paires)", ARGUMENTS)
-    arguments = ["--apprendre-vocabulaire"]
-    for rang, (brut, propre) in enumerate(zip(options.brut, options.propre)):
-        arguments += ["--brut", brut, "--propre", propre]
-        if rang < len(options.cr):
-            arguments += ["--cr", options.cr[rang]]
-    if options.sortie:
-        arguments += ["--sortie", options.sortie]
-    if options.importer:
-        arguments.append("--importer")
-    return apprentissage.principal_cli(arguments)
+    if not options.brut or len(options.brut) != len(options.propre) or len(options.cr) > len(options.brut):
+        raise Echec("arguments", "vocabulaire apprendre --brut B --propre P [--cr CR] (par paires, "
+                                 "au plus un --cr par paire)", ARGUMENTS)
+    for fichier in [*options.brut, *options.propre, *options.cr]:
+        if not Path(fichier).is_file():
+            raise Echec("introuvable", f"introuvable : {fichier}", ARGUMENTS)
+    triplets = [(b, p, options.cr[r] if r < len(options.cr) else "")
+                for r, (b, p) in enumerate(zip(options.brut, options.propre))]
+    resultat = apprentissage.executer(triplets, [], sortie=options.sortie, importer=options.importer)
+    texte = (resultat["rapport"] + f"\nPropositions : {resultat['propositions']}\nRapport      : {resultat['chiffres']}"
+             + (f"\nVersées dans le vocabulaire personnel, à relire : {resultat['importees']['ajoutees']} "
+                f"(déjà connues ou refusées : {resultat['importees']['ignorees']})" if resultat.get("importees") else ""))
+    sortie.donnees({k: v for k, v in resultat.items() if k != "rapport"}, texte)
+    return OK
 
 
 def _vocabulaire_appliquer(options, sortie: Sortie, config: dict) -> int:
@@ -1728,7 +1757,37 @@ _ANCIENNES = {"campagne": "--campagne", "banc": "--banc", "endurance": "--endura
               "comparer": "--comparer", "vocabulaire": "--mesurer-vocabulaire", "rythmes": "--banc"}
 
 
+def _sortie_vers_erreur(fonction):
+    """
+    Exécute un outil qui écrit du texte (le sien et celui de ses processus
+    fils) en le détournant vers la sortie d'erreur : la sortie standard ne
+    reçoit ensuite que l'enveloppe JSON.
+    """
+    sys.stdout.flush()
+    garde = os.dup(1)
+    os.dup2(2, 1)
+    try:
+        return fonction()
+    finally:
+        try:
+            sys.stdout.flush()
+        except Exception:
+            pass
+        os.dup2(garde, 1)
+        os.close(garde)
+
+
 def cmd_mesurer(options, sortie: Sortie) -> int:
+    """Les outils de mesure ; avec --json, leur texte va sur la sortie d'erreur et le bilan en JSON."""
+    if not sortie.json:
+        return _mesurer(options)
+    code = _sortie_vers_erreur(lambda: _mesurer(options))
+    sortie.donnees({"quoi": options.quoi, "code_retour": code, "options": list(options.reste or []),
+                    "donnees": str(chemins.RACINE)})
+    return code
+
+
+def _mesurer(options) -> int:
     from . import journal
 
     reste = list(options.reste or [])
@@ -1757,7 +1816,18 @@ def cmd_mesurer(options, sortie: Sortie) -> int:
 def cmd_donnees(options, sortie: Sortie) -> int:
     from . import migration
 
-    return migration.principal_cli()
+    base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
+    if not base:
+        raise Echec("introuvable", "LOCALAPPDATA introuvable : rien n'a été déplacé", RESSOURCE)
+    vers = Path(base) / migration.NOM_ANCIEN
+    bilan = migration.revenir(vers, Path(base) / migration.NOM_NOUVEAU, chemins.DOSSIER_PROGRAMME)
+    texte = (f"Retour vers {vers} : {len(bilan['deplaces'])} entrée(s) remise(s), "
+             f"{len(bilan['conflits'])} doublon(s) rangé(s) à part."
+             + "".join(f"\n  non déplacé : {r}" for r in bilan["restes"]))
+    sortie.donnees({"vers": str(vers), "deplaces": [str(x) for x in bilan["deplaces"]],
+                    "conflits": [str(x) for x in bilan["conflits"]], "restes": [str(x) for x in bilan["restes"]]},
+                   texte)
+    return ECHEC_PARTIEL if bilan["restes"] else OK
 
 
 _COMMANDES = {

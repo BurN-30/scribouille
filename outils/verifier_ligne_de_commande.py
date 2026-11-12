@@ -410,6 +410,38 @@ def essai_sortie_par_defaut() -> None:
     verifier(not any((TEMPORAIRE / "maison" / "Documents").iterdir()), "rien n'est écrit dans Documents")
 
 
+def essai_json_partout() -> None:
+    titre("7. --json tenu par toutes les commandes : rien d'autre que du JSON sur la sortie standard")
+    brut, propre = TEMPORAIRE / "brut.txt", TEMPORAIRE / "propre.txt"
+    brut.write_text("On déploie sur cube air nettesse demain. Le cube air nettesse tourne.\n" * 3, encoding="utf-8")
+    propre.write_text("On déploie sur Kubernetes demain. Le Kubernetes tourne.\n" * 3, encoding="utf-8")
+    commandes = [("version",), ("aide",), ("etat",), ("espace",), ("reglages",), ("reglages", "lire", "rythme"),
+                 ("diagnostic",), ("agent", "afficher"), ("vocabulaire", "etat"), ("materiel", "proposer"),
+                 ("vocabulaire", "apprendre", "--brut", str(brut), "--propre", str(propre),
+                  "--sortie", str(TEMPORAIRE / "propositions.toml")),
+                 ("mesurer", "comparer"), ("effacer", "--liberable", "--apercu"), ("transcrire", "--aide")]
+    for commande in commandes:
+        code, sortie, erreur, _, _ = lancer(*commande, "--json")
+        lignes = sortie.splitlines()
+        valides = []
+        for x in lignes:
+            try:
+                valides.append(json.loads(x))
+            except ValueError:
+                pass
+        verifier(lignes and len(valides) == len(lignes) and all(v.get("schema") == "scribouille.cli/1" for v in valides)
+                 and all(v.get("commande") == commande[0] or commande[-1] == "--aide" for v in valides),
+                 f"{' '.join(commande)} --json : {len(lignes)} ligne(s), toutes JSON (code {code})",
+                 f"{lignes[:2]} {erreur[-160:]}")
+    code, sortie, erreur, _, _ = lancer("mesurer", "comparer", "--json")
+    fin = (_json(sortie) or [{}])[-1].get("donnees", {})
+    verifier(code == 2 and fin.get("code_retour") == 2 and erreur.strip(),
+             "mesurer --json : le texte de l'outil sur la sortie d'erreur, son code dans l'enveloppe", str(fin))
+    code, sortie, _, _, _ = lancer("vocabulaire", "etat")
+    verifier(code == 0 and "{" not in sortie and "actifs" in sortie, "vocabulaire etat : un texte lisible, pas un "
+             "dictionnaire brut", sortie[:160])
+
+
 def principal() -> int:
     print(f"Vérification de la ligne de commande\n{'=' * 40}\n(dossier temporaire : {TEMPORAIRE})")
     try:
@@ -419,6 +451,7 @@ def principal() -> int:
         essai_sans_bureau()
         essai_options_honorees()
         essai_sortie_par_defaut()
+        essai_json_partout()
     finally:
         import shutil
 
