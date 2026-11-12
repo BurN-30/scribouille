@@ -680,8 +680,8 @@ def essai_accessibilite() -> None:
 
     verifier('class="sortie"' not in js.replace('<button class="sortie"', ""),
              "les fichiers produits d'une ligne sont des boutons, atteignables au clavier")
-    verifier('role="button" tabindex="0"' in js and "onkeydown" in js,
-             "une ligne de l'historique s'ouvre au clavier")
+    verifier(js.count("data-lire=") >= 2 and "ui.ligne.relire" in js,
+             "chaque transcription, dans la file comme dans l'historique, a son bouton « Relire » en toutes lettres")
     verifier("setAttribute('role', 'dialog')" in js and "setAttribute('aria-modal', 'true')" in js
              and "aria-labelledby" in js, "chaque modale est un dialogue nommé par son titre")
     verifier("el.inert" in js and "pileFocus" in js,
@@ -692,6 +692,134 @@ def essai_accessibilite() -> None:
              "la barre d'un fichier en cours est une barre de progression lisible")
     sans_nom = [b for b in re.findall(r'<button class="bouton-ligne"[^>]*>', js) if "aria-label" not in b]
     verifier(not sans_nom, "les boutons à icône des lignes ont un nom accessible", str(sans_nom))
+    icones = re.findall(r'<button class="bouton-icone"[^>]*>', html)
+    verifier(all("data-i18n-aria" in b or "data-fermer" in b for b in icones),
+             "chaque bouton à icône de la page a un nom accessible",
+             str([b for b in icones if "data-i18n-aria" not in b and "data-fermer" not in b]))
+    verifier("function pieger" in js and "e.key === 'Tab'" in js,
+             "Tab et Maj+Tab tournent dans la fenêtre du dessus")
+
+    # Contrastes des couples texte et fond de la refonte, dans chaque thème.
+    def couleurs(bloc: str) -> dict:
+        return dict(re.findall(r"(--[a-z-]+):\s*(#[0-9a-fA-F]{3,6})", bloc))
+
+    blocs = [couleurs(b) for b in css.split("}") if re.search(r"--texte-faible:\s*#", b)]
+    couples = [("--texte-faible", "--carte-creuse"), ("--texte-doux", "--fond"), ("--ambre", "--ambre-fond"),
+               ("--accent", "--accent-doux"), ("--accent-contraste", "--accent"), ("--vert", "--vert-fond"),
+               ("--rouge", "--rouge-fond"), ("--texte", "--lu"), ("--texte", "--trouve")]
+    faibles = []
+    for numero, bloc in enumerate(blocs):
+        for avant_plan, fond in couples:
+            if avant_plan in bloc and fond in bloc:
+                ratio = _contraste(bloc[avant_plan], bloc[fond])
+                if ratio < 4.5:
+                    faibles.append(f"thème {numero} {avant_plan}/{fond} {ratio:.2f}")
+    verifier(len(blocs) == 4 and not faibles,
+             "texte d'avertissement, d'accent, de succès, d'erreur et surlignages à 4,5:1 au moins, dans les deux thèmes",
+             ", ".join(faibles))
+
+
+def essai_ecrans() -> None:
+    """
+    L'organisation de l'interface : l'écran principal sert les réunions, les
+    outils du poste vivent dans Réglages, la relecture occupe tout l'écran.
+    """
+    import re
+
+    titre("Écrans : réunions d'abord, réglages rangés, relecture plein cadre")
+    html = (RACINE / "web" / "index.html").read_text(encoding="utf-8")
+    js = "\n".join((RACINE / "web" / nom).read_text(encoding="utf-8") for nom in ("app.js", "relecture.js", "espace.js"))
+    principal = re.search(r'<main[^>]*id="vue-principale".*?</main>', html, re.S).group(0)
+    absents = [i for i in ("presets", "btn-lancer-banc", "materiel-detail", "btn-installer-openvino",
+                           "comp-bloc", "opt-avance", "btn-reconnaitre", "bloc-proposition")
+               if f'id="{i}"' in principal]
+    verifier(not absents, "l'écran principal ne porte ni le banc, ni les moteurs, ni la fiche du poste", str(absents))
+    verifier(principal.count("bascule") <= 2 and "segments-qualite" in principal and "segments-rythme" in principal,
+             "au lancement : qualité, rythme, et les voix seulement si elles sont installées")
+    verifier('id="vue-relecture"' in html and 'id="modale-lecture"' not in html,
+             "la relecture est un écran entier, plus une fenêtre posée sur l'application")
+    groupes = re.findall(r'data-i18n="ui\.reg\.groupe\.(\w+)"', html)
+    verifier(groupes == ["courant", "avance", "mesures"],
+             "Réglages : usage courant, puis avancé, puis mesures et diagnostic", str(groupes))
+    for geste, preuve in (("lecture et pause à l'Espace", "touche === ' '"),
+                          ("5 s en arrière ou en avant aux flèches", "deplacer(touche === 'ArrowLeft' ? -5 : 5)"),
+                          ("recherche par Ctrl+F", "(touche === 'f' || touche === 'F')"),
+                          ("point à vérifier suivant par N", "touche === 'n' || touche === 'N'"),
+                          ("clic sur un mot : l'écoute s'y place", "placerA(Math.max(0, lect.mots[i].d")):
+        verifier(preuve in js, f"relecture : {geste}")
+    verifier("'occurrences_correction'" in js and "'corriger_occurrences'" in js and "data-rang" in js,
+             "une correction vise les endroits cochés, pas tout le fichier d'office")
+    verifier(html.count("doublure-passerelle.js") == 1 and "DOUBLURE_PASSERELLE" in js
+             and js.count("DOUBLURE_PASSERELLE") == 1,
+             "la doublure de la passerelle tient dans un fichier et une balise, retirables à la fusion")
+    catalogue = (RACINE / "web" / "langues.js").read_text(encoding="utf-8")
+    verifier("(s)" not in catalogue, "aucun accord en « (s) » dans les textes de l'interface")
+
+
+def essai_relecture_ciblee(base: Path) -> None:
+    """Corriger un seul endroit, renommer un locuteur, exporter : la vue reste le fichier."""
+    from app import compagnon, relecture
+
+    titre("Relecture : un seul endroit corrigé, locuteurs renommés, export")
+    dossier = base / "ciblee"
+    dossier.mkdir()
+    txt = ecrire(dossier, [
+        segment(0.0, 4.0, jetons("On ouvre gitlab ce matin."), "Locuteur 1"),
+        segment(4.5, 9.0, jetons("Puis gitlab redémarre, et gitlab revient."), "Locuteur 2"),
+        segment(9.5, 12.0, jetons("Bien, gitlab est stable."), "Locuteur 1"),
+    ], details={"nb_locuteurs": 2})
+    avant = txt.read_text(encoding="utf-8")
+    json_avant = compagnon.chemin_pour(txt).read_text(encoding="utf-8")
+
+    vue = relecture.occurrences(txt, "gitlab", "GitLab", avant="Puis ", apres=" redémarre")
+    verifier(vue.get("ok") and vue["nombre"] == 4 and vue["choisie"] == 1,
+             "l'aperçu liste les quatre endroits et retrouve celui de la sélection", str(vue)[:200])
+    retour = relecture.corriger(txt, "gitlab", "GitLab", [vue["choisie"]])
+    apres = txt.read_text(encoding="utf-8")
+    verifier(retour.get("ok") and apres.count("GitLab") == 1 and "Puis GitLab redémarre" in apres,
+             "seul l'endroit sélectionné change dans le fichier", str(retour))
+    charge = lecture.charger(txt)
+    affiche = "\n\n".join(texte_affiche(p) for p in charge["paragraphes"])
+    verifier(all(texte_affiche(p) == p["texte"] for p in charge["paragraphes"])
+             and "Puis GitLab redémarre, et gitlab revient." in affiche,
+             "la vue, relue du compagnon, montre le même texte que le fichier")
+    verifier(lecture.annuler_correction(txt).get("ok") and txt.read_text(encoding="utf-8") == avant
+             and compagnon.chemin_pour(txt).read_text(encoding="utf-8") == json_avant,
+             "Annuler remet le fichier et le compagnon à l'octet près")
+
+    retour = relecture.corriger(txt, "gitlab", "GitLab", [0, 2])
+    verifier(retour.get("ok") and txt.read_text(encoding="utf-8").count("GitLab") == 2,
+             "deux endroits cochés, deux endroits corrigés", str(retour))
+    lecture.annuler_correction(txt)
+    retour = relecture.corriger(txt, "gitlab", "GitLab", "tous")
+    verifier(retour.get("ok") and "gitlab" not in lecture.separer_entete(txt.read_text(encoding="utf-8"))[1],
+             "« tout corriger » passe par la correction habituelle", str(retour))
+    lecture.annuler_correction(txt)
+    verifier(relecture.corriger(txt, "gitlab", "GitLab", []).get("code") == "aucun_endroit",
+             "rien de coché : rien ne change, et l'interface le dit")
+
+    retour = relecture.renommer_locuteur(txt, "Locuteur 1", "alice")
+    renomme = txt.read_text(encoding="utf-8")
+    donnees = compagnon.lire(txt)
+    verifier(retour.get("ok") and retour["paragraphes"] == 2 and "Alice : On ouvre" in renomme
+             and "Locuteur 1" not in renomme
+             and sum(1 for s in donnees["segments"] if s.get("l") == "Alice") == 2,
+             "un locuteur renommé l'est dans le fichier et le compagnon, majuscule comprise", str(retour))
+    verifier(lecture.charger(txt)["paragraphes"][0]["locuteur"] == "Alice",
+             "la relecture montre le nouveau nom")
+    verifier(lecture.annuler_correction(txt).get("ok") and txt.read_text(encoding="utf-8") == avant,
+             "le renommage s'annule comme une correction")
+    verifier(relecture.renommer_locuteur(txt, "Locuteur 1", "1 : x").get("code") == "nom_invalide",
+             "un nom qui ne se relirait pas depuis le fichier est refusé")
+
+    retour = relecture.enregistrer_export(txt, ".md", "# Essai\n")
+    verifier(retour.get("ok") and Path(retour["chemin"]).read_text(encoding="utf-8") == "# Essai\n"
+             and Path(retour["chemin"]).parent == txt.parent,
+             "l'export Markdown s'écrit à côté de la transcription", str(retour))
+    second = relecture.enregistrer_export(txt, ".md", "# Autre\n")
+    verifier(second.get("ok") and second["chemin"] != retour["chemin"], "un export n'en écrase jamais un autre")
+    verifier(relecture.enregistrer_export(txt, ".txt", "x").get("code") == "format_refuse",
+             "un export ne peut pas créer une seconde transcription .txt")
 
 
 def principal() -> int:
@@ -715,7 +843,9 @@ def principal() -> int:
         essai_voix_non_installees(base)
         essai_retour_pendant_calcul(base)
         essai_file_apres_arret(base)
+        essai_relecture_ciblee(base)
         essai_accessibilite()
+        essai_ecrans()
 
     print(f"\n{'=' * 42}")
     if _echecs:
