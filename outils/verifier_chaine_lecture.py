@@ -217,6 +217,7 @@ def principal() -> int:
         # Les fichiers personnels sont mis de côté le temps du contrôle.
         chemins.FICHIER_CORRECTIONS = bac / "corrections.txt"
         chemins.FICHIER_GABARIT_IA = bac / "gabarit-ia.txt"
+        lecture.DOSSIER_HISTORIQUE = bac / "historique-relecture"
         from app import vocabulaire_v2
 
         vocabulaire_v2.FICHIER_PERSONNEL = bac / "vocabulaire.toml"

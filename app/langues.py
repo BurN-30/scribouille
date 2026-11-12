@@ -82,35 +82,18 @@ _FR: dict[str, str] = {
 
     # -- incidents traduits (app/journal.py) -------------------------------
     "err.memoire.titre": "Mémoire insuffisante",
-    "err.memoire.msg": (
-        "La machine n'a pas assez de mémoire vive pour ce modèle. Essayez le preset "
-        "« Rapide », désactivez la séparation des locuteurs, ou fermez les autres "
-        "applications ouvertes."
-    ),
+    "err.memoire.msg": "Mémoire vive insuffisante pour ce modèle. Choisissez la qualité Rapide, désactivez la séparation des locuteurs ou fermez d'autres applications.",
     "err.disque.titre": "Disque plein",
     "err.disque.msg": (
         "Il n'y a plus assez de place sur le disque pour écrire le résultat ou "
         "télécharger le modèle. Libérez de l'espace puis relancez."
     ),
-    "err.jeton.titre": "Accès au modèle de diarisation refusé",
-    "err.jeton.msg": (
-        "Le jeton Hugging Face est absent, invalide, ou les conditions du modèle "
-        "pyannote n'ont pas été acceptées. Ouvrez le panneau « Locuteurs » pour "
-        "revoir la procédure. La transcription seule fonctionne sans jeton."
-    ),
+    "err.jeton.titre": "Accès au modèle des voix refusé",
+    "err.jeton.msg": "Jeton Hugging Face absent ou invalide, ou conditions du modèle pyannote non acceptées. La marche à suivre est dans Réglages, Transcription, bloc « Locuteurs ». La transcription seule fonctionne sans jeton.",
     "err.reseau.titre": "Téléchargement impossible",
-    "err.reseau.msg": (
-        "Le modèle n'est pas encore présent sur la machine et le téléchargement a "
-        "échoué. Vérifiez la connexion Internet, puis relancez : une fois téléchargé, "
-        "le modèle reste local et l'application n'a plus besoin du réseau."
-    ),
+    "err.reseau.msg": "Le modèle n'est pas encore sur ce poste et son téléchargement a échoué. Vérifiez la connexion, puis relancez : une fois téléchargé, il reste ici et le réseau ne sert plus.",
     "err.modele.titre": "Modèle de transcription inutilisable",
-    "err.modele.msg": (
-        "Les fichiers du modèle sont absents ou abîmés, et le dossier n'a pas pu être "
-        "renouvelé automatiquement. Fermez les autres applications qui pourraient "
-        "l'ouvrir, puis relancez la transcription : le modèle sera retéléchargé. Le "
-        "dossier des modèles se retrouve dans les réglages, section « Modèles »."
-    ),
+    "err.modele.msg": "Les fichiers du modèle sont absents ou abîmés, et le dossier n'a pas pu être renouvelé. Fermez les applications qui pourraient l'ouvrir, puis relancez : le modèle sera retéléchargé. Son dossier se règle dans Réglages, Moteur et modèles.",
     "err.cuda.titre": "Accélération NVIDIA indisponible",
     "err.cuda.msg": (
         "Les bibliothèques CUDA (cuBLAS, cuDNN) n'ont pas pu être chargées. "
@@ -134,7 +117,7 @@ _FR: dict[str, str] = {
     "preset.qualite.nom": "Qualité maximale",
     "preset.qualite.resume": "Le meilleur texte possible. Pour les réunions et tout ce qui sera relu.",
     "preset.rapide.nom": "Rapide",
-    "preset.rapide.resume": "Environ quatre fois plus rapide, qualité un cran en dessous.",
+    "preset.rapide.resume": "Plus rapide, un peu moins juste.",
     "preset.personnalise": "{nom}, réglages personnalisés",
     "modele.qualite.depannage": "Dépannage",
     "modele.qualite.faible": "Faible",
@@ -142,41 +125,20 @@ _FR: dict[str, str] = {
     "modele.qualite.bonne": "Bonne",
     "modele.qualite.tres_bonne": "Très bonne",
     "modele.qualite.excellente": "Excellente",
-    "reco.proposee": (
-        "Réglage conseillé pour ce poste : {resume}, environ {duree} pour une heure "
-        "d'audio. Il s'applique d'un clic (Réglages, Vitesse de cette machine, "
-        "« Reconnaître ce poste »)."
-    ),
+    "reco.proposee": "Réglage conseillé pour ce poste : {resume}, environ {duree} pour une heure d'audio. Il s'applique d'un clic (Réglages, Poste, « Reconnaître ce poste »).",
     "reco.en_place": (
         "Le réglage en service est celui conseillé pour ce poste : {resume}, environ "
         "{duree} pour une heure d'audio."
     ),
-    "reco.memoire_juste": (
-        "Mémoire vive détectée : {ram} Go. C'est trop juste pour large-v3, le preset "
-        "« Rapide » est conseillé."
-    ),
-    "reco.cuda": (
-        "Carte NVIDIA exploitée : le preset « Qualité maximale » passe largement plus "
-        "vite que le temps réel."
-    ),
-    "reco.processeur": (
-        "Transcription sur processeur : le preset « Qualité maximale » est le bon choix "
-        "pour les réunions, il suffit de le lancer et de laisser tourner."
-    ),
-    "reco.processeur_lent": (
-        "Processeur peu puissant : une heure de réunion demanderait environ {qualite} "
-        "en « Qualité maximale », contre {rapide} en « Rapide ». Le banc d'essai "
-        "(réglages, section Vitesse de cette machine) mesure les vrais chiffres en "
-        "quelques minutes."
-    ),
+    "reco.memoire_juste": "Mémoire vive détectée : {ram} Go. C'est juste pour large-v3 : la qualité Rapide est conseillée.",
+    "reco.cuda": "Carte NVIDIA utilisée : la qualité maximale va bien plus vite que le temps réel.",
+    "reco.processeur": "Transcription sur le processeur : la qualité maximale convient aux réunions, il suffit de la lancer et de laisser tourner.",
+    "reco.processeur_lent": "Processeur peu puissant : une heure de réunion demanderait environ {qualite} en qualité maximale, contre {rapide} en Rapide. Le banc d'essai (Réglages, Banc d'essai) mesure les vrais chiffres en quelques minutes.",
     "reco.openvino": (
         "Puce Intel exploitée par OpenVINO : une heure de réunion demanderait environ "
         "{qualite} en « Qualité maximale », {rapide} en « Rapide »."
     ),
-    "avert.memoire_tres_serree": (
-        "Cette machine annonce {ram} Go de mémoire vive. Le modèle large-v3 risque de "
-        "saturer : préférez le preset « Rapide »."
-    ),
+    "avert.memoire_tres_serree": "Ce poste annonce {ram} Go de mémoire vive : large-v3 risque de la saturer. Préférez la qualité Rapide.",
     "avert.memoire_serree_diar": (
         "Mémoire vive : {ram} Go. La combinaison large-v3 plus séparation des locuteurs "
         "tient, parce que les deux étapes sont enchaînées et jamais chargées en même "
@@ -210,16 +172,8 @@ _FR: dict[str, str] = {
         "Carte NVIDIA détectée mais les bibliothèques CUDA de CTranslate2 ne répondent "
         "pas. Relancez l'installateur pour les poser."
     ),
-    "gpu.note.amd": (
-        "Non exploitée : la transcription tourne sur le processeur. Le moteur sait "
-        "calculer sur les cartes AMD récentes (ROCm), mais l'application ne l'embarque "
-        "pas encore."
-    ),
-    "gpu.note.intel": (
-        "Circuit graphique intégré. Le moteur OpenVINO, à installer en option "
-        "(réglages, section Vitesse de cette machine), sait y transcrire ; sans lui, "
-        "le processeur travaille seul."
-    ),
+    "gpu.note.amd": "Non utilisée : le moteur de calcul pour les cartes AMD (ROCm) n'est pas livré ; la transcription tourne sur le processeur.",
+    "gpu.note.intel": "Puce graphique intégrée. OpenVINO, à installer en option (Réglages, Moteur et modèles), sait y transcrire ; sans lui, le processeur travaille seul.",
     "gpu.note.autre": "Non exploitée.",
     "npu.note": (
         "Détecté, non exploité. Un NPU vise surtout l'autonomie sur batterie, la "
@@ -249,11 +203,7 @@ _FR: dict[str, str] = {
     "audio.decodage.titre": "Décodage impossible",
     "audio.decodage.msg": "Le décodeur n'a pas pu être lancé sur « {nom} ».",
     "audio.illisible.titre": "Fichier audio illisible",
-    "audio.illisible.msg": (
-        "« {nom} » n'a pas pu être décodé : le fichier est peut-être corrompu, "
-        "incomplet, ou ne contient aucune piste audio. Le détail FFmpeg est dans "
-        "logs/{journal}."
-    ),
+    "audio.illisible.msg": "« {nom} » est illisible : fichier abîmé, incomplet ou sans piste audio. Détail FFmpeg : logs/{journal}.",
     "audio.muet.titre": "Aucun son détecté",
     "audio.muet.msg": "« {nom} » ne contient aucune donnée audio exploitable.",
 
@@ -346,10 +296,7 @@ _FR: dict[str, str] = {
     "ov.peripherique.gpu": "puce graphique Intel",
     "ov.peripherique.npu": "NPU Intel",
     "ov.modele_absent.titre": "Modèle sans version OpenVINO",
-    "ov.modele_absent.msg": (
-        "Le modèle {modele} n'existe pas au format d'OpenVINO. Choisissez un modèle du "
-        "catalogue, ou revenez au moteur habituel (réglages, Vitesse de cette machine)."
-    ),
+    "ov.modele_absent.msg": "Le modèle {modele} n'existe pas au format d'OpenVINO. Choisissez un modèle du catalogue, ou revenez au moteur habituel (Réglages, Moteur et modèles).",
     "ov.chargement": "Chargement du modèle {modele} sur {peripherique} (OpenVINO)...",
     "ov.repli": (
         "OpenVINO n'a pas pu travailler sur {peripherique} : la transcription continue "
@@ -423,10 +370,7 @@ _FR: dict[str, str] = {
     "comp.non": "non",
     "comp.un_a_un": "un à un",
     "comp.openvino_absent.titre": "OpenVINO n'est pas installé",
-    "comp.openvino_absent.msg": (
-        "La comparaison a besoin des deux moteurs. Installez OpenVINO depuis les "
-        "réglages (Vitesse de cette machine) ou avec --installer-openvino, puis relancez."
-    ),
+    "comp.openvino_absent.msg": "La comparaison a besoin des deux moteurs. Installez OpenVINO (Réglages, Moteur et modèles, ou --installer-openvino), puis relancez.",
     "comp.etape.telechargement": "Téléchargement du modèle {modele} ({taille})...",
     "comp.etape.decodage": "Lecture de l'extrait...",
     "comp.etape.moteur": "Transcription par {moteur} ({duree} d'audio)...",
@@ -556,19 +500,9 @@ _FR: dict[str, str] = {
     # Depuis la version 2.3.0, ces trois phrases ne renvoient plus à une
     # procédure : le bouton « Installer la séparation des locuteurs » du panneau
     # « Locuteurs » fait le travail, dans les deux modes.
-    "diar.indispo.installee": (
-        "La séparation des locuteurs n'est pas encore installée. Elle repose sur PyTorch, "
-        "environ 3,6 Go de composants à poser une seule fois. Le bouton "
-        "« Installer la séparation des locuteurs » du panneau « Locuteurs » s'en charge."
-    ),
-    "diar.indispo.torch": (
-        "PyTorch n'est pas installé. Le bouton « Installer la séparation des locuteurs » "
-        "du panneau « Locuteurs » le pose pour vous."
-    ),
-    "diar.indispo.pyannote": (
-        "La bibliothèque pyannote.audio n'est pas installée. Le bouton « Installer la "
-        "séparation des locuteurs » du panneau « Locuteurs » la pose pour vous."
-    ),
+    "diar.indispo.installee": "La séparation des locuteurs n'est pas installée : environ 3,6 Go de composants (PyTorch) à poser une fois, par le bouton du bloc « Locuteurs » (Réglages, Transcription).",
+    "diar.indispo.torch": "PyTorch n'est pas installé. Le bouton du bloc « Locuteurs » (Réglages, Transcription) le pose pour vous.",
+    "diar.indispo.pyannote": "pyannote.audio n'est pas installé. Le bouton du bloc « Locuteurs » (Réglages, Transcription) le pose pour vous.",
     "diar.inaccessible.titre": "Modèle de locuteurs inaccessible",
     "diar.inaccessible.depot": (
         "Le dépôt {depot} n'a rien renvoyé, généralement parce que ses conditions "
@@ -577,10 +511,7 @@ _FR: dict[str, str] = {
     "diar.inaccessible.aucun": "Aucun dépôt pyannote n'a pu être chargé.",
     "diar.indisponible.titre": "Séparation des locuteurs indisponible",
     "diar.jeton_manquant.titre": "Jeton Hugging Face manquant",
-    "diar.jeton_manquant.msg": (
-        "La séparation des locuteurs a besoin d'un jeton gratuit. Ouvrez le panneau "
-        "« Locuteurs » : la marche à suivre y est détaillée en trois étapes."
-    ),
+    "diar.jeton_manquant.msg": "La séparation des locuteurs a besoin d'un jeton gratuit. La marche à suivre, en trois étapes, est dans Réglages, Transcription, bloc « Locuteurs ».",
     "diar.chargement": "Chargement du modèle de locuteurs ({depot})...",
     "diar.analyse": "Analyse des voix en cours...",
     "diar.guide.etape1": (
@@ -646,25 +577,25 @@ _FR: dict[str, str] = {
     "adapt.source.campagne": "la campagne de mesure",
     "adapt.source.banc": "le banc d'essai",
     "adapt.source.table": "la table de décision",
-    "adapt.note.mesure_caduque": "Le réglage mesuré par {source} ne tient plus sur le matériel actuel (puce graphique ou moteur Intel absent) : proposition faite d'après le matériel.",
-    "adapt.note.installer_openvino": "Puce graphique Intel présente : installer le moteur Intel (OpenVINO, environ 90 Mo, bouton plus bas) permettrait d'y faire le calcul (une heure en 7 minutes environ sur un Core Ultra 5, mesuré).",
-    "adapt.note.installer_openvino_processeur": "Installer le moteur Intel (OpenVINO, environ 90 Mo, bouton plus bas) : sur le corpus public de réunions, il fait 2 points d'erreur de moins que le moteur habituel, et il a été deux fois plus rapide sur les processeurs mesurés. Le banc d'essai vérifie la vitesse sur ce poste.",
+    "adapt.note.mesure_caduque": "Le réglage mesuré par {source} ne tient plus sur le matériel actuel (puce graphique ou OpenVINO absents) : proposition faite d'après le matériel.",
+    "adapt.note.installer_openvino": "Puce graphique Intel présente : installer OpenVINO (environ 90 Mo, Réglages, Moteur et modèles) permettrait d'y faire le calcul (une heure en 7 minutes environ, mesuré sur un Core Ultra 5).",
+    "adapt.note.installer_openvino_processeur": "Installer OpenVINO (environ 90 Mo, Réglages, Moteur et modèles) : 2 points d'erreur de moins que le moteur habituel sur le corpus public de réunions, et deux fois plus rapide sur les processeurs mesurés. Le banc d'essai vérifie la vitesse ici.",
     "adapt.note.pilote_ancien": "Pilote graphique Intel {version} : OpenVINO demande la version {minimum} ou plus récente ; une mise à jour du pilote est conseillée.",
-    "adapt.note.sans_confiance": "Ce que l'on perd : le moteur Intel ne donne pas la confiance de chaque mot, la relecture ne surlignera donc aucun mot douteux.",
+    "adapt.note.sans_confiance": "En échange : OpenVINO ne donne pas la confiance des mots, aucun mot douteux ne sera signalé en relecture.",
     "adapt.note.batterie": "Sur batterie : avec « s'adapter tout seul », la transcription reste au rythme choisi tant que le portable n'est pas branché.",
     "adapt.note.mode_efficacite": "Le mode d'alimentation de Windows est réglé sur l'économie : sur secteur, « Meilleures performances » accélère la transcription (Paramètres, Système, Alimentation). L'application ne change pas ce réglage.",
     "adapt.telechargement": "Le modèle n'est pas encore sur le poste : {taille} seront téléchargés au premier lancement d'une transcription.",
-    "adapt.moteur_ov": "moteur Intel sur {peripherique}",
+    "adapt.moteur_ov": "OpenVINO sur {peripherique}",
     "adapt.moteur_cuda": "carte NVIDIA",
     "adapt.moteur_ct2": "processeur, moteur habituel",
     "adapt.raison.nvidia": "une carte NVIDIA fait le calcul bien plus vite que le processeur",
     "adapt.raison.puce_intel": "la puce graphique Intel est aussi juste que la qualité maximale sur le processeur (mesuré sur un Core Ultra 5), qui annonce {habituel} sur ce poste",
     "adapt.raison.puce_intel_juste": "la puce graphique Intel est aussi juste que la qualité maximale sur le processeur (mesuré sur un Core Ultra 5) ; sur ce poste, elle n'est pas annoncée plus rapide ({habituel} pour la qualité maximale)",
-    "adapt.raison.puce_muette": "la puce graphique Intel n'est pas utilisable en ce moment (pilote ?) ; sur le processeur, le moteur Intel est plus juste que le moteur habituel (corpus public de réunions), qui annonce {habituel} sur ce poste",
-    "adapt.raison.puce_muette_juste": "la puce graphique Intel n'est pas utilisable en ce moment (pilote ?) ; sur le processeur, le moteur Intel est plus juste que le moteur habituel (corpus public de réunions), mais il n'est pas annoncé plus rapide sur ce poste ({habituel} pour le moteur habituel)",
+    "adapt.raison.puce_muette": "la puce graphique Intel ne répond pas en ce moment (pilote ?) ; sur le processeur, OpenVINO est plus juste que le moteur habituel (corpus public de réunions), qui annonce {habituel} ici",
+    "adapt.raison.puce_muette_juste": "la puce graphique Intel ne répond pas en ce moment (pilote ?) ; sur le processeur, OpenVINO est plus juste que le moteur habituel (corpus public de réunions), sans gain de vitesse ici ({habituel} avec le moteur habituel)",
     "adapt.raison.memoire_juste": "la mémoire de ce poste est trop juste pour le grand modèle",
-    "adapt.raison.processeur_openvino": "le moteur Intel est plus juste que le moteur habituel (2 points d'erreur de moins sur le corpus public de réunions), qui annonce {habituel} sur ce poste",
-    "adapt.raison.processeur_openvino_juste": "le moteur Intel est plus juste que le moteur habituel (2 points d'erreur de moins sur le corpus public de réunions), mais il n'est pas annoncé plus rapide sur ce poste ({habituel} pour le moteur habituel)",
+    "adapt.raison.processeur_openvino": "OpenVINO fait 2 points d'erreur de moins que le moteur habituel (corpus public de réunions), qui annonce {habituel} ici",
+    "adapt.raison.processeur_openvino_juste": "OpenVINO fait 2 points d'erreur de moins que le moteur habituel (corpus public de réunions), sans gain de vitesse ici ({habituel} avec le moteur habituel)",
     "adapt.raison.processeur_modeste": "sur ce processeur, la qualité maximale prendrait plus de temps que la réunion",
     "adapt.raison.processeur_puissant": "ce processeur tient la qualité maximale en moins de temps que la réunion",
     "adapt.raison.campagne": "c'est le réglage retenu par la campagne de mesure menée sur ce poste",
@@ -796,10 +727,7 @@ _FR: dict[str, str] = {
     "regle.fleche_interdite": "Une correction ne peut pas contenir la flèche « => ».",
     "regle.diese_interdit": "Une correction ne peut pas commencer par « # ».",
     "regle.deja_enregistree": "Cette règle était déjà enregistrée.",
-    "regle.conflit": (
-        "Une règle existe déjà pour « {source} », vers « {cible} ». Modifiez-la dans le "
-        "panneau « Corrections » si elle n'est plus la bonne."
-    ),
+    "regle.conflit": "Une règle existe déjà pour « {source} », vers « {cible} ». Modifiez-la dans Vocabulaire, Corrections si elle n'est plus la bonne.",
     "regle.ajoutee": "Règle « {source} » vers « {cible} » ajoutée aux corrections.",
 
     # -- nom des fichiers produits (app/nommage.py) ------------------------
@@ -821,11 +749,7 @@ _FR: dict[str, str] = {
     # -- vue de lecture (app/lecture.py) -----------------------------------
     "lect.absent": "Ce fichier n'existe plus à l'emplacement indiqué.",
     "lect.illisible": "Ce fichier n'a pas pu être lu.",
-    "lect.sans_compagnon": (
-        "Cette transcription n'a pas de fichier compagnon : elle a été produite avant "
-        "cette fonction, ou l'option était coupée. Le texte s'affiche normalement, sans "
-        "indication de confiance."
-    ),
+    "lect.sans_compagnon": "Pas de fichier compagnon (.json) : ni mots douteux, ni écoute mot à mot.",
     "lect.tronque": (
         "Ce fichier est très long : seul son début est affiché ici, et la confiance des "
         "mots n'est pas chargée. Ouvrez le fichier pour tout voir."
@@ -835,18 +759,36 @@ _FR: dict[str, str] = {
     "lect.non_interpretee": "Cette correction n'a pas pu être interprétée.",
     "lect.non_retrouve": "« {source} » n'a pas été retrouvé dans ce texte.",
     "lect.non_reecrit": "Le fichier n'a pas pu être réécrit.",
-    "lect.remplacements.un": "{n} remplacement dans le fichier.",
-    "lect.remplacements.autres": "{n} remplacements dans le fichier.",
+    "lect.remplacements.un": "{n} endroit corrigé.",
+    "lect.remplacements.autres": "{n} endroits corrigés.",
     "lect.apercu.un": "{n} endroit du fichier sera modifié :",
     "lect.deja_corrige": "« {cible} » est déjà écrit ainsi partout dans ce texte.",
     "lect.apercu.autres": "{n} endroits du fichier seront modifiés :",
-    "lect.annulation.aucune": "Aucune correction à annuler pour ce fichier.",
+    "lect.annulation.aucune": "Rien à annuler.",
     "lect.annulation.modifie": (
         "Le fichier a été modifié depuis la correction : elle n'a pas été annulée, "
         "pour ne pas écraser ces changements."),
-    "lect.annulation.faite": "Correction annulée, le fichier est revenu à son état précédent.",
-    "lect.annulation.regle": "La règle mémorisée a été retirée.",
-    "lect.annulation.proposition": "La proposition ajoutée au vocabulaire a été retirée.",
+    "lect.annulation.faite": "Correction annulée.",
+    "lect.annulation.regle": "Règle retirée.",
+    "lect.annulation.proposition": "Proposition retirée.",
+    "lect.original.remis": "Texte d'origine remis. Ctrl+Z pour revenir en arrière.",
+    "lect.original.deja": "Le texte est déjà dans son état d'origine.",
+    "lect.original.absent": "Aucun état d'origine n'est gardé pour cette transcription.",
+    "lect.recale": "Ce fichier a été modifié hors de Scribouille : le texte affiché est le sien, et l'écoute mot à mot a été recalée dessus.",
+    "lect.refus.locuteur_inconnu": "Ce locuteur n'est plus dans le texte.",
+    "lect.refus.absent": "Ce fichier n'existe plus à l'emplacement indiqué.",
+    "lect.refus.illisible": "Ce fichier n'a pas pu être lu.",
+    "lect.refus.introuvable": "Cet endroit n'est plus dans le texte : rien n'a été changé.",
+    "lect.refus.non_reecrit": "Le fichier n'a pas pu être réécrit.",
+    "lect.refus.modifie_dehors": "Le fichier a changé depuis son ouverture : rien n'a été écrit.",
+    "lect.refus.ecart": "Écriture annulée : l'écran, le fichier et le compagnon auraient différé. Rien n'a changé.",
+    "lect.refus.chevauchement": "Deux endroits se chevauchent : rien n'a été écrit.",
+    "lect.refus.hors_paragraphe": "Une modification doit tenir dans un seul paragraphe.",
+    "lect.refus.vide": "Le texte ne peut pas être vidé entièrement.",
+    "lect.modifie_pendant": "Le fichier a changé depuis son ouverture : rien n'a été écrit.",
+    "lect.compagnon_desaccorde": "Ce fichier a été modifié hors de Scribouille : le texte affiché est le sien, sans mots douteux ni écoute mot à mot.",
+    "lect.locuteurs.autres": "{n} locuteurs détectés",
+    "lect.locuteurs.un": "{n} locuteur détecté",
 
     # -- espace occupé (app/stockage.py) -----------------------------------
     "stock.modeles.libelle": "Modèles de transcription",
@@ -855,10 +797,7 @@ _FR: dict[str, str] = {
         "retéléchargent au besoin."
     ),
     "stock.donnees.libelle": "Vos données",
-    "stock.donnees.detail": (
-        "Réglages, glossaire, corrections, gabarit, journaux et fichiers de reprise. "
-        "C'est ce que l'export du panneau « Mes données » sait sauvegarder."
-    ),
+    "stock.donnees.detail": "Réglages, glossaire, corrections, gabarit, journaux et fichiers de reprise. C'est ce que l'export (Réglages, Application, Mes données) sauvegarde.",
     "stock.programme.libelle": "Programme",
     "stock.programme.detail_installee": (
         "Le programme installé, dans votre espace utilisateur. Il se remplace par une "
@@ -908,11 +847,7 @@ _FR: dict[str, str] = {
     "arch.type": "Archive de données Scribouille (*.zip)",
     "arch.tous_fichiers": "Tous les fichiers (*.*)",
     "arch.aucun_emplacement": "Aucun emplacement d'enregistrement choisi.",
-    "arch.export_message": (
-        "{termes} terme(s) de glossaire, {regles} règle(s) de correction et vos réglages "
-        "ont été enregistrés dans « {chemin} ». Le jeton Hugging Face, les journaux et "
-        "les modèles n'y sont pas."
-    ),
+    "arch.export_message": "Glossaire ({termes} termes), corrections ({regles} règles) et réglages enregistrés dans « {chemin} ». Ni le jeton Hugging Face, ni les journaux, ni les modèles n'y sont.",
     "arch.membre_inattendu": (
         "L'archive contient un élément inattendu (« {nom} »). Ce n'est pas un export "
         "Scribouille, ou il a été modifié."
@@ -974,10 +909,7 @@ _FR: dict[str, str] = {
         "{libelle} : « {valeur} » n'existe pas sur ce poste, votre réglage actuel est "
         "conservé."
     ),
-    "arch.import_message": (
-        "Import terminé : {termes} terme(s) de glossaire, {regles} règle(s) de correction "
-        "et vos réglages ont été remplacés."
-    ),
+    "arch.import_message": "Import terminé : glossaire ({termes} termes), corrections ({regles} règles) et réglages remplacés.",
     "arch.message_sauvegarde": (
         "Vos données d'avant l'import ont été enregistrées dans « {chemin} ». Ce fichier "
         "se réimporte de la même façon si vous voulez revenir en arrière."
@@ -1026,7 +958,7 @@ _FR: dict[str, str] = {
     "etat.arrete": "Arrêté",
     "phase.transcription": "Transcription",
     "phase.chargement": "Chargement du modèle",
-    "trait.modele_charge": "Modèle chargé en {duree}, transcription en cours.",
+    "trait.modele_charge": "Modèle chargé, transcription en cours.",
     "app.titre_fin.un": "{nom} : transcription terminée",
     "app.titre_fin.autres": "{nom} : {n} transcriptions terminées",
     "phase.locuteurs": "Locuteurs",
@@ -1127,8 +1059,12 @@ _FR: dict[str, str] = {
     "app.comp.dialogue_reference": "Transcriptions (*.txt;*.srt;*.vtt;*.json)",
     "app.comp.fichier_absent": "Choisissez d'abord l'enregistrement à comparer.",
     "app.comp.debut_illisible": "Début illisible : écrivez-le sous la forme 00:05:00.",
-    "app.depot.dossier": "Dossier « {nom} » : {retenus} fichier(s) audio retenu(s)",
-    "app.depot.ignores": ", {n} entrée(s) ignorée(s)",
+    "app.depot.dossier.un": "Dossier « {nom} » : {n} fichier audio retenu",
+    "app.depot.dossier.autres": "Dossier « {nom} » : {n} fichiers audio retenus",
+    "app.depot.ignores.un": ", {n} entrée ignorée",
+    "app.depot.ignores.autres": ", {n} entrées ignorées",
+    "app.depot.ignores_noms.un": "{noms} ignoré : ce n'est pas un enregistrement audio ou vidéo.",
+    "app.depot.ignores_noms.autres": "{n} fichiers ignorés ({noms}) : ce ne sont pas des enregistrements audio ou vidéo.",
     "app.depot.sous_dossiers": ". Les sous-dossiers ne sont pas parcourus.",
     "app.depot.aucun": "Aucun fichier audio exploitable dans ce dépôt.",
     "app.depot.deja.un": "Ce fichier est déjà dans la file, en attente ou en cours.",
@@ -1154,24 +1090,12 @@ _FR: dict[str, str] = {
     "app.demarrer.file_vide": "Aucun fichier en attente dans la file.",
     "app.demarrer.lancee": "Démarrage de la file.",
     "app.diar.ignoree": "Séparation des locuteurs ignorée : {raison}",
-    "app.diar.non_installee": (
-        "La séparation des locuteurs est cochée mais n'est pas installée : les "
-        "transcriptions ne distingueront pas les voix. Elle s'installe une fois "
-        "(environ 3,6 Go) depuis le panneau « Locuteurs »."
-    ),
+    "app.diar.non_installee": "Séparation des locuteurs cochée mais non installée : les voix ne seront pas distinguées. Elle s'installe une fois (environ 3,6 Go), bloc « Locuteurs » plus bas.",
     "app.diar.sans_jeton": (
         "Aucun jeton Hugging Face : la transcription se fera sans étiquettes de locuteur."
     ),
-    "app.modele.dossier_inutilisable": (
-        "Le modèle doit être téléchargé, mais le dossier prévu « {dossier} » n'est pas "
-        "utilisable. {probleme} Choisissez un autre emplacement dans les réglages, "
-        "section « Modèles »."
-    ),
-    "app.modele.place": (
-        "Il faut environ {taille} pour télécharger ce modèle, et il ne reste que {libre} "
-        "Go sur le disque de « {dossier} ». Libérez de la place, ou rangez les modèles "
-        "sur un autre disque dans les réglages, section « Modèles »."
-    ),
+    "app.modele.dossier_inutilisable": "Le modèle doit être téléchargé, mais le dossier prévu « {dossier} » n'est pas utilisable. {probleme} Choisissez un autre emplacement dans Réglages, Moteur et modèles.",
+    "app.modele.place": "Ce modèle demande environ {taille}, et il ne reste que {libre} Go sur le disque de « {dossier} ». Libérez de la place, ou rangez les modèles sur un autre disque (Réglages, Moteur et modèles).",
     "app.modele.hors_ligne": (
         "Ce modèle n'est pas encore sur la machine, il pèse environ {taille} et doit être "
         "téléchargé une première fois. Or aucune connexion Internet n'a été trouvée. "
@@ -1578,34 +1502,18 @@ _EN: dict[str, str] = {
     "unite.octets": "{n} bytes",
 
     "err.memoire.titre": "Not enough memory",
-    "err.memoire.msg": (
-        "This machine does not have enough RAM for that model. Try the \"Fast\" preset, "
-        "turn off speaker separation, or close the other applications you have open."
-    ),
+    "err.memoire.msg": "Not enough memory for this model. Choose Fast quality, turn off speaker separation or close other applications.",
     "err.disque.titre": "Disk full",
     "err.disque.msg": (
         "There is no longer enough space on the disk to write the result or download the "
         "model. Free some space, then start again."
     ),
-    "err.jeton.titre": "Access to the speaker model was refused",
-    "err.jeton.msg": (
-        "The Hugging Face token is missing or invalid, or the pyannote model terms have "
-        "not been accepted. Open the \"Speakers\" panel to review the steps. "
-        "Transcription on its own works without a token."
-    ),
+    "err.jeton.titre": "Access to the speaker model refused",
+    "err.jeton.msg": "Hugging Face token missing or invalid, or the pyannote model terms not accepted. The steps are in Settings, Transcription, \"Speakers\" block. Transcription alone works without a token.",
     "err.reseau.titre": "Download failed",
-    "err.reseau.msg": (
-        "The model is not on this machine yet and the download failed. Check your "
-        "Internet connection, then start again: once downloaded, the model stays local "
-        "and the application no longer needs the network."
-    ),
+    "err.reseau.msg": "The model is not on this computer yet and its download failed. Check the connection, then try again: once downloaded, it stays here and the network is no longer needed.",
     "err.modele.titre": "Transcription model unusable",
-    "err.modele.msg": (
-        "The model files are missing or damaged, and the folder could not be renewed "
-        "automatically. Close any other application that might be holding it, then "
-        "start the transcription again: the model will be downloaded afresh. The models "
-        "folder is shown in the settings, \"Models\" section."
-    ),
+    "err.modele.msg": "The model files are missing or damaged, and the folder could not be renewed. Close any application that might hold it, then try again: the model will be downloaded again. Its folder is set in Settings, Engine and models.",
     "err.cuda.titre": "NVIDIA acceleration unavailable",
     "err.cuda.msg": (
         "The CUDA libraries (cuBLAS, cuDNN) could not be loaded. Run the installer "
@@ -1627,7 +1535,7 @@ _EN: dict[str, str] = {
     "preset.qualite.nom": "Highest quality",
     "preset.qualite.resume": "The best text possible. For meetings and anything you will read back.",
     "preset.rapide.nom": "Fast",
-    "preset.rapide.resume": "About four times faster, quality one notch below.",
+    "preset.rapide.resume": "Faster, slightly less accurate.",
     "preset.personnalise": "{nom}, custom settings",
     "modele.qualite.depannage": "Fallback",
     "modele.qualite.faible": "Low",
@@ -1635,40 +1543,20 @@ _EN: dict[str, str] = {
     "modele.qualite.bonne": "Good",
     "modele.qualite.tres_bonne": "Very good",
     "modele.qualite.excellente": "Excellent",
-    "reco.proposee": (
-        "Recommended setting for this computer: {resume}, about {duree} for an hour of "
-        "audio. It is applied in one click (Settings, Speed of this machine, \"Recognise "
-        "this computer\")."
-    ),
+    "reco.proposee": "Recommended setting for this computer: {resume}, about {duree} per hour of audio. One click applies it (Settings, This computer, \"Recognise this computer\").",
     "reco.en_place": (
         "The setting in use is the one recommended for this computer: {resume}, about "
         "{duree} for an hour of audio."
     ),
-    "reco.memoire_juste": (
-        "RAM detected: {ram} GB. That is too tight for large-v3, the \"Fast\" preset is "
-        "the better choice here."
-    ),
-    "reco.cuda": (
-        "NVIDIA card in use: the \"Highest quality\" preset runs comfortably faster than "
-        "real time."
-    ),
-    "reco.processeur": (
-        "Transcription on the CPU: the \"Highest quality\" preset is the right choice for "
-        "meetings, just start it and let it run."
-    ),
-    "reco.processeur_lent": (
-        "Low-power processor: one hour of meeting would take about {qualite} with "
-        "\"Highest quality\", against {rapide} with \"Fast\". The benchmark (settings, "
-        "Speed of this machine section) measures the real figures in a few minutes."
-    ),
+    "reco.memoire_juste": "Memory detected: {ram} GB. That is tight for large-v3: Fast quality is recommended.",
+    "reco.cuda": "NVIDIA card in use: Highest quality runs much faster than real time.",
+    "reco.processeur": "Transcribing on the processor: Highest quality suits meetings, just start it and let it run.",
+    "reco.processeur_lent": "Low-power processor: one hour of meeting would take about {qualite} in Highest quality, against {rapide} in Fast. The benchmark (Settings, Benchmark) measures the real figures in a few minutes.",
     "reco.openvino": (
         "Intel chip used through OpenVINO: one hour of meeting would take about "
         "{qualite} with \"Highest quality\", {rapide} with \"Fast\"."
     ),
-    "avert.memoire_tres_serree": (
-        "This machine reports {ram} GB of RAM. The large-v3 model is likely to run out of "
-        "memory: use the \"Fast\" preset instead."
-    ),
+    "avert.memoire_tres_serree": "This computer reports {ram} GB of memory: large-v3 may saturate it. Prefer Fast quality.",
     "avert.memoire_serree_diar": (
         "RAM: {ram} GB. large-v3 plus speaker separation still fits, because the two "
         "stages run one after the other and are never loaded at the same time. Close any "
@@ -1699,14 +1587,8 @@ _EN: dict[str, str] = {
         "NVIDIA card detected, but the CUDA libraries used by CTranslate2 are not "
         "answering. Run the installer again to put them in place."
     ),
-    "gpu.note.amd": (
-        "Not used: transcription runs on the CPU. The engine can compute on recent AMD "
-        "cards (ROCm), but the application does not ship it yet."
-    ),
-    "gpu.note.intel": (
-        "Integrated graphics. The OpenVINO engine, an optional install (settings, Speed "
-        "of this machine section), can transcribe on it; without it, the CPU works alone."
-    ),
+    "gpu.note.amd": "Not used: the compute engine for AMD cards (ROCm) is not shipped; transcription runs on the processor.",
+    "gpu.note.intel": "Integrated graphics. OpenVINO, an optional install (Settings, Engine and models), can transcribe on it; without it, the processor works alone.",
     "gpu.note.autre": "Not used.",
     "npu.note": (
         "Detected, not used. An NPU mainly targets battery life; transcription runs "
@@ -1734,10 +1616,7 @@ _EN: dict[str, str] = {
     "audio.decodage.titre": "Decoding failed",
     "audio.decodage.msg": "The decoder could not be started on \"{nom}\".",
     "audio.illisible.titre": "Unreadable audio file",
-    "audio.illisible.msg": (
-        "\"{nom}\" could not be decoded: the file may be corrupted, incomplete, or "
-        "contain no audio track. The FFmpeg details are in logs/{journal}."
-    ),
+    "audio.illisible.msg": "\"{nom}\" cannot be read: damaged or incomplete file, or no audio track. FFmpeg details: logs/{journal}.",
     "audio.muet.titre": "No sound found",
     "audio.muet.msg": "\"{nom}\" contains no usable audio data.",
 
@@ -1828,10 +1707,7 @@ _EN: dict[str, str] = {
     "ov.peripherique.gpu": "Intel graphics",
     "ov.peripherique.npu": "Intel NPU",
     "ov.modele_absent.titre": "Model without an OpenVINO version",
-    "ov.modele_absent.msg": (
-        "Model {modele} does not exist in OpenVINO format. Pick a model from the "
-        "catalogue, or go back to the usual engine (settings, Speed of this machine)."
-    ),
+    "ov.modele_absent.msg": "Model {modele} does not exist in OpenVINO format. Choose a model from the catalogue, or go back to the usual engine (Settings, Engine and models).",
     "ov.chargement": "Loading model {modele} on {peripherique} (OpenVINO)...",
     "ov.repli": (
         "OpenVINO could not run on {peripherique}: transcription carries on with the "
@@ -1905,10 +1781,7 @@ _EN: dict[str, str] = {
     "comp.non": "no",
     "comp.un_a_un": "one by one",
     "comp.openvino_absent.titre": "OpenVINO is not installed",
-    "comp.openvino_absent.msg": (
-        "The comparison needs both engines. Install OpenVINO from the settings (Speed of "
-        "this computer) or with --installer-openvino, then run it again."
-    ),
+    "comp.openvino_absent.msg": "The comparison needs both engines. Install OpenVINO (Settings, Engine and models, or --installer-openvino), then try again.",
     "comp.etape.telechargement": "Downloading the {modele} model ({taille})...",
     "comp.etape.decodage": "Reading the excerpt...",
     "comp.etape.moteur": "Transcribing with {moteur} ({duree} of audio)...",
@@ -2034,19 +1907,9 @@ _EN: dict[str, str] = {
     "moteur.taille_inconnue": "a few hundred MB up to 3 GB",
 
     "diar.locuteur": "Speaker {n}",
-    "diar.indispo.installee": (
-        "Speaker separation is not installed yet. It relies on PyTorch, about 3.6 GB of "
-        "components to install once. The \"Install speaker separation\" button in the "
-        "\"Speakers\" panel takes care of it."
-    ),
-    "diar.indispo.torch": (
-        "PyTorch is not installed. The \"Install speaker separation\" button in the "
-        "\"Speakers\" panel puts it in place for you."
-    ),
-    "diar.indispo.pyannote": (
-        "The pyannote.audio library is not installed. The \"Install speaker separation\" "
-        "button in the \"Speakers\" panel puts it in place for you."
-    ),
+    "diar.indispo.installee": "Speaker separation is not installed: about 3.6 GB of components (PyTorch) to set up once, with the button in the \"Speakers\" block (Settings, Transcription).",
+    "diar.indispo.torch": "PyTorch is not installed. The button in the \"Speakers\" block (Settings, Transcription) installs it for you.",
+    "diar.indispo.pyannote": "pyannote.audio is not installed. The button in the \"Speakers\" block (Settings, Transcription) installs it for you.",
     "diar.inaccessible.titre": "Speaker model unreachable",
     "diar.inaccessible.depot": (
         "The {depot} repository returned nothing, usually because its terms of use have "
@@ -2055,10 +1918,7 @@ _EN: dict[str, str] = {
     "diar.inaccessible.aucun": "No pyannote repository could be loaded.",
     "diar.indisponible.titre": "Speaker separation unavailable",
     "diar.jeton_manquant.titre": "Hugging Face token missing",
-    "diar.jeton_manquant.msg": (
-        "Speaker separation needs a free token. Open the \"Speakers\" panel: the steps "
-        "are set out there, three of them."
-    ),
+    "diar.jeton_manquant.msg": "Speaker separation needs a free token. The three steps are in Settings, Transcription, \"Speakers\" block.",
     "diar.chargement": "Loading the speaker model ({depot})...",
     "diar.analyse": "Analysing voices...",
     "diar.guide.etape1": (
@@ -2123,25 +1983,25 @@ _EN: dict[str, str] = {
     "adapt.source.campagne": "the measurement campaign",
     "adapt.source.banc": "the benchmark",
     "adapt.source.table": "the decision table",
-    "adapt.note.mesure_caduque": "The setting measured by {source} no longer fits the current hardware (graphics chip or Intel engine missing): proposal based on the hardware.",
-    "adapt.note.installer_openvino": "Intel graphics chip present: installing the Intel engine (OpenVINO, about 90 MB, button below) would let it do the computing (an hour in about 7 minutes on a Core Ultra 5, measured).",
-    "adapt.note.installer_openvino_processeur": "Install the Intel engine (OpenVINO, about 90 MB, button below): on the public meeting corpus it makes 2 points fewer errors than the usual engine, and it was twice as fast on the processors measured. The benchmark checks the speed on this computer.",
+    "adapt.note.mesure_caduque": "The setting measured by {source} no longer fits the current hardware (graphics chip or OpenVINO missing): proposal based on the hardware.",
+    "adapt.note.installer_openvino": "Intel graphics present: installing OpenVINO (about 90 MB, Settings, Engine and models) would run the calculation there (one hour in about 7 minutes, measured on a Core Ultra 5).",
+    "adapt.note.installer_openvino_processeur": "Install OpenVINO (about 90 MB, Settings, Engine and models): 2 points fewer errors than the usual engine on the public meeting corpus, and twice as fast on the processors measured. The benchmark checks the speed here.",
     "adapt.note.pilote_ancien": "Intel graphics driver {version}: OpenVINO needs version {minimum} or newer; a driver update is recommended.",
-    "adapt.note.sans_confiance": "What you lose: the Intel engine does not give a confidence for each word, so the reading view will not highlight any doubtful word.",
+    "adapt.note.sans_confiance": "The trade-off: OpenVINO does not give word confidence, so no doubtful word will be flagged in review.",
     "adapt.note.batterie": "On battery: with \"adapt automatically\", the transcription keeps the chosen pace until the laptop is plugged in.",
     "adapt.note.mode_efficacite": "The Windows power mode is set to efficiency: on mains power, \"Best performance\" speeds up transcription (Settings, System, Power). The application does not change this setting.",
     "adapt.telechargement": "The model is not on this computer yet: {taille} will be downloaded when the first transcription starts.",
-    "adapt.moteur_ov": "Intel engine on {peripherique}",
+    "adapt.moteur_ov": "OpenVINO on {peripherique}",
     "adapt.moteur_cuda": "NVIDIA card",
     "adapt.moteur_ct2": "processor, usual engine",
     "adapt.raison.nvidia": "an NVIDIA card computes much faster than the processor",
     "adapt.raison.puce_intel": "the Intel graphics chip is as accurate as maximum quality on the processor (measured on a Core Ultra 5), which announces {habituel} on this computer",
     "adapt.raison.puce_intel_juste": "the Intel graphics chip is as accurate as maximum quality on the processor (measured on a Core Ultra 5); on this computer it is not announced faster ({habituel} for maximum quality)",
-    "adapt.raison.puce_muette": "the Intel graphics chip cannot be used right now (driver?); on the processor, the Intel engine is more accurate than the usual engine (public meeting corpus), which announces {habituel} on this computer",
-    "adapt.raison.puce_muette_juste": "the Intel graphics chip cannot be used right now (driver?); on the processor, the Intel engine is more accurate than the usual engine (public meeting corpus), but it is not announced faster on this computer ({habituel} for the usual engine)",
+    "adapt.raison.puce_muette": "the Intel graphics chip is not responding right now (driver?); on the processor, OpenVINO is more accurate than the usual engine (public meeting corpus), which announces {habituel} here",
+    "adapt.raison.puce_muette_juste": "the Intel graphics chip is not responding right now (driver?); on the processor, OpenVINO is more accurate than the usual engine (public meeting corpus), with no speed gain here ({habituel} with the usual engine)",
     "adapt.raison.memoire_juste": "this computer's memory is too tight for the large model",
-    "adapt.raison.processeur_openvino": "the Intel engine is more accurate than the usual engine (2 points fewer errors on the public meeting corpus), which announces {habituel} on this computer",
-    "adapt.raison.processeur_openvino_juste": "the Intel engine is more accurate than the usual engine (2 points fewer errors on the public meeting corpus), but it is not announced faster on this computer ({habituel} for the usual engine)",
+    "adapt.raison.processeur_openvino": "OpenVINO makes 2 points fewer errors than the usual engine (public meeting corpus), which announces {habituel} here",
+    "adapt.raison.processeur_openvino_juste": "OpenVINO makes 2 points fewer errors than the usual engine (public meeting corpus), with no speed gain here ({habituel} with the usual engine)",
     "adapt.raison.processeur_modeste": "on this processor, maximum quality would take longer than the meeting",
     "adapt.raison.processeur_puissant": "this processor handles maximum quality in less time than the meeting",
     "adapt.raison.campagne": "it is the setting chosen by the measurement campaign run on this computer",
@@ -2271,10 +2131,7 @@ _EN: dict[str, str] = {
     "regle.fleche_interdite": "A correction cannot contain the \"=>\" arrow.",
     "regle.diese_interdit": "A correction cannot start with \"#\".",
     "regle.deja_enregistree": "This rule was already saved.",
-    "regle.conflit": (
-        "A rule already exists for \"{source}\", pointing to \"{cible}\". Edit it in the "
-        "\"Corrections\" panel if it is no longer the right one."
-    ),
+    "regle.conflit": "A rule already exists for \"{source}\", to \"{cible}\". Change it in Vocabulary, Corrections if it is no longer right.",
     "regle.ajoutee": "Rule \"{source}\" to \"{cible}\" added to your corrections.",
 
     "nom.caracteres_interdits": (
@@ -2294,11 +2151,7 @@ _EN: dict[str, str] = {
 
     "lect.absent": "This file is no longer at the given location.",
     "lect.illisible": "This file could not be read.",
-    "lect.sans_compagnon": (
-        "This transcript has no companion file: it was produced before that feature "
-        "existed, or the option was off. The text is shown normally, without confidence "
-        "marks."
-    ),
+    "lect.sans_compagnon": "No companion file (.json): no doubtful words, no word-by-word listening.",
     "lect.tronque": (
         "This file is very long: only its beginning is shown here, and word confidence is "
         "not loaded. Open the file to see everything."
@@ -2308,18 +2161,36 @@ _EN: dict[str, str] = {
     "lect.non_interpretee": "This correction could not be understood.",
     "lect.non_retrouve": "\"{source}\" was not found in this text.",
     "lect.non_reecrit": "The file could not be written back.",
-    "lect.remplacements.un": "{n} replacement in the file.",
-    "lect.remplacements.autres": "{n} replacements in the file.",
+    "lect.remplacements.un": "{n} place corrected.",
+    "lect.remplacements.autres": "{n} places corrected.",
     "lect.apercu.un": "{n} place in the file will be changed:",
     "lect.deja_corrige": "\"{cible}\" is already written this way throughout this text.",
     "lect.apercu.autres": "{n} places in the file will be changed:",
-    "lect.annulation.aucune": "No correction to undo for this file.",
+    "lect.annulation.aucune": "Nothing to undo.",
     "lect.annulation.modifie": (
         "The file has changed since the correction: it was not undone, so as not to "
         "overwrite those changes."),
-    "lect.annulation.faite": "Correction undone, the file is back to its previous state.",
-    "lect.annulation.regle": "The saved rule has been removed.",
-    "lect.annulation.proposition": "The suggestion added to the vocabulary has been removed.",
+    "lect.annulation.faite": "Correction undone.",
+    "lect.annulation.regle": "Rule removed.",
+    "lect.annulation.proposition": "Suggestion removed.",
+    "lect.original.remis": "Original text restored. Ctrl+Z to go back.",
+    "lect.original.deja": "The text is already in its original state.",
+    "lect.original.absent": "No original state is kept for this transcript.",
+    "lect.recale": "This file was changed outside Scribouille: the text shown is the file's, and word-by-word listening was realigned to it.",
+    "lect.refus.locuteur_inconnu": "This speaker is no longer in the text.",
+    "lect.refus.absent": "This file is no longer at the given location.",
+    "lect.refus.illisible": "This file could not be read.",
+    "lect.refus.introuvable": "This place is no longer in the text: nothing was changed.",
+    "lect.refus.non_reecrit": "The file could not be written back.",
+    "lect.refus.modifie_dehors": "The file changed since it was opened: nothing was written.",
+    "lect.refus.ecart": "Write cancelled: the screen, the file and the companion would have differed. Nothing changed.",
+    "lect.refus.chevauchement": "Two places overlap: nothing was written.",
+    "lect.refus.hors_paragraphe": "A change must stay within one paragraph.",
+    "lect.refus.vide": "The text cannot be emptied entirely.",
+    "lect.modifie_pendant": "The file changed since it was opened: nothing was written.",
+    "lect.compagnon_desaccorde": "This file was changed outside Scribouille: the text shown is the file's, without doubtful words or word-by-word listening.",
+    "lect.locuteurs.autres": "{n} speakers detected",
+    "lect.locuteurs.un": "{n} speaker detected",
 
     "stock.modeles.libelle": "Transcription models",
     "stock.modeles.detail": (
@@ -2327,10 +2198,7 @@ _EN: dict[str, str] = {
         "again when needed."
     ),
     "stock.donnees.libelle": "Your data",
-    "stock.donnees.detail": (
-        "Settings, glossary, corrections, prompt template, logs and resume files. This is "
-        "what the export in the \"My data\" panel saves."
-    ),
+    "stock.donnees.detail": "Settings, glossary, corrections, template, logs and resume files. This is what the export (Settings, Application, My data) saves.",
     "stock.programme.libelle": "Program",
     "stock.programme.detail_installee": (
         "The installed program, in your user space. It is replaced by reinstalling, never "
@@ -2379,11 +2247,7 @@ _EN: dict[str, str] = {
     "arch.type": "Scribouille data archive (*.zip)",
     "arch.tous_fichiers": "All files (*.*)",
     "arch.aucun_emplacement": "No save location was chosen.",
-    "arch.export_message": (
-        "{termes} glossary term(s), {regles} correction rule(s) and your settings have "
-        "been saved to \"{chemin}\". The Hugging Face token, the logs and the models are "
-        "not in it."
-    ),
+    "arch.export_message": "Glossary ({termes} terms), corrections ({regles} rules) and settings saved to \"{chemin}\". Neither the Hugging Face token, the logs nor the models are in it.",
     "arch.membre_inattendu": (
         "The archive contains an unexpected item (\"{nom}\"). This is not a Scribouille "
         "export, or it has been modified."
@@ -2443,10 +2307,7 @@ _EN: dict[str, str] = {
         "{libelle}: \"{valeur}\" does not exist on this machine, your current setting is "
         "kept."
     ),
-    "arch.import_message": (
-        "Import finished: {termes} glossary term(s), {regles} correction rule(s) and your "
-        "settings have been replaced."
-    ),
+    "arch.import_message": "Import finished: glossary ({termes} terms), corrections ({regles} rules) and settings replaced.",
     "arch.message_sauvegarde": (
         "Your data from before the import has been saved to \"{chemin}\". That file can be "
         "imported the same way if you want to go back."
@@ -2490,7 +2351,7 @@ _EN: dict[str, str] = {
     "etat.arrete": "Stopped",
     "phase.transcription": "Transcribing",
     "phase.chargement": "Loading the model",
-    "trait.modele_charge": "Model loaded in {duree}, transcribing.",
+    "trait.modele_charge": "Model loaded, transcribing.",
     "app.titre_fin.un": "{nom}: transcription finished",
     "app.titre_fin.autres": "{nom}: {n} transcriptions finished",
     "phase.locuteurs": "Speakers",
@@ -2589,8 +2450,12 @@ _EN: dict[str, str] = {
     "app.comp.dialogue_reference": "Transcripts (*.txt;*.srt;*.vtt;*.json)",
     "app.comp.fichier_absent": "First choose the recording to compare.",
     "app.comp.debut_illisible": "Unreadable start: write it as 00:05:00.",
-    "app.depot.dossier": "Folder \"{nom}\": {retenus} audio file(s) kept",
-    "app.depot.ignores": ", {n} item(s) ignored",
+    "app.depot.dossier.un": "Folder \"{nom}\": {n} audio file kept",
+    "app.depot.dossier.autres": "Folder \"{nom}\": {n} audio files kept",
+    "app.depot.ignores.un": ", {n} item ignored",
+    "app.depot.ignores.autres": ", {n} items ignored",
+    "app.depot.ignores_noms.un": "{noms} ignored: not an audio or video recording.",
+    "app.depot.ignores_noms.autres": "{n} files ignored ({noms}): not audio or video recordings.",
     "app.depot.sous_dossiers": ". Subfolders are not scanned.",
     "app.depot.aucun": "No usable audio file in what was dropped.",
     "app.depot.deja.un": "This file is already in the queue, waiting or in progress.",
@@ -2616,23 +2481,12 @@ _EN: dict[str, str] = {
     "app.demarrer.file_vide": "No file waiting in the queue.",
     "app.demarrer.lancee": "Queue started.",
     "app.diar.ignoree": "Speaker separation skipped: {raison}",
-    "app.diar.non_installee": (
-        "Speaker separation is ticked but not installed: transcripts will not tell the "
-        "voices apart. It is installed once (about 3.6 GB) from the \"Speakers\" panel."
-    ),
+    "app.diar.non_installee": "Speaker separation is ticked but not installed: voices will not be told apart. It installs once (about 3.6 GB), \"Speakers\" block below.",
     "app.diar.sans_jeton": (
         "No Hugging Face token: the transcription will run without speaker labels."
     ),
-    "app.modele.dossier_inutilisable": (
-        "The model has to be downloaded, but the folder set aside for it, \"{dossier}\", "
-        "cannot be used. {probleme} Choose another location in the settings, "
-        "\"Models\" section."
-    ),
-    "app.modele.place": (
-        "About {taille} is needed to download this model, and only {libre} GB is left on "
-        "the disk holding \"{dossier}\". Free some space, or store the models on another "
-        "disk in the settings, \"Models\" section."
-    ),
+    "app.modele.dossier_inutilisable": "The model must be downloaded, but the planned folder \"{dossier}\" cannot be used. {probleme} Choose another location in Settings, Engine and models.",
+    "app.modele.place": "This model needs about {taille}, and only {libre} GB are left on the drive of \"{dossier}\". Free some space, or keep the models on another drive (Settings, Engine and models).",
     "app.modele.hors_ligne": (
         "This model is not on the machine yet, it weighs about {taille} and has to be "
         "downloaded once. No Internet connection was found. Connect this machine for the "

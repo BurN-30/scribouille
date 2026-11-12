@@ -9,7 +9,7 @@
     "txt": true,
     "srt": false,
     "vtt": false,
-    "horodatage": false
+    "horodatage": true
   },
   "appliquer_corrections": true,
   "utiliser_glossaire": true,

@@ -62,15 +62,23 @@ Ce que l'application en fait, en trois étages :
 
 **Mesurer.** `scribouille.com --mesurer-vocabulaire --vocabulaire V.toml --reunion AUDIO --reference RELUE` transcrit chaque réunion sans puis avec amorce, applique la correction, et donne le taux d'erreur, le rappel et la précision des termes par catégorie, et le nombre de fausses corrections. Mesurez sur des réunions qui n'ont pas servi à apprendre le vocabulaire.
 
-Les deux fichiers du format 1 sont du texte brut. Ils s'éditent à la main ou depuis les panneaux de l'application. Le panneau **« Mes données »** les exporte, avec vos réglages et votre gabarit pour l'IA s'il existe, dans une archive `scribouille-donnees-AAAA-MM-JJ.zip` que vous rangez où vous voulez, clé USB ou sauvegarde d'entreprise. Un import affiche un aperçu de ce qui va changer et n'écrit rien avant votre confirmation, l'état précédent étant sauvegardé à côté au préalable.
-
----
+Les deux fichiers du format 1 sont du texte brut. Ils s'éditent à la main ou depuis les panneaux de l'application. **Réglages, Application, Mes données** les exporte, avec vos réglages et votre gabarit pour l'IA s'il existe, dans une archive `scribouille-donnees-AAAA-MM-JJ.zip` que vous rangez où vous voulez, clé USB ou sauvegarde d'entreprise. Un import affiche un aperçu de ce qui va changer et n'écrit rien avant votre confirmation, l'état précédent étant sauvegardé à côté au préalable.
 
 ---
 
 ## Relire une transcription
 
-Une transcription s'ouvre **dans l'application**, sans passer par un éditeur : cliquez sur une ligne de l'onglet « Transcriptions », ou sur le bouton de relecture d'un fichier qui vient de se terminer.
+Une transcription s'ouvre **dans l'application**, sur un écran entier, sans passer par un éditeur : bouton **Relire** d'un fichier qui vient de se terminer, ou d'une ligne de la liste « Transcriptions ». Le texte affiché est celui du fichier, paragraphe par paragraphe, avec l'heure en marge (et la voix quand les locuteurs sont séparés). La relecture reprend là où elle s'était arrêtée : défilement et instant d'écoute sont gardés pour chaque transcription.
+
+**Une seule vérité.** L'écran, le `.txt`, le compagnon `.json` et les sous-titres disent toujours la même chose : chaque modification est contrôlée sur les fichiers relus, et une écriture qui les ferait différer est annulée et dite. Un `.txt` retouché dans un éditeur est relu tel quel, à l'ouverture comme pendant la relecture, et l'écoute mot à mot est recalée dessus.
+
+**Écouter.** Un clic sur un mot place l'écoute à ce mot, **Espace** lit ou met en pause (quel que soit le dernier bouton cliqué), les flèches reculent ou avancent de 5 s, la virgule et le point-virgule changent la vitesse (`[` et `]` aussi) ; pendant la lecture, le mot entendu est marqué et le texte suit. Un clic sur l'heure d'un paragraphe le fait entendre depuis son début. L'enregistrement doit être resté à son emplacement.
+
+**Chercher et vérifier.** **Ctrl+F** cherche sans tenir compte de la casse ni des accents, tous les résultats surlignés, **Entrée** ou **F3** pour passer au suivant. La liste **Points à vérifier** parcourt, touche **N** (Maj+N pour revenir), les mots douteux, les remplacements faits par le vocabulaire (annulables un à un), les silences de plus de 5 s et les paragraphes de plus de 90 s ; seules les catégories non vides sont proposées. Avec OpenVINO, qui ne donne pas la confiance des mots, il n'y a pas de mots douteux. Après une correction, **N** repart du point où l'on était.
+
+**Locuteurs.** Un clic sur « Locuteur 1 » le renomme dans tout le fichier, son compagnon et ses sous-titres ; un nom déjà porté réunit les deux voix, leurs paragraphes restant distincts.
+
+**Exporter.** Copier le texte (à la lettre du fichier), avec les heures (quand elles sont connues), ou en Markdown ; enregistrer un `.md` à côté de la transcription. Tous partent du même texte que l'écran.
 
 <!-- capture 2 : vue de lecture, un paragraphe avec deux ou trois mots surlignés en ambre, l'infobulle de confiance visible sur l'un d'eux -->
 
@@ -78,11 +86,13 @@ Whisper donne la probabilité de chaque mot qu'il écrit. La vue de lecture **su
 
 Ces valeurs vivent dans un **fichier compagnon `.json`** écrit à côté du texte, quelques dizaines de kilooctets par heure d'audio. Il est facultatif : une transcription plus ancienne, ou produite avec l'option coupée, s'ouvre normalement, simplement sans surlignage.
 
-Sélectionner un mot ou une courte expression propose de le **corriger**. Avant d'appliquer, la fenêtre montre combien d'endroits du fichier changeront, et lesquels, avec leur contexte. L'application applique alors le remplacement au texte affiché et au fichier enregistré, et met le compagnon à jour ; **Annuler la correction** (ou Ctrl+Z) remet le fichier dans son état d'avant. Une correction de casse (« gitlab » vers « GitLab ») est acceptée. Si vous cochez la case prévue, décochée par défaut, la règle rejoint aussi une section dédiée de `corrections.txt`, pour que la même erreur soit corrigée automatiquement dans les transcriptions suivantes.
+Sélectionner un mot ou une courte expression propose de le **corriger** (bouton ou **Entrée** ; au clavier seul, **N** puis **Entrée** corrige le mot atteint). La fenêtre liste chaque endroit du fichier qui contient cette forme, avec son contexte : celui de la sélection est coché, situé par sa position exacte (un morceau de mot ou une sélection qui part d'une apostrophe ne corrige jamais ailleurs), les autres se cochent un par un ou tous à la fois ; **Entrée** valide depuis toute la fenêtre. Une correction de casse (« gitlab » vers « GitLab ») est acceptée. La case « Toujours remplacer », décochée par défaut, fait valoir la règle pour les transcriptions suivantes ; sans elle, le vocabulaire n'apprend rien.
+
+**Réécrire ou supprimer un passage.** Sous une sélection de toute longueur, **Modifier** (touche **E**) ouvre le passage ; sans sélection, **E** ouvre le paragraphe du mot atteint. **Suppr** efface la sélection. Un paragraphe vidé disparaît.
+
+**Annuler.** **Ctrl+Z** défait la dernière modification, puis la précédente, jusqu'à cinquante, même après avoir fermé l'application ; le fichier revient à l'octet près. **Exporter, Revenir au texte d'origine** remet l'état d'avant toute modification, et s'annule lui aussi.
 
 **Copier pour l'IA** met dans le presse-papiers un texte d'instructions, les métadonnées de l'enregistrement et la transcription complète. Le gabarit est un fichier à vous, `gabarit-ia.txt`, créé au premier usage et modifiable depuis les réglages, où `{texte}`, `{fichier}`, `{date}`, `{duree}`, `{locuteurs}` et `{modele}` sont remplacés au moment de la copie.
-
----
 
 ---
 
@@ -102,13 +112,13 @@ La ligne mesurée l'a été en novembre 2026 sur un extrait français de trois m
 
 **Avant la première transcription, l'application annonce une estimation de départ, pas une garantie.** Elle est calée sur des mesures publiques et ajustée au nombre de cœurs de votre machine. L'application affiche le **temps réellement mesuré** après chaque transcription, et l'écrit dans l'en-tête du fichier produit. La séparation des locuteurs ajoute à peu près 0,2 x sur processeur.
 
-**Elles se corrigent toutes seules.** Dès qu'une transcription arrive à son terme, le facteur observé est retenu, et c'est lui qui sert aux annonces suivantes : la carte du matériel précise alors « mesuré sur cette machine ». Les cinq dernières mesures sont moyennées, la plus récente et la plus longue pesant le plus, et chaque combinaison de modèle et de largeur de faisceau est suivie à part. Rien à régler, et rien qui parte en ligne : les mesures vivent dans `calibration.json`, à côté de vos réglages.
+**Elles se corrigent toutes seules.** Dès qu'une transcription arrive à son terme, le facteur observé est retenu, et c'est lui qui sert aux annonces suivantes : les durées affichées se recalculent après chaque fichier. Les cinq dernières mesures sont moyennées, la plus récente et la plus longue pesant le plus, et chaque combinaison de modèle et de largeur de faisceau est suivie à part. Rien à régler, et rien qui parte en ligne : les mesures vivent dans `calibration.json`, à côté de vos réglages.
 
 Ce qui est accéléré : le **processeur, partout**, en quantification `int8` ; les **cartes NVIDIA** en CUDA `float16`, automatiquement, si le pilote et les bibliothèques répondent ; et, depuis la 2.4.0, **la puce graphique Intel intégrée** (et à titre expérimental le NPU) par le moteur **OpenVINO**, à installer en option. Les cartes AMD Radeon sont détectées et affichées mais pas exploitées.
 
 ### Portable Intel (Core Ultra et apparentés)
 
-Sur un portable de 15 W sans carte dédiée, le processeur seul peut mettre plus longtemps à transcrire que la réunion n'a duré. Trois choses changent la donne, toutes dans la section **Vitesse de cette machine** des réglages :
+Sur un portable de 15 W sans carte dédiée, le processeur seul peut mettre plus longtemps à transcrire que la réunion n'a duré. Trois choses changent la donne, toutes dans les réglages (**Poste**, **Moteur et modèles**, **Banc d'essai**) :
 
 - **Le nombre de fils de calcul suit l'architecture.** Les Core Ultra série U mêlent cœurs performants, efficaces et « basse consommation » (2 + 8 + 2 sur un Core Ultra 5 225U). L'application les reconnaît et laisse de côté les cœurs basse consommation, plafonnés à 2,4 GHz et sans cache L3, qui freineraient tout le calcul. Elle empêche aussi Windows de brider la transcription quand la fenêtre est réduite.
 - **Le moteur OpenVINO** (Intel, licence Apache 2.0, environ 90 Mo depuis PyPI) transcrit sur la puce graphique intégrée. Seule mesure publiée sur un processeur de la même famille (Core Ultra 7 265U) : 0,12 x avec le modèle Rapide sur la puce graphique, contre 1,04 x sur son processeur, texte identique. Les modèles au format OpenVINO (0,8 Go pour Rapide, 1,6 Go pour Qualité) se téléchargent au premier usage. Ce que l'on perd : la probabilité de chaque mot, que ce moteur ne donne pas (la vue de relecture ne surligne alors aucun mot incertain). Tout le reste est gardé : segments horodatés, horodatage des mots pour les locuteurs, glossaire, reprise après coupure, arrêt. En cas de panne d'OpenVINO, le moteur habituel prend le relais sans perdre ce qui est déjà transcrit.
@@ -121,7 +131,7 @@ En ligne de commande, sans fenêtre : `scribouille.com --banc` dans le dossier d
 - `cote-a-cote.html`, à ouvrir dans le navigateur : les deux textes horodatés face à face, les passages où ils divergent surlignés, les mots dont CTranslate2 doute soulignés en pointillé, un clic sur une heure réécoute le passage. Cette page contient la transcription, comme les fichiers `textes-*.json` posés à côté : ils restent sur le poste ;
 - `rapport-chiffres.txt` : des nombres seulement (durées de calcul, nombre de mots, taux de désaccord, passages divergents par nature, écarts d'horodatage, segments, termes du glossaire, mots anglais courants, mots incertains), sans un mot de la transcription ni nom ni chemin. Lui peut être transmis.
 
-Depuis la fenêtre : section **Vitesse de cette machine**, bloc **Comparer les deux moteurs** (visible une fois OpenVINO installé). En ligne de commande :
+Depuis la fenêtre : **Réglages, Comparer les moteurs** (une fois OpenVINO installé). En ligne de commande :
 
 ```
 scribouille.com --comparer "D:\Réunions\point-hebdo.m4a" --debut 00:05:00 --duree 600 --ouvrir
@@ -145,9 +155,9 @@ Sur la puce graphique Intel, OpenVINO ne décode qu'en glouton (faisceau 1) : c'
 
 ### Réglage proposé pour ce poste
 
-Au premier lancement, et à chaque clic sur **Reconnaître ce poste** (section **Vitesse de cette machine**), l'application regarde le poste (processeur et familles de cœurs, mémoire, puce graphique Intel vue ou non par OpenVINO, carte NVIDIA, NPU, batterie ou secteur, mode d'alimentation de Windows) et propose un réglage, expliqué en une phrase, avec la durée attendue pour une heure de réunion. Si une campagne ou un banc d'essai a été mené sur le poste, son résultat passe devant la table ; s'il ne tient plus (puce graphique absente, pilote en panne, OpenVINO retiré), la proposition le dit et repart du matériel. Rien ne change sans **Appliquer**, rien n'est téléchargé ni installé d'office : un modèle manquant est annoncé avec sa taille et ne descend qu'au lancement d'une transcription ; le moteur Intel reste à installer par son propre bouton. En ligne de commande : `scribouille.com --reconnaitre`, puis `--reconnaitre --appliquer`.
+Au premier lancement, et à chaque clic sur **Reconnaître ce poste** (**Réglages, Poste**), l'application regarde le poste (processeur et familles de cœurs, mémoire, puce graphique Intel vue ou non par OpenVINO, carte NVIDIA, NPU, batterie ou secteur, mode d'alimentation de Windows) et propose un réglage, expliqué en une phrase, avec la durée attendue pour une heure de réunion. Si une campagne ou un banc d'essai a été mené sur le poste, son résultat passe devant la table ; s'il ne tient plus (puce graphique absente, pilote en panne, OpenVINO retiré), la proposition le dit et repart du matériel. Rien ne change sans **Appliquer**, rien n'est téléchargé ni installé d'office : un modèle manquant est annoncé avec sa taille et ne descend qu'au lancement d'une transcription ; OpenVINO reste à installer par son propre bouton. En ligne de commande : `scribouille.com --reconnaitre`, puis `--reconnaitre --appliquer`.
 
-La table, lue de haut en bas : carte NVIDIA, Qualité maximale sur la carte ; puce graphique Intel vue par OpenVINO, Rapide sur la puce (une heure en 7 minutes environ, aussi juste que Qualité maximale sur le processeur d'après la campagne du PC de test) ; puce Intel présente mais inutilisable, Rapide avec OpenVINO sur le processeur ; moins de 10 Go de mémoire, Rapide ; processeur seul, OpenVINO s'il est installé, sinon Rapide sur un processeur modeste (moins de 12 fils ou série U) et Qualité maximale sur un processeur de bureau. Le rythme proposé est **Équilibré, qui s'adapte tout seul**.
+La table, lue de haut en bas : carte NVIDIA, Qualité maximale sur la carte ; puce graphique Intel vue par OpenVINO, Rapide sur la puce (une heure en 7 minutes environ sur un Core Ultra 5, aussi juste que Qualité maximale sur le processeur d'après la campagne du PC de test) ; puce Intel présente mais inutilisable, Rapide avec OpenVINO sur le processeur ; moins de 10 Go de mémoire, Rapide ; processeur seul, OpenVINO s'il est installé, sinon Rapide sur un processeur modeste (moins de 12 fils ou série U) et Qualité maximale sur un processeur de bureau. Le rythme proposé est **Équilibré, qui s'adapte tout seul**.
 
 ### Travailler pendant une transcription
 
@@ -180,8 +190,6 @@ Pendant une transcription, le poste ne se met plus en veille faute d'activité (
 **Les cartes AMD Radeon** : CTranslate2 sait calculer dessus avec ROCm sous Windows depuis la 4.9.0, mais l'application n'embarque pas encore ces bibliothèques (environ 1,1 Go).
 
 </details>
-
----
 
 ---
 
@@ -245,7 +253,7 @@ Contrôler l'état du poste, le décodeur FFmpeg, les dossiers de travail et la 
 <details>
 <summary>Mettre en place la séparation des locuteurs</summary>
 
-**Depuis l'application, c'est un bouton.** Ouvrez le panneau « Locuteurs », cliquez sur « Installer la séparation des locuteurs ». L'application annonce la taille à télécharger, environ 0,8 Go en variante processeur, l'espace nécessaire sur le disque, 6 Go, et ce qu'il reste de libre. Ces chiffres sont mesurés sur une installation réelle : 0,71 Go de roues téléchargées, 3,55 Go de fichiers posés. Elle demande confirmation, puis télécharge en arrière-plan : la progression s'affiche, l'annulation est possible à tout moment, et la transcription reste utilisable pendant ce temps. Une coupure réseau n'oblige pas à tout retélécharger : ce qui est déjà arrivé est gardé, et une relance ne redemande au réseau que ce qui manque. Elle repose en revanche les fichiers sur le disque, quelques minutes, seule façon sûre de ne pas laisser en place les restes d'une tentative interrompue.
+**Depuis l'application, c'est un bouton.** Dans **Réglages, Transcription**, bloc « Locuteurs », cliquez sur « Installer la séparation des locuteurs ». L'application annonce la taille à télécharger, environ 0,8 Go en variante processeur, l'espace nécessaire sur le disque, 6 Go, et ce qu'il reste de libre. Ces chiffres sont mesurés sur une installation réelle : 0,71 Go de roues téléchargées, 3,55 Go de fichiers posés. Elle demande confirmation, puis télécharge en arrière-plan : la progression s'affiche, l'annulation est possible à tout moment, et la transcription reste utilisable pendant ce temps. Une coupure réseau n'oblige pas à tout retélécharger : ce qui est déjà arrivé est gardé, et une relance ne redemande au réseau que ce qui manque. Elle repose en revanche les fichiers sur le disque, quelques minutes, seule façon sûre de ne pas laisser en place les restes d'une tentative interrompue.
 
 Le bouton choisit tout seul la variante adaptée au poste : processeur par défaut, CUDA si une carte NVIDIA répond. Dans la version installée, les composants vont dans `%LOCALAPPDATA%\Scribouille\extensions`, et un second bouton permet de les retirer, avec leur poids affiché. Depuis les sources, ils vont dans le `.venv` du projet, exactement comme le fait `installer.bat --locuteurs`.
 
@@ -254,7 +262,7 @@ Le bouton choisit tout seul la variante adaptée au poste : processeur par défa
 1. Créez un compte sur [huggingface.co](https://huggingface.co).
 2. Ouvrez [pyannote/speaker-diarization-community-1](https://huggingface.co/pyannote/speaker-diarization-community-1) et acceptez les conditions (licence CC-BY-4.0 ; le formulaire demande une organisation et un usage, et pyannote peut vous écrire de temps en temps). Ce modèle, plus juste que l'ancien 3.1, est essayé en premier ; 3.1 reste utilisé si vous n'avez accepté que ses conditions.
 3. Créez un jeton d'accès **Read** dans les réglages du compte.
-4. Collez-le dans le panneau « Locuteurs » de l'application.
+4. Collez-le dans le bloc « Locuteurs » (Réglages, Transcription).
 
 Le jeton est enregistré dans `jeton_hf.txt`, avec vos données, et n'est jamais versionné. La variable d'environnement `HF_TOKEN` est également reconnue, et prioritaire. Sans jeton, tout fonctionne quand même, simplement sans étiquettes et avec un message clair au lieu d'une erreur.
 
@@ -339,15 +347,13 @@ Une version qui ne peut pas se mettre à jour en place s'annonce en écrivant `[
 
 ---
 
----
-
 ## Diagnostic
 
 Chaque échec est expliqué dans l'interface, en clair : fichier illisible, modèle à télécharger, mémoire insuffisante, jeton absent ou invalide, disque plein, bibliothèques CUDA manquantes. Aucun traceback n'apparaît à l'écran.
 
 Le détail technique part dans un fichier horodaté du dossier `logs/`, dont le nom est cité dans le message d'erreur. Le bouton **« Ouvrir le fichier détaillé »**, dans la barre du bas, l'ouvre directement. Les 30 derniers journaux sont conservés. C'est ce fichier qu'il faut joindre à un rapport de bug, et il est écrit en français : il s'adresse au mainteneur, pas à l'utilisateur.
 
-Trois modes s'ajoutent pour la séparation des locuteurs, sans fenêtre eux non plus. Ce sont ceux que l'application se lance à elle-même, dans un processus de fond, quand on clique sur le bouton du panneau « Locuteurs » ; ils servent aussi à valider une version construite sans rien cliquer :
+Trois modes s'ajoutent pour la séparation des locuteurs, sans fenêtre eux non plus. Ce sont ceux que l'application se lance à elle-même, dans un processus de fond, quand on clique sur le bouton du bloc « Locuteurs » ; ils servent aussi à valider une version construite sans rien cliquer :
 
 ```bat
 REM Poser les composants, ici dans un dossier d'essai plutot que le dossier reel

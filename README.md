@@ -10,7 +10,7 @@ Turn recordings into text on your own machine. No account, no cloud, no upload.
 
 Scribouille is a desktop app for Windows built on [faster-whisper](https://github.com/SYSTRAN/faster-whisper). Drop audio files on the window, get text files next to them. It was written for meeting recordings: room audio, several voices, proper nouns and in-house jargon. The interface is available in English and French.
 
-<!-- screenshot 1: main window, dark theme, drop area empty, hardware card visible -->
+<!-- screenshot 1: meetings screen, dark theme, one transcription running and the list of transcripts -->
 
 ---
 
@@ -24,32 +24,33 @@ Nothing else to install. The setup is per user, **no administrator rights**, and
 
 > **The application was called WhiScribe up to 2.3.3.** The repository name has changed, the old addresses redirect. On a machine that already has it, the update installs over the existing setup, in its original folder `%LOCALAPPDATA%\Programs\WhiScribe`. Since 2.5, the data moves on first launch from `%LOCALAPPDATA%\WhiScribe` to `%LOCALAPPDATA%\Scribouille`, by a plain rename: nothing is lost, the models are not downloaded again, and only Scribouille's own files are moved (another program called "Whiscribe" keeps its models in the same place). To go back to an earlier version: `scribouille.com donnees revenir-whiscribe` in the program folder.
 
-The setup asks **where to keep the transcription models**, 1.6 to 3.1 GB depending on the preset. The models are not bundled: they are downloaded once, on first use, and the app tells you the size before starting. After that it works offline.
+The setup asks **where to keep the transcription models**, 1.6 to 3.1 GB depending on the quality. The models are not bundled: they are downloaded once, on first use, and the app tells you the size before starting. After that it works offline.
 
 The installer is not signed, so SmartScreen may warn on first run: "More info", then "Run anyway". See [Known limits](#known-limits).
 
-> **Speaker separation** does not ship inside the setup, on purpose: it needs PyTorch, about 3.6 GB once installed. It is added **from a button inside the application**, in the "Speakers" panel, which downloads and installs the components, announces the size and lets you cancel. Nothing else to do.
+> **Speaker separation** does not ship inside the setup, on purpose: it needs PyTorch, about 3.6 GB once installed. It is added **from a button inside the application** (Settings, Transcription, "Speakers" block), which downloads and installs the components, announces the size and lets you cancel. Nothing else to do.
 
 ---
 
 ## What it does
 
-- **Drop and go.** Drag files or a folder onto the window, pick a preset, start. Files are processed one after another, a failure does not stop the queue.
+- **Drop and go.** Drop files or a folder, choose the quality, start. Files are processed one after another, a failure does not stop the queue.
 - **Formats in:** `m4a` (including phone recordings), `mp3`, `wav`, `ogg`, `flac`, `opus`, `webm`, `wma`, `aac`, `amr`, and the usual video containers (`mp4`, `mkv`, `mov`), whose audio track is extracted.
-- **Formats out:** `.txt` in paragraphs, with a header (recording name, duration, model, date, real compute time), plus optional `.srt` and `.vtt`. Output names follow a configurable pattern with `{nom}`, `{date}`, `{heure}` and `{modele}`.
-- **Two presets.** *Highest quality* (`large-v3`) for anything that will be read back, *Fast* (`large-v3-turbo`) to get the gist. Other Whisper models are reachable in advanced mode.
+- **Formats out:** `.txt` in paragraphs, each starting with its time (by default, to find a passage in the recording), with a header (recording name, duration, model, date, real compute time), plus optional `.srt` and `.vtt`. Output names follow a configurable pattern with `{nom}`, `{date}`, `{heure}` and `{modele}`.
+- **Two qualities.** *Highest quality* (`large-v3`) for anything that will be read back, *Fast* (`large-v3-turbo`) to get the gist. Other Whisper models are reachable in advanced mode.
 - **Glossary and corrections.** A list of proper nouns primes the model before it transcribes, and a list of rewrite rules cleans up the recurring mistakes afterwards. See [the guide](docs/guide.md#vocabulary-and-corrections).
-- **Read back in the app.** Uncertain words are highlighted, any word shows its confidence on hover, and correcting one can be remembered for good. See [the guide](docs/guide.md#reading-back-a-transcript).
+- **Review in the app, while listening.** Clicking a word places playback there and the text follows it; doubtful words highlighted, search (`Ctrl` + `F`), points to check from the keyboard (`N`).
+- **Correct without leaving the review.** One place or all of them, a passage rewritten or deleted, a speaker renamed; `Ctrl` + `Z` undoes step by step, even after closing, and the original text stays available. The screen, the `.txt`, the `.json` companion and the subtitles always say the same thing: every write is checked. See [the guide](docs/guide.md#reading-back-a-transcript).
 - **Copy for AI.** One button puts your own instruction template, the metadata and the full text on the clipboard, ready to paste into the assistant of your choice. Nothing is sent by the app.
 - **Progressive saving.** Text is written segment by segment. A crash or a power cut does not lose the work: the app offers to resume at the next start.
 - **Separate engine.** Transcription runs in its own engine process: cancelling is immediate, a graphics driver crash does not close the window (the file resumes from the last segment, on the processor), and the model's memory is given back at the end of the queue.
 - **Command line.** `scribouille transcrire FILE --json`, without a window, over SSH or as a scheduled task, with resume, paged reading of the result and stable exit codes. A usage sheet installs for Claude Code and Codex. See [the command line guide](docs/ligne-de-commande.md) (French) and [AGENTS.md](AGENTS.md).
 - **Disk usage and full erase.** `scribouille espace` details what the app takes up, item by item, and what can be freed without losing anything; `scribouille effacer --complet`, or the uninstaller, erases everything it wrote, after showing the list and sizes, except your transcripts.
 - **Watched folder,** off by default. A folder can be watched so that new recordings join the queue on their own, which suits a dictaphone or a meeting recorder that always drops files in the same place.
-- **Speaker separation,** optional, installed from a button in the "Speakers" panel. Produces a labelled transcript, `Speaker 1`, `Speaker 2`, which is worth a lot for a meeting summary.
-- **Taskbar progress,** disk usage report, export and import of your data as a single zip file, dark and light theme, three keyboard shortcuts and no more: `Ctrl` + `O`, `Ctrl` + `Enter`, `Esc`.
+- **Speaker separation,** optional, installed from a button (Settings, Transcription). Produces a labelled transcript, `Speaker 1`, `Speaker 2`, which is worth a lot for a meeting summary.
+- **Taskbar progress,** disk usage report, export and import of your data as a single zip file, dark and light theme. Keyboard shortcuts are listed in the help (`?`).
 
-<!-- gif: drop two files, pick the Fast preset, start, progress bar filling, a finished line with its Read back button (about 15 s, no sound) -->
+<!-- gif: drop two files, choose Fast quality, start, progress bar filling, a finished line with its Read back button (about 15 s, no sound) -->
 
 ---
 
@@ -80,9 +81,10 @@ The Hugging Face token used for speaker separation is never included in an expor
 - **Windows 64-bit only.** The code is portable, but hardware detection and the launch scripts target Windows. The interface relies on Microsoft Edge WebView2 Runtime, shipped with Windows 11 and up to date Windows 10; the setup installs it if missing.
 - **One spoken language per recording.** Mixing languages inside the same conversation is handled poorly: Whisper settles on one language and transcribes the rest through it. English terms scattered through a French discussion are a different matter, and that is exactly what the glossary is for.
 - **Designed for French first,** which is where it was tested most. Quality is equal or better in English and in the languages Whisper covers well, and the app tells you what to expect under the language selector: excellent, good, or variable.
-- **The first run needs an internet connection** to download the model, 1.6 to 3.1 GB depending on the preset. After that, never again.
-- **No AMD GPU acceleration**; those machines transcribe on the processor. **Intel integrated graphics** can be used through the optional OpenVINO engine (about 90 MB, installed from the settings), and a built-in benchmark tells in a few minutes which setting is fastest on your machine; a comparison of both engines on one of your own recordings tells whether OpenVINO is as accurate, without the text leaving the computer. The guide has the details.
-- **Speaker separation installs separately**, about 0.8 GB to download and 3.6 GB on disk for the CPU build, more with an NVIDIA card. Keep 6 GB free while it installs. The button in the "Speakers" panel handles it, and a free Hugging Face token is still needed afterwards. Without it, everything else works.
+- **The first run needs an internet connection** to download the model, 1.6 to 3.1 GB depending on the quality. After that, never again.
+- **No AMD GPU acceleration**; those machines transcribe on the processor.
+- **Intel integrated graphics** can be used through the optional OpenVINO engine (about 90 MB, Settings, Engine and models). OpenVINO does not give word confidence: with it, the review flags no doubtful word. Benchmark and engine comparison: see the guide.
+- **Speaker separation installs separately**, about 0.8 GB to download and 3.6 GB on disk for the CPU build, more with an NVIDIA card. Keep 6 GB free while it installs. The button in the "Speakers" block (Settings, Transcription) handles it, and a free Hugging Face token is still needed afterwards. Without it, everything else works.
 - **The installer is not signed.** SmartScreen may warn on first run. A code signing certificate costs several hundred euros a year, which makes no sense for a free personal tool.
 - **Audio is decoded entirely in memory,** about 230 MB per hour of recording. Comfortable up to several hours, but this is not stream processing.
 - **Speaker labels are useful, not authoritative.** Overlapping speech and distant voices are the hard cases. Setting the number of participants improves the split noticeably.

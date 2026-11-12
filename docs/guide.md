@@ -62,15 +62,23 @@ What the app does with it, in three stages:
 
 **Measuring.** `scribouille.com --mesurer-vocabulaire --vocabulaire V.toml --reunion AUDIO --reference REVIEWED` transcribes each meeting without, then with the prompt, applies the correction, and reports the word error rate, recall and precision of the terms by category, and the number of wrong corrections. Measure on meetings that were not used to learn the vocabulary.
 
-The two format 1 files are plain text. Edit them by hand or from the panels in the app. The **My data** panel exports them, with your settings and your AI template if you have one, as a single `scribouille-donnees-YYYY-MM-DD.zip` you can put on a USB stick or in a company backup. An import shows a preview of what would change and writes nothing before you confirm, and the previous state is saved next to it first.
-
----
+The two format 1 files are plain text. Edit them by hand or from the panels in the app. **Settings, Application, My data** exports them, with your settings and your AI template if you have one, as a single `scribouille-donnees-YYYY-MM-DD.zip` you can put on a USB stick or in a company backup. An import shows a preview of what would change and writes nothing before you confirm, and the previous state is saved next to it first.
 
 ---
 
 ## Reading back a transcript
 
-A transcript opens **in the app**, no editor needed: click a line in the Transcripts tab, or the read button on a file that just finished.
+A transcript opens **in the app**, full screen, no editor needed: the **Review** button of a file that just finished, or of a row in the "Transcripts" list. The text shown is the file's text, paragraph by paragraph, with the time in the margin (and the voice when speakers are separated). The review resumes where it stopped: scrolling and playback position are kept for each transcript.
+
+**One truth.** The screen, the `.txt`, the `.json` companion and the subtitles always say the same thing: every change is checked against the files read back, and a write that would make them differ is cancelled and reported. A `.txt` edited in a text editor is read as it is, on opening as during the review, and word-by-word listening is realigned to it.
+
+**Listen.** Clicking a word places playback there, **Space** plays or pauses (whatever button was clicked last), the arrow keys go back or forward 5 s, comma and semicolon change the speed (`[` and `]` too); while playing, the word being heard is marked and the text follows. Clicking a paragraph's time plays it from its start. The recording must still be where it was.
+
+**Search and check.** **Ctrl+F** searches regardless of case and accents, every result highlighted, **Enter** or **F3** for the next one. The **Points to check** list steps through, with **N** (Shift+N to go back), doubtful words, replacements made by the vocabulary (each one can be undone), silences over 5 s and paragraphs over 90 s; only non-empty categories are offered. With OpenVINO, which gives no per-word confidence, there are no doubtful words. After a correction, **N** carries on from where you were.
+
+**Speakers.** Clicking "Speaker 1" renames it throughout the file, its companion and its subtitles; a name already in use merges the two voices, their paragraphs staying separate.
+
+**Export.** Copy the text (exactly as in the file), with timestamps (when they are known), or as Markdown; save a `.md` next to the transcript. All of them start from the same text as the screen.
 
 <!-- screenshot 2: reading view, a paragraph with two or three amber highlighted words, the confidence tooltip visible on one of them -->
 
@@ -78,11 +86,13 @@ Whisper gives a probability for every word it writes. The reading view **highlig
 
 These values live in a **companion `.json` file** written next to the text, a few tens of kilobytes per hour of audio. It is optional: an older transcript, or one produced with the option off, opens normally without highlighting.
 
-Selecting a word or a short phrase offers to **correct it**. Before applying, the window shows how many places in the file will change, and which ones, with their context. The app then applies the replacement to the text on screen and to the saved file, and updates the companion; **Undo the correction** (or Ctrl+Z) puts the file back as it was. A case correction ("gitlab" to "GitLab") is accepted. If you tick the box provided, unticked by default, the rule also goes into a dedicated section of `corrections.txt`, so the same mistake is fixed automatically in later transcripts.
+Selecting a word or a short phrase offers to **correct it** (button or **Enter**; with the keyboard alone, **N** then **Enter** corrects the word reached). The window lists every place in the file containing that form, with its context: the selected one is ticked, located by its exact position (part of a word, or a selection starting at an apostrophe, never corrects anywhere else), the others can be ticked one by one or all at once; **Enter** confirms from anywhere in the window. A case correction ("gitlab" to "GitLab") is accepted. The "Always replace" box, unticked by default, makes the rule apply to later transcripts; without it, the vocabulary learns nothing.
+
+**Rewrite or delete a passage.** Under a selection of any length, **Edit** (key **E**) opens the passage; without a selection, **E** opens the paragraph of the word reached. **Del** deletes the selection. A paragraph left empty disappears.
+
+**Undo.** **Ctrl+Z** undoes the last change, then the one before, up to fifty, even after closing the app; the file comes back byte for byte. **Export, Go back to the original text** restores the state before any change, and can be undone too.
 
 **Copy for AI** puts an instruction template, the recording metadata and the full transcript on the clipboard. The template is your own file, `gabarit-ia.txt`, created on first use and editable from the settings, with `{texte}`, `{fichier}`, `{date}`, `{duree}`, `{locuteurs}` and `{modele}` replaced at copy time.
-
----
 
 ---
 
@@ -102,13 +112,13 @@ The measured row was taken in November 2026 on a three-minute French excerpt, wi
 
 **Before the first transcription, the app shows a starting estimate, not a guarantee.** It is calibrated on public measurements and adjusted to the number of cores on your machine. The app shows the **time actually measured** after every transcription, and writes it in the header of the output file. Speaker separation adds roughly 0.2 x on CPU.
 
-**They correct themselves.** As soon as a transcription completes, the observed factor is kept, and it is what the next announcements are based on: the hardware card then says "measured on this machine". The last five measurements are averaged, the most recent and the longest weighing the most, and every combination of model and beam width is tracked separately. Nothing to set up, and nothing goes online: the measurements live in `calibration.json`, next to your settings.
+**They correct themselves.** As soon as a transcription completes, the observed factor is kept, and it is what the next announcements are based on: the durations shown are recalculated after each file. The last five measurements are averaged, the most recent and the longest weighing the most, and every combination of model and beam width is tracked separately. Nothing to set up, and nothing goes online: the measurements live in `calibration.json`, next to your settings.
 
 Acceleration: **CPU everywhere** with `int8` quantisation; **NVIDIA cards** in CUDA `float16`, automatically, when the driver and libraries answer; and, since 2.4.0, **Intel integrated graphics** (and, experimentally, the NPU) through the optional **OpenVINO** engine. AMD Radeon cards are detected and displayed but not used.
 
 ### Intel laptops (Core Ultra and similar)
 
-On a 15 W laptop without a dedicated card, the CPU alone can take longer to transcribe than the meeting lasted. Three things change that, all in the **Speed of this machine** section of the settings:
+On a 15 W laptop without a dedicated card, the CPU alone can take longer to transcribe than the meeting lasted. Three things change that, all in the settings (**This computer**, **Engine and models**, **Benchmark**):
 
 - **The number of compute threads follows the architecture.** Core Ultra U-series chips mix performance, efficient and low-power cores (2 + 8 + 2 on a Core Ultra 5 225U). The app recognises them and leaves out the low-power cores, capped at 2.4 GHz and without L3 cache, which would slow the whole computation down. It also stops Windows from throttling the transcription when the window is minimised.
 - **The OpenVINO engine** (Intel, Apache 2.0 licence, about 90 MB from PyPI) transcribes on the integrated graphics. The only published measurement on a processor of the same family (Core Ultra 7 265U): 0.12 x with the Fast model on the integrated graphics, against 1.04 x on its CPU, identical text. Models in OpenVINO format (0.8 GB for Fast, 1.6 GB for Quality) are downloaded on first use. What you lose: the probability of each word, which this engine does not give (the review view then highlights no uncertain word). Everything else is kept: timestamped segments, word timestamps for speakers, glossary, resume after interruption, stop. If OpenVINO fails, the usual engine takes over without losing what is already transcribed.
@@ -121,7 +131,7 @@ From the command line, without a window: `scribouille.com --banc` in the install
 - `cote-a-cote.html`, to open in the browser: both timestamped texts side by side, passages where they disagree highlighted, words CTranslate2 is unsure of underlined with dots, and clicking a time plays the passage. This page contains the transcript, like the `textes-*.json` files next to it: they stay on the computer;
 - `rapport-chiffres.txt`: figures only (computing times, word counts, disagreement rate, diverging passages by kind, timing gaps, segments, glossary terms, common English words, uncertain words), without a single word of the transcript, name or path. This one can be shared.
 
-From the window: **Speed of this machine** section, **Compare both engines** block (shown once OpenVINO is installed). From the command line:
+From the window: **Settings, Compare engines** (once OpenVINO is installed). From the command line:
 
 ```
 scribouille.com --comparer "D:\Meetings\weekly.m4a" --debut 00:05:00 --duree 600 --ouvrir
@@ -145,9 +155,9 @@ On Intel integrated graphics, OpenVINO only decodes greedily (beam 1): this is a
 
 ### Setting proposed for this computer
 
-On first start, and each time you click **Recognise this computer** (section **Speed of this computer**), the application looks at the computer (processor and core families, memory, Intel graphics chip seen or not by OpenVINO, NVIDIA card, NPU, battery or mains, Windows power mode) and proposes a setting, explained in one sentence, with the expected duration for an hour of meeting. If a campaign or a benchmark was run on the computer, its result comes before the table; if it no longer fits (graphics chip missing, broken driver, OpenVINO removed), the proposal says so and starts again from the hardware. Nothing changes without **Apply**, nothing is downloaded or installed on its own: a missing model is announced with its size and only downloaded when a transcription starts; the Intel engine keeps its own install button. From the command line: `scribouille.com --reconnaitre`, then `--reconnaitre --appliquer`.
+On first start, and each time you click **Recognise this computer** (**Settings, This computer**), the application looks at the computer (processor and core families, memory, Intel graphics chip seen or not by OpenVINO, NVIDIA card, NPU, battery or mains, Windows power mode) and proposes a setting, explained in one sentence, with the expected duration for an hour of meeting. If a campaign or a benchmark was run on the computer, its result comes before the table; if it no longer fits (graphics chip missing, broken driver, OpenVINO removed), the proposal says so and starts again from the hardware. Nothing changes without **Apply**, nothing is downloaded or installed on its own: a missing model is announced with its size and only downloaded when a transcription starts; OpenVINO keeps its own install button. From the command line: `scribouille.com --reconnaitre`, then `--reconnaitre --appliquer`.
 
-The table, read from top to bottom: NVIDIA card, Maximum quality on the card; Intel graphics chip seen by OpenVINO, Fast on the chip (an hour in about 7 minutes, as accurate as Maximum quality on the processor according to the campaign on the test laptop); Intel chip present but unusable, Fast with OpenVINO on the processor; under 10 GB of memory, Fast; processor only, OpenVINO if installed, otherwise Fast on a modest processor (under 12 threads or U series) and Maximum quality on a desktop processor. The proposed pace is **Balanced, adapting automatically**.
+The table, read from top to bottom: NVIDIA card, Highest quality on the card; Intel graphics chip seen by OpenVINO, Fast on the chip (an hour in about 7 minutes on a Core Ultra 5, as accurate as Highest quality on the processor according to the campaign on the test laptop); Intel chip present but unusable, Fast with OpenVINO on the processor; under 10 GB of memory, Fast; processor only, OpenVINO if installed, otherwise Fast on a modest processor (under 12 threads or U series) and Highest quality on a desktop processor. The proposed pace is **Balanced, adapting automatically**.
 
 ### Working during a transcription
 
@@ -180,8 +190,6 @@ During a transcription, the computer no longer goes to sleep for lack of activit
 **AMD Radeon cards**: CTranslate2 can compute on them with ROCm on Windows since 4.9.0, but the app does not ship those libraries yet (about 1.1 GB).
 
 </details>
-
----
 
 ---
 
@@ -245,7 +253,7 @@ Check the state of the machine, the FFmpeg decoder, the work folders and hardwar
 <details>
 <summary>Setting up speaker separation</summary>
 
-**From the application, it is one button.** Open the "Speakers" panel and click "Install speaker separation". The app announces the download size, about 0.8 GB for the CPU build, the room needed on disk, 6 GB, and how much is free. Those figures are measured on a real install: 0.71 GB of wheels downloaded, 3.55 GB of files laid down. It asks for confirmation, then downloads in the background: progress is shown, cancelling is possible at any point, and transcription stays usable meanwhile. A network drop does not mean downloading everything again: what already arrived is kept, and a new run only asks the network for what is missing. It does lay the files down again, a few minutes of disk, the only safe way not to leave the leftovers of an interrupted attempt in place.
+**From the application, it is one button.** In **Settings, Transcription**, "Speakers" block, click "Install speaker separation". The app announces the download size, about 0.8 GB for the CPU build, the room needed on disk, 6 GB, and how much is free. Those figures are measured on a real install: 0.71 GB of wheels downloaded, 3.55 GB of files laid down. It asks for confirmation, then downloads in the background: progress is shown, cancelling is possible at any point, and transcription stays usable meanwhile. A network drop does not mean downloading everything again: what already arrived is kept, and a new run only asks the network for what is missing. It does lay the files down again, a few minutes of disk, the only safe way not to leave the leftovers of an interrupted attempt in place.
 
 The button picks the right build on its own: CPU by default, CUDA when an NVIDIA card answers. In the installed version the components land in `%LOCALAPPDATA%\Scribouille\extensions`, and a second button removes them, with their size shown. From source they land in the project `.venv`, exactly like `installer.bat --locuteurs`.
 
@@ -256,7 +264,7 @@ The model that recognises voices, pyannote, is free but gated: its author asks y
 1. Create an account on [huggingface.co](https://huggingface.co).
 2. Open [pyannote/speaker-diarization-community-1](https://huggingface.co/pyannote/speaker-diarization-community-1) and accept the terms (CC-BY-4.0 licence; the form asks for an organisation and a use case, and pyannote may email you now and then). This model, more accurate than the older 3.1, is tried first; 3.1 is still used if you only accepted its terms.
 3. Create a **Read** access token in your account settings.
-4. Paste it into the Speakers panel of the app.
+4. Paste it into the "Speakers" block (Settings, Transcription).
 
 The token is saved in `jeton_hf.txt`, with your data, and is never versioned. The `HF_TOKEN` environment variable is recognised too, and takes precedence. Without a token everything still works, simply without labels and with a clear message rather than an error.
 
@@ -341,15 +349,13 @@ A release that cannot update in place is announced by writing `[reinstallation-r
 
 ---
 
----
-
 ## Diagnostics
 
 Every failure is explained in the interface, in plain language: unreadable file, model to download, not enough memory, missing or invalid token, full disk, missing CUDA libraries. No traceback ever reaches the screen.
 
 The technical detail goes to a timestamped file in `logs/`, whose name is quoted in the error message. The **Open the detailed log** button, in the bottom bar, opens it directly. The last 30 logs are kept. That file is what to attach to a bug report, and the logs are written in French: they are aimed at the maintainer, not at the user.
 
-Three more modes cover speaker separation, again without a window. They are what the application runs against itself, in a background process, when the button in the "Speakers" panel is clicked; they also serve to validate a build without clicking anything:
+Three more modes cover speaker separation, again without a window. They are what the application runs against itself, in a background process, when the button in the "Speakers" block is clicked; they also serve to validate a build without clicking anything:
 
 ```bat
 REM Install the components, here into a scratch folder rather than the real one

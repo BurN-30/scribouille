@@ -193,7 +193,7 @@ journal.purger()
 journal.silence_bibliotheques()
 if chemins.MIGRATION.get("etat") not in (None, "rien"):
     _m = chemins.MIGRATION
-    journal.info("Données reprises de %s : %s entrée(s) déplacée(s), %s doublon(s) rangé(s) à part, état %s%s",
+    journal.info("Données reprises de %s : déplacées %s, doublons rangés à part %s, état %s%s",
                  chemins.NOM_DOSSIER_ANCIEN, len(_m.get("deplaces") or []), len(_m.get("conflits") or []),
                  _m.get("etat"), (" : " + "; ".join(_m.get("restes") or [])) if _m.get("restes") else "")
     if _m.get("erreur"):
@@ -1804,9 +1804,17 @@ class Passerelle:
         # adaptation automatique, la durée du rythme choisi, la plus longue).
         # La séparation des locuteurs ne compte que si elle tournera vraiment :
         # cochée par défaut, elle ajoutait son coût sans être installée.
+        # Même calcul que le décompte de départ de la file (`app/traitement.py`),
+        # taille des lots comprise : la ligne et le décompte disent la même durée.
         return presets.formater_duree(presets.estimer_annonce(
             duree_secs, cle_preset, self.materiel, self.config.get("rythme"),
-            diarisation.effective(diarisation_active), modele_avance or "", beam=beam))
+            diarisation.effective(diarisation_active), modele_avance or "", beam=beam,
+            lot=presets.taille_lot(cle_preset, self.materiel)))
+
+    def durees_affichees(self) -> dict:
+        """Durées du bandeau et des cartes, recalculées après chaque mesure du poste."""
+        rythme_etat = self.etat_rythme()
+        return {"rythme": rythme_etat, "presets": self._presets_affiches(rythme_etat["choisi"])}
 
     # -- fichiers ----------------------------------------------------------
 
@@ -1856,8 +1864,8 @@ class Passerelle:
                 ignores += ecartes
                 self._sur_journal(
                     "info" if retenus else "attention",
-                    langues.t("app.depot.dossier", nom=cible.name, retenus=len(retenus))
-                    + (langues.t("app.depot.ignores", n=ecartes) if ecartes else "")
+                    langues.tn("app.depot.dossier", len(retenus), nom=cible.name)
+                    + (langues.tn("app.depot.ignores", ecartes) if ecartes else "")
                     + langues.t("app.depot.sous_dossiers"),
                 )
             else:
@@ -1866,14 +1874,26 @@ class Passerelle:
         self._enregistrer_fichiers(fichiers)
 
     def _enregistrer_fichiers(self, liste: list[str]) -> None:
+        # Fichiers qui ne sont pas des enregistrements (un .docx déposé avec des
+        # audios) : ils sont dits à l'écran, pas seulement dans le journal.
+        ignores = [Path(c).name for c in liste
+                   if c and Path(c).is_file() and not audio_module.est_audio(Path(c))]
         ajoutes = self.file.ajouter(liste)
         if not ajoutes:
             doublons = self.file.derniers_doublons
-            self._sur_journal("attention", langues.tn("app.depot.deja", doublons) if doublons
-                              else langues.t("app.depot.aucun"))
+            if ignores:
+                self._sur_journal("attention", langues.tn("app.depot.ignores_noms", len(ignores),
+                                                          noms=", ".join(ignores[:3])))
+            else:
+                self._sur_journal("attention", langues.tn("app.depot.deja", doublons) if doublons
+                                  else langues.t("app.depot.aucun"))
             return
         self._js(f"onFichiersAjoutes({_json(ajoutes)})")
-        self._sur_journal("info", langues.tn("app.ajoutes", len(ajoutes)))
+        if ignores:
+            self._sur_journal("attention", langues.tn("app.ajoutes", len(ajoutes)) + " "
+                              + langues.tn("app.depot.ignores_noms", len(ignores), noms=", ".join(ignores[:3])))
+        else:
+            self._sur_journal("info", langues.tn("app.ajoutes", len(ajoutes)))
         self.file.mesurer_durees(
             lambda identifiant, secondes, texte:
             self._js(f"onDuree({_json(identifiant)}, {secondes}, {_json(texte)})")
@@ -2048,7 +2068,30 @@ class Passerelle:
         elements = sorties.historique(Path(self.config.get("dossier_sortie") or ""))
         for element in elements:
             element["taille"] = audio_module.formater_taille(element["taille"])
+            # Durée de la réunion et date de la transcription, lues dans
+            # l'en-tête du .txt : une correction ne redate plus la réunion.
+            element.update(self._entete_historique(element.get("chemin", "")))
         self._js(f"onHistorique({_json(elements)})")
+
+    @staticmethod
+    def _entete_historique(chemin: str) -> dict:
+        fichier = Path(chemin or "")
+        if fichier.suffix.lower() != ".txt":
+            return {}
+        try:
+            with fichier.open(encoding="utf-8", errors="replace") as flux:
+                debut = flux.read(2000)
+        except OSError:
+            return {}
+        entete = lecture.separer_entete(debut + "\n")[0]
+        retour = {}
+        duree = lecture._valeur_entete_traduite(entete, "ent.duree")
+        date = lecture._valeur_entete_traduite(entete, "ent.transcrit_le")
+        if duree:
+            retour["duree"] = duree
+        if date:
+            retour["date"] = date
+        return retour
 
     def lire_texte(self, chemin: str) -> str:
         try:
@@ -2062,15 +2105,24 @@ class Passerelle:
 
     def lire_transcription(self, chemin: str) -> dict:
         """Contenu structuré d'une transcription, pour la vue de lecture."""
-        retour = lecture.charger(chemin)
+        # Un fichier retouché dans un éditeur est relu tel quel, et son
+        # compagnon recalé dessus une fois pour toutes.
+        retour = lecture.charger(chemin, persister=True)
         retour["lecture_audio"] = bool(self.config.get("lecture_audio"))
-        retour["annulable"] = lecture.correction_annulable(chemin)
+        retour["niveaux"] = lecture.niveaux_annulables(chemin)
+        retour["annulable"] = retour["niveaux"] > 0
+        retour["original"] = lecture.original_disponible(chemin)
+        retour["position"] = lecture.position(chemin)
         # L'audio passe par le serveur local, jamais par un « file:// » que le
         # navigateur intégré refuse depuis une page servie en http.
         meta = retour.get("meta") or {}
         if retour["lecture_audio"] and meta.get("source_presente"):
             retour["audio_url"] = self._ecoute.adresse_pour(meta.get("source_chemin", ""))
         return retour
+
+    def empreinte_transcription(self, chemin: str) -> str:
+        """Date et taille du texte et du compagnon : la relecture voit ainsi une retouche faite ailleurs."""
+        return lecture.empreinte(chemin)
 
     def copier_pour_ia(self, chemin: str) -> dict:
         """
@@ -2114,9 +2166,85 @@ class Passerelle:
             retour["nb_corrections"] = len(regles)
         return retour
 
+    def editer_passage(self, chemin: str, k: int, debut: int, fin: int, attendu: str, texte: str,
+                       empreinte: str = "") -> dict:
+        """Réécrit ou supprime un passage choisi dans la relecture (annulable)."""
+        return lecture.editer_passage(chemin, k, debut, fin, attendu, texte, str(empreinte or ""))
+
+    def memoriser_position(self, chemin: str, temps: float, haut: int) -> bool:
+        """Dernier instant d'écoute et défilement d'une transcription relue."""
+        return lecture.memoriser_position(chemin, temps, haut)
+
+    def revenir_original(self, chemin: str) -> dict:
+        """Remet la transcription dans son état d'avant toute modification (annulable)."""
+        return lecture.revenir_original(chemin)
+
     def annuler_remplacement(self, chemin: str, rang: int) -> dict:
         """Défait un remplacement du vocabulaire dans une transcription relue."""
         return lecture.annuler_remplacement(chemin, int(rang))
+
+    # -- relecture plein cadre (voir app/relecture.py) ----------------------
+    # Ajouts de la refonte d'interface : aucune méthode existante n'est changée.
+
+    def accueil(self) -> dict:
+        """Premier lancement : l'interface montre l'accueil et le réglage proposé."""
+        return {"premier_lancement": bool(self._premier_lancement)}
+
+    def audio_relecture(self, chemin: str) -> dict:
+        """
+        Adresse locale de l'enregistrement d'une transcription. L'écoute fait
+        partie de la relecture : elle ne dépend plus d'une option.
+        """
+        from app import compagnon
+
+        fichier = Path(chemin or "")
+        donnees = compagnon.lire(fichier) if fichier.is_file() else None
+        if donnees:
+            source = str((donnees.get("source") or {}).get("chemin") or "")
+        else:
+            try:
+                entete = lecture.separer_entete(fichier.read_text(encoding="utf-8", errors="replace"))[0]
+            except OSError:
+                entete = ""
+            source = lecture._meta_de_lentete(entete, fichier).get("source_chemin", "")
+        if not source or not Path(source).is_file():
+            return {"ok": False, "code": "audio_absent" if source else "audio_inconnu"}
+        url = self._ecoute.adresse_pour(source)
+        return {"ok": bool(url), "url": url, "code": "" if url else "audio_illisible"}
+
+    def occurrences_correction(self, chemin: str, source: str, cible: str,
+                               avant: str = "", apres: str = "", position=None) -> dict:
+        """Endroits d'une correction ; `position` situe la sélection à l'écran (paragraphe, début, fin)."""
+        from app import relecture
+
+        return relecture.occurrences(chemin, source, cible, avant, apres, position)
+
+    def corriger_occurrences(self, chemin: str, source: str, cible: str, rangs,
+                             ajouter_regle: bool = False, position=None, empreinte: str = "") -> dict:
+        from app import relecture
+
+        if not self.config.get("corrections_apprises", True):
+            ajouter_regle = False
+        retour = relecture.corriger(chemin, source, cible, rangs, bool(ajouter_regle), position,
+                                    str(empreinte or ""))
+        if retour.get("regle_ajoutee"):
+            regles, _ = vocabulaire.analyser_corrections()
+            retour["nb_corrections"] = len(regles)
+        return retour
+
+    def renommer_locuteur(self, chemin: str, ancien: str, nouveau: str, empreinte: str = "") -> dict:
+        from app import relecture
+
+        return relecture.renommer_locuteur(chemin, ancien, nouveau, str(empreinte or ""))
+
+    def enregistrer_export(self, chemin: str, extension: str, contenu: str) -> dict:
+        from app import relecture
+
+        return relecture.enregistrer_export(chemin, extension, contenu)
+
+    def ouvrir_dossier_de(self, chemin: str) -> None:
+        """Ouvre le dossier qui contient ce fichier."""
+        self.ouvrir(str(Path(chemin or "").parent))
 
     # -- vocabulaire, format 2 (voir app/vocabulaire_interface.py) ----------
 
@@ -2363,7 +2491,7 @@ def principal() -> None:
         f"{NOM_APPLICATION}",
         url=str(chemins.DOSSIER_WEB / "index.html"),
         js_api=passerelle,
-        width=1180, height=780, min_size=(920, 620),
+        width=1180, height=780, min_size=(720, 540),
         background_color="#12151b",
         text_select=True,
     )
