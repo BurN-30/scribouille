@@ -805,6 +805,7 @@ _FR: dict[str, str] = {
     "lect.annulation.faite": "Correction annulée, le fichier est revenu à son état précédent.",
     "lect.annulation.regle": "La règle mémorisée a été retirée.",
     "lect.annulation.proposition": "La proposition ajoutée au vocabulaire a été retirée.",
+    "lect.recale": "Ce fichier a été modifié hors de Scribouille : le texte affiché est le sien, et l'écoute mot à mot a été recalée dessus.",
     "lect.refus.locuteur_inconnu": "Ce locuteur n'est plus dans le texte.",
     "lect.refus.absent": "Ce fichier n'existe plus à l'emplacement indiqué.",
     "lect.refus.illisible": "Ce fichier n'a pas pu être lu.",
@@ -816,7 +817,7 @@ _FR: dict[str, str] = {
     "lect.refus.hors_paragraphe": "Une modification doit tenir dans un seul paragraphe.",
     "lect.refus.vide": "Le texte ne peut pas être vidé entièrement.",
     "lect.modifie_pendant": "Le fichier a changé depuis son ouverture : rien n'a été écrit.",
-    "lect.compagnon_desaccorde": "Le fichier compagnon (.json) ne correspond plus à ce texte : le texte affiché est celui du fichier, sans mots douteux ni écoute mot à mot.",
+    "lect.compagnon_desaccorde": "Ce fichier a été modifié hors de Scribouille : le texte affiché est le sien, sans mots douteux ni écoute mot à mot.",
     "lect.locuteurs.autres": "{n} locuteurs détectés",
     "lect.locuteurs.un": "{n} locuteur détecté",
 
@@ -2251,6 +2252,7 @@ _EN: dict[str, str] = {
     "lect.annulation.faite": "Correction undone, the file is back to its previous state.",
     "lect.annulation.regle": "The saved rule has been removed.",
     "lect.annulation.proposition": "The suggestion added to the vocabulary has been removed.",
+    "lect.recale": "This file was changed outside Scribouille: the text shown is the file's, and word-by-word listening was realigned to it.",
     "lect.refus.locuteur_inconnu": "This speaker is no longer in the text.",
     "lect.refus.absent": "This file is no longer at the given location.",
     "lect.refus.illisible": "This file could not be read.",
@@ -2262,7 +2264,7 @@ _EN: dict[str, str] = {
     "lect.refus.hors_paragraphe": "A change must stay within one paragraph.",
     "lect.refus.vide": "The text cannot be emptied entirely.",
     "lect.modifie_pendant": "The file changed since it was opened: nothing was written.",
-    "lect.compagnon_desaccorde": "The companion file (.json) no longer matches this text: the text shown is the file's, without doubtful words or word-by-word listening.",
+    "lect.compagnon_desaccorde": "This file was changed outside Scribouille: the text shown is the file's, without doubtful words or word-by-word listening.",
     "lect.locuteurs.autres": "{n} speakers detected",
     "lect.locuteurs.un": "{n} speaker detected",
 

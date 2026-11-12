@@ -62,6 +62,35 @@ async function ouvrirLecture(chemin) {
   lect.mesures.ouverture_ms = Math.round(performance.now() - debut);
   $('#rl-titre').focus({ preventScroll: true });
   chargerAudio(chemin);
+  clearInterval(lect.veille);
+  lect.veille = setInterval(verifierFichier, 4000);
+}
+
+/* Un fichier retouche ailleurs (editeur de texte) pendant la relecture : il
+   est relu, et on le dit. Verifie toutes les 4 s et au retour dans la
+   fenetre, jamais pendant une ecriture de l'application. */
+async function verifierFichier() {
+  if (etat.vue !== 'relecture' || !lect.d || !lect.pret || lect.ecriture || document.hidden) return;
+  const chemin = lect.chemin;
+  let empreinte = '';
+  try { empreinte = await appelPasserelle('empreinte_transcription', chemin); } catch (e) { return; }
+  if (lect.ecriture || chemin !== lect.chemin || !lect.d || !empreinte || empreinte === lect.d.empreinte) return;
+  await chargerLecture(chemin, true);
+  statutRelecture(t('ui.rl.modifie_dehors'), 'attention');
+  journaliser('attention', t('ui.rl.modifie_dehors'));
+}
+
+/* Ecritures de la relecture : la verification du fichier se tait pendant
+   qu'elles tournent, et un refus « modifie ailleurs » relit le texte. */
+async function ecrireRelecture(appel) {
+  lect.ecriture = true;
+  try {
+    const r = await appel();
+    if (r && !r.ok && r.code === 'modifie_dehors') await chargerLecture(lect.chemin, true);
+    return r;
+  } finally {
+    lect.ecriture = false;
+  }
 }
 
 /* Recharge apres une correction, en gardant la position de lecture. */
@@ -193,6 +222,7 @@ function relectureLangueChangee() {
 }
 
 function quitterRelecture() {
+  clearInterval(lect.veille);
   arreterAudio();
   masquerBoutonCorrection();
   fermerMenuExport();
@@ -542,7 +572,7 @@ async function annulerRemplacementCourant() {
   const liste = lect.points.listes.remplacement || [];
   const point = liste[lect.points.i];
   if (!point || !lect.d) return;
-  const r = await pywebview.api.annuler_remplacement(lect.chemin, Number(point.rang));
+  const r = await ecrireRelecture(() => pywebview.api.annuler_remplacement(lect.chemin, Number(point.rang)));
   if (r.ok) {
     journaliser('ok', r.message);
     await chargerLecture(lect.chemin, true);
@@ -702,9 +732,9 @@ async function appliquerCorrection() {
     && (lect.correction.tous || lect.correction.nombre === coches.length);
   bouton.disabled = true;
   try {
-    const r = await appelPasserelle('corriger_occurrences', lect.chemin, source, cible,
+    const r = await ecrireRelecture(() => appelPasserelle('corriger_occurrences', lect.chemin, source, cible,
       tous ? 'tous' : coches, $('#correction-regle').checked,
-      lect.selection ? lect.selection.position : null, lect.d.empreinte || '');
+      lect.selection ? lect.selection.position : null, lect.d.empreinte || ''));
     if (!r.ok) {
       $('#retour-correction').innerHTML = encartAttention(r.message || t('ui.rl.code.' + (r.code || 'echec')));
       return;
@@ -731,7 +761,7 @@ function majAnnulation() {
 
 async function annulerCorrection() {
   if (!lect.d || !lect.d.annulable) return;
-  const r = await pywebview.api.annuler_correction(lect.chemin);
+  const r = await ecrireRelecture(() => pywebview.api.annuler_correction(lect.chemin));
   if (r.nb_corrections !== undefined) majCorrections({ nb: r.nb_corrections, erreurs: [] });
   journaliser(r.ok ? 'ok' : 'attention', r.message);
   majCompteurVocabulaire();
@@ -755,7 +785,8 @@ function ouvrirRenommage(nom) {
 async function renommerLocuteur() {
   const nouveau = $('#locuteur-nom').value.trim();
   if (!nouveau) return;
-  const r = await appelPasserelle('renommer_locuteur', lect.chemin, lect.locuteur, nouveau);
+  const r = await ecrireRelecture(() => appelPasserelle('renommer_locuteur', lect.chemin, lect.locuteur, nouveau,
+    lect.d.empreinte || ''));
   if (!r.ok) {
     $('#retour-locuteur').innerHTML = encartAttention(t('ui.rl.code.' + (r.code || 'echec')));
     return;
@@ -1063,4 +1094,5 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.addEventListener('keydown', clavierRelecture);
+  window.addEventListener('focus', () => { verifierFichier(); });
 });

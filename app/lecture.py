@@ -367,11 +367,110 @@ def _reunir_elisions(mots: list[dict]) -> list[dict]:
 # État d'une transcription
 # ---------------------------------------------------------------------------
 
-def _etat(fichier: Path, contenu: str | None = None) -> dict:
+def _recaler(corps: str, donnees: dict) -> dict | None:
+    """
+    Recale le compagnon sur un fichier texte retouché hors de l'application.
+
+    Les mots des segments et ceux du fichier sont alignés (début et fin
+    communs écartés d'abord, puis comparaison mot à mot du milieu) ; chaque
+    mot du fichier revient au segment dont il vient, un mot ajouté au segment
+    voisin. Les segments reprennent ainsi le texte du fichier en gardant leurs
+    heures et la confiance des mots restés identiques. Un segment coupé en
+    deux par une ligne vide ajoutée donne deux segments. Renvoie le compagnon
+    recalé, ou None si le fichier ne se laisse pas décrire ainsi.
+    """
+    import difflib
+
+    segments = donnees.get("segments") or []
+    avec_locuteurs = any(isinstance(s, dict) and s.get("l") for s in segments)
+    plan = _plan_du_texte(corps, avec_locuteurs)
+    anciens = [(mot, rang) for rang, s in enumerate(segments) if isinstance(s, dict)
+               for mot in str(s.get("t") or "").split()]
+    nouveaux = [(m.group(0), k, p["debut"] + m.start(), p["debut"] + m.end())
+                for k, p in enumerate(plan) for m in re.finditer(r"\S+", corps[p["debut"]:p["fin"]])]
+    if not anciens or not nouveaux:
+        return None
+    proprietaire: list[int | None] = [None] * len(nouveaux)
+    tete = 0
+    while tete < min(len(anciens), len(nouveaux)) and anciens[tete][0] == nouveaux[tete][0]:
+        proprietaire[tete] = anciens[tete][1]
+        tete += 1
+    queue = 0
+    while (queue < min(len(anciens), len(nouveaux)) - tete
+           and anciens[-1 - queue][0] == nouveaux[-1 - queue][0]):
+        proprietaire[len(nouveaux) - 1 - queue] = anciens[-1 - queue][1]
+        queue += 1
+    milieu_a = anciens[tete:len(anciens) - queue]
+    milieu_n = nouveaux[tete:len(nouveaux) - queue]
+    if milieu_a and milieu_n:
+        comparaison = difflib.SequenceMatcher(None, [m for m, _ in milieu_a], [m[0] for m in milieu_n],
+                                              autojunk=False)
+        for etiquette, i1, i2, j1, j2 in comparaison.get_opcodes():
+            if etiquette == "equal":
+                for d in range(j2 - j1):
+                    proprietaire[tete + j1 + d] = milieu_a[i1 + d][1]
+            elif etiquette == "replace":
+                for j in range(j1, j2):
+                    proprietaire[tete + j] = milieu_a[i1 + (j - j1) * (i2 - i1) // (j2 - j1)][1]
+    # Mots ajoutés : au segment du mot qui précède, sinon de celui qui suit.
+    for j in range(1, len(nouveaux)):
+        if proprietaire[j] is None:
+            proprietaire[j] = proprietaire[j - 1]
+    for j in range(len(nouveaux) - 2, -1, -1):
+        if proprietaire[j] is None:
+            proprietaire[j] = proprietaire[j + 1]
+    if proprietaire[0] is None:
+        return None
+    for j in range(1, len(nouveaux)):
+        proprietaire[j] = max(proprietaire[j], proprietaire[j - 1])
+
+    groupes: list[list] = []
+    for j, (_, k, debut, fin) in enumerate(nouveaux):
+        dernier = groupes[-1] if groupes else None
+        if dernier and dernier[1] == k and (dernier[0] == proprietaire[j] or corps[dernier[3]:debut] != " "):
+            dernier[3] = fin
+        else:
+            groupes.append([proprietaire[j], k, debut, fin])
+    par_rang: dict[int, list] = {}
+    for groupe in groupes:
+        par_rang.setdefault(groupe[0], []).append(groupe)
+
+    recales: list = []
+    correspondance: dict[int, int] = {}
+    for rang, segment in enumerate(segments):
+        correspondance[rang] = len(recales)
+        origine = segment if isinstance(segment, dict) else {}
+        liste = par_rang.get(rang) or []
+        if not liste:
+            vide = copy.deepcopy(origine)
+            vide["t"] = ""
+            recales.append(vide)
+            continue
+        for n, (_, k, debut, fin) in enumerate(liste):
+            nouveau = copy.deepcopy(origine) if n == 0 else {"d": origine.get("f", 0), "f": origine.get("f", 0)}
+            nouveau["t"] = corps[debut:fin]
+            if plan[k]["locuteur"]:
+                nouveau["l"] = plan[k]["locuteur"]
+            else:
+                nouveau.pop("l", None)
+            recales.append(nouveau)
+    if situer(corps, recales) is None:
+        return None
+    resultat = copy.deepcopy(donnees)
+    resultat["segments"] = recales
+    for remplacement in (resultat.get("vocabulaire") or {}).get("remplacements") or []:
+        if isinstance(remplacement, dict) and int(remplacement.get("s", -1)) in correspondance:
+            remplacement["s"] = correspondance[int(remplacement["s"])]
+    return resultat
+
+
+def _etat(fichier: Path, contenu: str | None = None, recaler: bool = True) -> dict:
     """
     Ce que l'on sait d'une transcription : le fichier, son compagnon, et où se
     trouve chaque paragraphe. Avec un compagnon qui décrit ce fichier, le plan
-    vient de `situer` ; sinon, du fichier seul.
+    vient de `situer` ; avec un compagnon qui ne le décrit plus (fichier
+    retouché dans un éditeur), le compagnon est recalé en mémoire sur le
+    fichier ; sinon, le plan vient du fichier seul. « recale » le signale.
     """
     if contenu is None:
         contenu = fichier.read_text(encoding="utf-8")
@@ -379,8 +478,13 @@ def _etat(fichier: Path, contenu: str | None = None) -> dict:
     separation = contenu[len(entete):len(contenu) - len(corps)]
     donnees = compagnon.lire(fichier)
     plan = None
+    recale = False
     if donnees and len(contenu) <= LIMITE_CARACTERES:
         plan = situer(corps, donnees.get("segments") or [])
+        if plan is None and recaler and _compagnon_parlant(donnees):
+            recalees = _recaler(corps, donnees)
+            if recalees is not None:
+                donnees, plan, recale = recalees, situer(corps, recalees["segments"]), True
     if plan is None:
         avec_locuteurs = not donnees or any(
             isinstance(s, dict) and s.get("l") for s in donnees.get("segments") or [])
@@ -389,7 +493,7 @@ def _etat(fichier: Path, contenu: str | None = None) -> dict:
         plan_texte = None
     return {
         "fichier": fichier, "contenu": contenu, "entete": entete, "separation": separation,
-        "corps": corps, "donnees": donnees, "situe": plan is not None,
+        "corps": corps, "donnees": donnees, "situe": plan is not None, "recale": recale,
         "plan": plan if plan is not None else plan_texte,
     }
 
@@ -427,12 +531,15 @@ def empreinte(chemin: str | Path) -> str:
 # Chargement d'une transcription
 # ---------------------------------------------------------------------------
 
-def charger(chemin: str | Path) -> dict:
+def charger(chemin: str | Path, persister: bool = False) -> dict:
     """
     Tout ce dont la vue de lecture a besoin pour un fichier de sortie.
 
     Le compagnon JSON n'est jamais obligatoire : sans lui, le texte s'affiche
-    quand même, sans surlignage, avec une phrase qui l'explique.
+    quand même, sans surlignage, avec une phrase qui l'explique. Le texte
+    affiché est toujours celui du fichier : retouché dans un éditeur, il est
+    relu tel quel et le compagnon est recalé dessus (écrit sur le disque avec
+    `persister`, annulable comme une correction).
     """
     fichier = Path(chemin or "")
     if not fichier.is_file():
@@ -451,9 +558,15 @@ def charger(chemin: str | Path) -> dict:
     etat = _etat(fichier, contenu)
     donnees = etat["donnees"] if etat["situe"] else None
     paragraphes = _paragraphes(etat)
+    if etat["recale"] and persister and not tronque:
+        ecrit = _ecrire(etat, etat["corps"], donnees)
+        if ecrit["ok"]:
+            regles = _instantane_regles()
+            _memoriser_annulation(fichier, ecrit, regles, regles, False)
+            journal.info("Compagnon recalé sur %s, retouché hors de l'application", fichier.name)
     if donnees:
         meta = _meta_du_compagnon(donnees, fichier, paragraphes)
-        message = ""
+        message = langues.t("lect.recale") if etat["recale"] else ""
     else:
         meta = _meta_de_lentete(etat["entete"], fichier)
         if tronque:
@@ -827,7 +940,7 @@ def controler(fichier: str | Path) -> str:
     """
     fichier = Path(fichier)
     try:
-        etat = _etat(fichier)
+        etat = _etat(fichier, recaler=False)
     except (OSError, UnicodeDecodeError) as exc:
         return f"illisible : {exc}"
     if _compagnon_parlant(etat["donnees"]) and not etat["situe"]:

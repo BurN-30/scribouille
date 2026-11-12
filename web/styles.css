@@ -812,6 +812,7 @@ textarea { resize: vertical; font-family: var(--police-mono); font-size: 12.5px;
 .rl-statut:not(:empty) { padding: 6px 18px; border-top: 1px solid var(--bordure); background: var(--carte); }
 .rl-statut.ok { color: var(--vert); }
 .rl-statut.erreur { color: var(--rouge); }
+.rl-statut.attention { color: var(--ambre); }
 
 /* Un paragraphe : l'heure et la voix en marge, le texte en colonne de lecture. */
 .rl-para {

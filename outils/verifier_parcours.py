@@ -1011,6 +1011,53 @@ def essai_selection_exacte(base: Path) -> None:
              "une position qui ne désigne plus la sélection est ignorée")
 
 
+def essai_modifie_dehors(base: Path) -> None:
+    """Un .txt retouché dans un éditeur : relu, dit, compagnon recalé, exports du même texte."""
+    from app import compagnon, relecture
+
+    titre("Fichier retouché hors de l'application : relu, dit, recalé")
+    dossier = base / "dehors"
+    dossier.mkdir()
+    txt = ecrire(dossier, reunion_longue(3000), {"txt": True, "srt": True},
+                 details={"nb_locuteurs": 3})
+    empreinte_avant = lecture.empreinte(txt) if hasattr(lecture, "empreinte") else ""
+    contenu = txt.read_text(encoding="utf-8")
+    retouche = (contenu.replace("pour moi, pour ma part,", "pour ma part, franchement,", 1)
+                .replace("l'héros du film", "le héros du film", 1)
+                .replace("c'est clair.", "c'est clair.\n\nAjout : une phrase écrite à la main.", 1))
+    txt.write_text(retouche, encoding="utf-8")
+
+    vue = lecture.charger(txt)
+    verifier(egalite_ecran_fichier(txt) == "", "l'écran montre le fichier retouché, mot pour mot",
+             egalite_ecran_fichier(txt))
+    verifier(bool(vue.get("message")) and "modifié hors de Scribouille" in vue["message"],
+             "la retouche est dite à l'ouverture", vue.get("message", ""))
+    verifier(vue.get("compagnon") is True and vue["statistiques"]["mots"] > 0,
+             "la confiance des mots inchangés est gardée", str(vue["statistiques"]))
+    ia = lecture.texte_pour_ia(txt)["texte"]
+    verifier("pour ma part, franchement," in ia and "Ajout : une phrase écrite à la main." in ia,
+             "« Copier pour l'IA » part du même texte que l'écran")
+    verifier(vue.get("empreinte") and vue["empreinte"] != empreinte_avant,
+             "l'empreinte du fichier change avec la retouche")
+
+    lecture.charger(txt, persister=True) if "persister" in lecture.charger.__code__.co_varnames else None
+    controler = getattr(lecture, "controler", lambda _t: "absent")
+    verifier(controler(txt) == "" and lecture.charger(txt).get("message", "") == "",
+             "le compagnon recalé est écrit une fois : le fichier se rouvre sans avis", controler(txt))
+    retour = relecture.corriger(txt, "franchement", "vraiment", "tous")
+    verifier(retour.get("ok") and egalite_ecran_fichier(txt) == "" and controler(txt) == "",
+             "une correction après la retouche garde l'écran égal au fichier", str(retour)[:160])
+
+    perimee = lecture.charger(txt)["empreinte"]
+    txt.write_text(txt.read_text(encoding="utf-8").replace("vraiment", "sincèrement", 1), encoding="utf-8")
+    refus = relecture.corriger(txt, "budget", "Budget", [0], empreinte=perimee)
+    verifier(refus.get("ok") is False and refus.get("code") == "modifie_dehors"
+             and "Budget" not in lecture.separer_entete(txt.read_text(encoding="utf-8"))[1],
+             "une écriture lancée sur un fichier changé entre-temps est refusée, rien n'est écrit", str(refus))
+    donnees = compagnon.lire(txt)
+    verifier(donnees is not None, "le compagnon reste lisible après tout cela")
+
+
 def principal() -> int:
     print(f"Vérification du parcours de l'utilisateur\n{'=' * 42}")
     with tempfile.TemporaryDirectory(prefix="scribouille-parcours-") as brut:
@@ -1035,6 +1082,7 @@ def principal() -> int:
         essai_relecture_ciblee(base)
         essai_reunion_longue(base)
         essai_selection_exacte(base)
+        essai_modifie_dehors(base)
         essai_accessibilite()
         essai_ecrans()
 

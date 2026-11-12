@@ -1917,7 +1917,9 @@ class Passerelle:
 
     def lire_transcription(self, chemin: str) -> dict:
         """Contenu structuré d'une transcription, pour la vue de lecture."""
-        retour = lecture.charger(chemin)
+        # Un fichier retouché dans un éditeur est relu tel quel, et son
+        # compagnon recalé dessus une fois pour toutes.
+        retour = lecture.charger(chemin, persister=True)
         retour["lecture_audio"] = bool(self.config.get("lecture_audio"))
         retour["annulable"] = lecture.correction_annulable(chemin)
         # L'audio passe par le serveur local, jamais par un « file:// » que le
@@ -1926,6 +1928,10 @@ class Passerelle:
         if retour["lecture_audio"] and meta.get("source_presente"):
             retour["audio_url"] = self._ecoute.adresse_pour(meta.get("source_chemin", ""))
         return retour
+
+    def empreinte_transcription(self, chemin: str) -> str:
+        """Date et taille du texte et du compagnon : la relecture voit ainsi une retouche faite ailleurs."""
+        return lecture.empreinte(chemin)
 
     def copier_pour_ia(self, chemin: str) -> dict:
         """
@@ -2022,10 +2028,10 @@ class Passerelle:
             retour["nb_corrections"] = len(regles)
         return retour
 
-    def renommer_locuteur(self, chemin: str, ancien: str, nouveau: str) -> dict:
+    def renommer_locuteur(self, chemin: str, ancien: str, nouveau: str, empreinte: str = "") -> dict:
         from app import relecture
 
-        return relecture.renommer_locuteur(chemin, ancien, nouveau)
+        return relecture.renommer_locuteur(chemin, ancien, nouveau, str(empreinte or ""))
 
     def enregistrer_export(self, chemin: str, extension: str, contenu: str) -> dict:
         from app import relecture
