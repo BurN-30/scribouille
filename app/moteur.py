@@ -871,8 +871,10 @@ class MoteurTranscription:
                 # Horodatages internes conservés : sans eux, un segment couvre
                 # tout un passage du VAD (jusqu'à 30 s), illisible en sous-titre.
                 options["without_timestamps"] = False
-                iterateur, info = BatchedInferencePipeline(model=self._modele).transcribe(
-                    signal, batch_size=lot, **options)
+                pipeline = BatchedInferencePipeline(model=self._modele)
+                if progression and duree_totale > 0:
+                    _suivre_lots(pipeline, progression, decalage, duree_totale)
+                iterateur, info = pipeline.transcribe(signal, batch_size=lot, **options)
             else:
                 iterateur, info = self._modele.transcribe(signal, **options)
 
@@ -899,7 +901,9 @@ class MoteurTranscription:
                     segments.append(segment)
                     if sur_segment is not None:
                         sur_segment(segment)
-                if progression and duree_totale > 0:
+                # Par lots, la progression vient des lots décodés (`_suivre_lots`) :
+                # un segment sort seulement quand tout son lot est fini.
+                if progression and duree_totale > 0 and not par_lots:
                     progression(min(0.99, (brut.end + decalage) / duree_totale))
 
         if progression:
@@ -918,6 +922,38 @@ class MoteurTranscription:
             len(segments), details["langue"],
         )
         return segments, details
+
+
+def _suivre_lots(pipeline, progression: Callable[[float], None], decalage: float,
+                 duree_totale: float) -> None:
+    """
+    Progression réelle du mode par lots : la part de parole déjà décodée.
+
+    faster-whisper ne rend les segments d'un lot qu'une fois le lot entier
+    décodé : sur un fichier de quelques minutes (un seul lot), la barre
+    restait à 0 % jusqu'à la fin. Le compte se fait autour de `forward`, qui
+    décode un lot : rien ne change au calcul ni au texte, seul le compte est
+    ajouté. La part est celle de la parole retenue par le VAD (la seule qui
+    coûte), rapportée à ce qui restait à faire depuis `decalage`.
+    """
+    etat = {"total": 0.0, "fait": 0.0}
+    generateur = pipeline._batched_segments_generator
+    forward = pipeline.forward
+
+    def generateur_suivi(features, tokenizer, chunks_metadata, *args, **kwargs):
+        etat["total"] = sum(float(m.get("duration") or 0) for m in chunks_metadata) or 1.0
+        etat["fait"] = 0.0
+        return generateur(features, tokenizer, chunks_metadata, *args, **kwargs)
+
+    def forward_suivi(features, tokenizer, chunks_metadata, options):
+        resultat = forward(features, tokenizer, chunks_metadata, options)
+        etat["fait"] += sum(float(m.get("duration") or 0) for m in chunks_metadata)
+        part = min(1.0, etat["fait"] / etat["total"])
+        progression(min(0.99, (decalage + part * max(0.0, duree_totale - decalage)) / duree_totale))
+        return resultat
+
+    pipeline._batched_segments_generator = generateur_suivi
+    pipeline.forward = forward_suivi
 
 
 def _mots_du_segment(brut, decalage: float = 0.0) -> list[Mot]:
