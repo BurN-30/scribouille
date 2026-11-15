@@ -1455,8 +1455,12 @@ def essai_cartes_graphiques() -> None:
         stdout = reponse
 
     executer, registre = materiel.subprocess.run, materiel._memoires_registre
-    plateforme = materiel.sys.platform
+    plateforme, requete = materiel.sys.platform, materiel._requete_wmi
     try:
+        # La requête WMI dans le processus passe avant PowerShell : simulée
+        # elle aussi, sinon un poste où elle répond (le service de
+        # vérification de GitHub) lit ses vraies cartes au lieu du tampon.
+        materiel._requete_wmi = lambda *a, **k: json.loads(reponse)
         materiel.subprocess.run = lambda *a, **k: Resultat()
         materiel.sys.platform = "win32"
         materiel._memoires_registre = lambda: {}
@@ -1465,7 +1469,7 @@ def essai_cartes_graphiques() -> None:
         avec_registre = materiel._cartes_graphiques()
     finally:
         materiel.subprocess.run, materiel._memoires_registre = executer, registre
-        materiel.sys.platform = plateforme
+        materiel.sys.platform, materiel._requete_wmi = plateforme, requete
 
     noms = [c.nom for c in avec_registre]
     verifier(noms == ["AMD Radeon RX 7900 XT", "AMD Radeon(TM) Graphics"],
