@@ -118,16 +118,60 @@ def _ecrire(niveau: int, message: str, args: tuple) -> None:
     _logger.log(niveau, message, *args)
 
 
-def purger(nb_a_garder: int = 30) -> None:
-    """Ne conserve que les N derniers fichiers de log."""
+#: Purge des journaux : rien de plus récent que `JOURS_GARDES` jours n'est
+#: effacé (le journal d'un processus tombé la semaine passée sert encore au
+#: diagnostic), et les `NOMBRE_GARDE` plus récents restent quel que soit leur
+#: âge. Seul garde-fou de place : au-delà de `NOMBRE_MAXIMAL` journaux, les
+#: plus anciens partent s'ils ont plus de `JOURS_MINIMAUX` jours.
+JOURS_GARDES = 30
+NOMBRE_GARDE = 50
+NOMBRE_MAXIMAL = 1000
+JOURS_MINIMAUX = 7
+
+
+def a_purger(fichiers: list[tuple[Path, float]], maintenant: float, proteges: set[str] = frozenset()) -> list[Path]:
+    """
+    Parmi nos journaux (chemin, date de modification), ceux que la purge
+    efface ; jamais ceux de `proteges` (noms). Fonction pure.
+    """
+    tries = sorted(fichiers, key=lambda f: f[1], reverse=True)
+    partants = []
+    for rang, (fichier, date) in enumerate(tries):
+        if fichier.name in proteges or rang < NOMBRE_GARDE:
+            continue
+        age_jours = (maintenant - date) / 86400
+        if age_jours > JOURS_GARDES or (rang >= NOMBRE_MAXIMAL and age_jours > JOURS_MINIMAUX):
+            partants.append(fichier)
+    return partants
+
+
+def purger() -> int:
+    """
+    Efface les vieux journaux de Scribouille, et seulement les siens : ceux de
+    `chemins.DOSSIER_LOGS` (un sous-dossier de `logs\\` à elle), jamais ce qui
+    est posé à côté (journaux d'une WhiScribe 2.x qui partage le dossier,
+    `verification.txt`, fichiers d'autres outils). Sans effet tant qu'il y en
+    a moins de `NOMBRE_GARDE`. Renvoie le nombre de journaux effacés.
+    """
     try:
-        fichiers = sorted(
-            chemins.DOSSIER_LOGS.glob("*.log"), key=lambda f: f.stat().st_mtime, reverse=True
-        )
-        for vieux in fichiers[nb_a_garder:]:
-            vieux.unlink(missing_ok=True)
+        fichiers = [(f, f.stat().st_mtime) for f in chemins.DOSSIER_LOGS.glob("*.log") if f.is_file()]
     except OSError:
-        pass
+        return 0
+    if len(fichiers) <= NOMBRE_GARDE:
+        return 0
+    import time
+
+    proteges = {_fichier_courant.name} if _fichier_courant is not None else set()
+    effaces = 0
+    for vieux in a_purger(fichiers, time.time(), proteges):
+        try:
+            vieux.unlink()
+            effaces += 1
+        except OSError:
+            pass
+    if effaces:
+        info("Journaux de plus de %s jours effacés : %s (%s gardés)", JOURS_GARDES, effaces, len(fichiers) - effaces)
+    return effaces
 
 
 # ---------------------------------------------------------------------------

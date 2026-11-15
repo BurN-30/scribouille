@@ -937,13 +937,18 @@ async function rafraichirRythme(partiel) {
 /* Reglage propose pour ce poste : au premier lancement (accueil), ou sur
    demande depuis Reglages, Poste. Une seule recommandation, dite ici. */
 
+/* Le rythme propose tel qu'il sera pose : adapte tout seul, ou fixe (sur la
+   puce graphique, vitesse maximale sans adaptation). */
+function phraseRythme(p) {
+  return t(p.rythme_auto ? 'ui.proposition.rythme' : 'ui.proposition.rythme_fixe',
+    { rythme: t('ui.rythme.' + (p.rythme || 'equilibre')) });
+}
+
 function afficherProposition(p) {
   const bloc = $('#bloc-proposition');
   if (!p) { bloc.hidden = true; return; }
   $('#proposition-phrase').textContent = p.phrase || '';
-  $('#proposition-rythme').textContent = t('ui.proposition.rythme', {
-    rythme: t('ui.rythme.' + (p.rythme || 'equilibre')),
-  });
+  $('#proposition-rythme').textContent = phraseRythme(p);
   const notes = (p.notes || []).map((n) => encartInfo(n));
   if (p.deja) notes.unshift(encartSucces(t('ui.proposition.deja')));
   $('#proposition-notes').innerHTML = notes.join('');
@@ -1031,7 +1036,7 @@ function dessinerAccueil(p, definitif) {
     // ce que l'on y perd, s'il y a lieu, est dit ici.
     const phrase = String(p.phrase || '').split(/ ?: /)[0].replace(/[.\s]+$/, '') + '.';
     const perte = (p.notes || []).find((n) => /confiance|confidence/i.test(n));
-    const rythme = p.rythme ? t('ui.proposition.rythme', { rythme: t('ui.rythme.' + p.rythme) }) : '';
+    const rythme = p.rythme ? phraseRythme(p) : '';
     zone.innerHTML = `<span class="titre-section">${ech(t('ui.proposition.titre'))}</span>
       <div>${ech(phrase)}</div>${rythme ? `<div>${ech(rythme)}</div>` : ''}${perte ? `<div class="perte">${ech(perte)}</div>` : ''}`;
     appliquer.hidden = false;

@@ -747,7 +747,9 @@ class MoteurTranscription:
         """Situation de calcul pour les mesures de durée : « cpu » ou « cuda »."""
         return self.peripherique
 
-    def charger(self, modele: str, signaler: Callable[[str, str], None] | None = None) -> None:
+    def charger(self, modele: str, signaler: Callable[[str, str], None] | None = None,
+                annonce: str = "") -> None:
+        """`annonce` : la ligne « Chargement » à dire à la place de la phrase habituelle (repli)."""
         if self._modele is not None and self._nom_modele == modele:
             return
         self.liberer()
@@ -767,7 +769,7 @@ class MoteurTranscription:
             etat["etat"],
         )
         if signaler:
-            signaler("info", langues.t("moteur.chargement", modele=_nom_court(modele)))
+            signaler("info", annonce or langues.t("moteur.chargement", modele=_nom_court(modele)))
 
         try:
             self._modele = self._instancier(modele)

@@ -876,8 +876,21 @@ def retirer(dossier: str | Path | None = None, vider_cache: bool = True) -> dict
     Efface le dossier d'extensions, et par défaut le cache de téléchargement.
 
     Renvoie {ok, message_technique, libere_go}. L'appelant traduit.
+
+    Dossier de données partagé avec une WhiScribe 2.x installée : ses
+    extensions sont aussi les siennes, rien n'est effacé (`partage` : son
+    exécutable). Un dossier donné hors des données (`--cible`) reste libre.
     """
     cible = Path(str(dossier)) if dossier else DOSSIER
+    partage = chemins.donnees_partagees_ancienne_version()
+    if partage is not None:
+        try:
+            dans_donnees = cible.resolve().is_relative_to(chemins.RACINE.resolve())
+        except OSError:
+            dans_donnees = True
+        if dans_donnees:
+            return {"ok": False, "partage": str(partage), "libere_go": 0.0,
+                    "message_technique": f"{cible} : partagé avec la version installée {partage}, laissé"}
     # Mesure réelle cette fois : c'est un geste ponctuel, et le chiffre annoncé
     # à l'utilisateur doit être celui de ce qui part vraiment.
     libere = taille_go(cible, mesurer=True) + (taille_cache_go() if vider_cache else 0.0)

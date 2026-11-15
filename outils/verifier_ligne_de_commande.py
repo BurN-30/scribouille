@@ -572,6 +572,24 @@ def essai_documentation() -> None:
     verifier(code == 2 and "fenêtre" in erreur, "clé interne : refusée, et dite comme telle", erreur[:120])
     lancer("reglages", "defaut", "formats")
 
+    # Les textes, l'aide et les guides donnent la syntaxe d'aujourd'hui (PC du
+    # travail, 15/11 : « scribouille.com --reconnaitre --appliquer » après
+    # `materiel proposer`). Les anciennes formes ne restent que dans leur table.
+    ancienne = re.compile(r"(scribouille(\.com)?|transcriber\.pyw|Scribouille\.exe) --(banc|campagne|endurance|"
+                          r"comparer|reconnaitre|mesurer-vocabulaire|apprendre-vocabulaire|detecter-materiel)\b"
+                          r"|--reconnaitre --appliquer")
+    trouves = []
+    for relatif in ("app/langues.py", "web/langues.js", "web/app.js", "web/index.html", "docs/guide.fr.md",
+                    "docs/guide.md", "docs/reglages.md", "README.md", "README.fr.md", "AGENTS.md"):
+        texte = (RACINE / relatif).read_text(encoding="utf-8")
+        trouves += [f"{relatif}:{n}" for n, ligne in enumerate(texte.splitlines(), 1) if ancienne.search(ligne)]
+    hors_table = [ligne for ligne in guide.split("### Anciennes formes")[0].splitlines() if ancienne.search(ligne)]
+    textes_aide = cli._analyseur().format_help() + "".join(p.format_help() for p in cli._sous_commandes(
+        cli._analyseur()).values())
+    verifier(not trouves and not hors_table and not ancienne.search(textes_aide),
+             "textes, aide et guides : aucune syntaxe d'avant la 3.0 (hors de la table des anciennes formes)",
+             str(trouves[:6] + hors_table[:3]))
+
 
 # ---------------------------------------------------------------------------
 # 9. Aucune fenêtre de console, jamais
@@ -875,7 +893,7 @@ def essai_lecture_sans_ecriture() -> None:
     code, sortie, _ = lancer_dans(env, "reglages", "lire", "theme", "--json")
     verifier((_json(sortie) or [{}])[-1].get("donnees", {}).get("valeur") == "sombre",
              "et relus par la 3.0")
-    journaux = [f for f in (donnees / "logs").glob("*.log") if f.name != "whiscribe-ancien.log"]
+    journaux = list((donnees / "logs" / "scribouille").glob("*.log"))
     texte = "".join(f.read_text(encoding="utf-8", errors="replace") for f in journaux)
     verifier("Données gardées dans" in texte and "WhiScribe.exe" in texte,
              "journal de la ligne de commande : « Données gardées dans … » comme celui de la fenêtre",
@@ -883,14 +901,21 @@ def essai_lecture_sans_ecriture() -> None:
     source = maison / "Documents" / "point.ogg"
     source.write_bytes((RACINE / "banc" / "extrait_fr.ogg").read_bytes())
     avis = []
-    for _ in range(2):
-        code, sortie, erreur = lancer_dans(env, "transcrire", str(source), "--json")
+    factice = {**env, "SCRIBOUILLE_MOTEUR_ESSAI": json.dumps({"segments": 2, "pause_s": 0.01})}
+    for _ in range(3):
+        code, sortie, erreur = lancer_dans(factice, "transcrire", str(source), "--json", "--telecharger", "--ecraser")
+        evenements = _json(sortie)
+        debut = next((x for x in evenements if x.get("evenement") == "debut"), {})
         avis.append(("non installée" in erreur,
                      any(x.get("evenement") == "journal" and "non installée" in x.get("texte", "")
-                         for x in _json(sortie))))
-    verifier(avis[0] == (True, True) and avis[1] == (False, True) and (donnees / "config.json").read_bytes() == config_2x,
-             "voix cochées par la 2.x, extension absente : dit une fois, ensuite seulement en JSON (et diagnostic)",
+                         for x in evenements),
+                     debut.get("locuteurs") == {"demandes": True, "disponibles": False} if debut else None))
+    verifier(avis[0][:2] == (True, True) and all(a[:2] == (False, False) for a in avis[1:])
+             and (donnees / "config.json").read_bytes() == config_2x,
+             "voix cochées par la 2.x, extension absente : dit une fois pour de bon, plus aucun avis ensuite",
              str(avis))
+    verifier(all(a[2] is True for a in avis),
+             "et toujours lisible en JSON (champ « locuteurs » de l'événement « debut »)", str(avis))
     # La 2.x désinstallée : la sauvegarde suivante reverse nos réglages dans
     # config.json, garde les clés inconnues, et notre fichier s'en va.
     (maison / "AppData" / "Local" / "Programs" / "WhiScribe" / "WhiScribe.exe").unlink()
@@ -900,6 +925,213 @@ def essai_lecture_sans_ecriture() -> None:
              and "lecture_audio" in fusion,
              "2.x partie : nos réglages reversés dans config.json, clés de la 2.x gardées, fichier à part retiré",
              f"{code} {sorted(fusion)[:5]} {erreur[-160:]}")
+
+
+# ---------------------------------------------------------------------------
+# 11. Dossier partagé avec une 2.x : rien de la 2.x ne disparaît ni ne change
+# ---------------------------------------------------------------------------
+
+_FENETRE_ET_MENAGE = r"""
+import runpy, sys, time
+sys.argv = [sys.argv[1]]
+ns = runpy.run_path(sys.argv[0], run_name="essai-demarrage")
+passerelle = ns["Passerelle"]()
+passerelle.etat_initial()
+# Le ménage que la fenêtre fait une fois la page chargée (`_au_demarrage`).
+ns["reprise"].purger()
+time.sleep(1.0)
+print("pret", flush=True)
+"""
+
+
+def _tuer_arbre(p: subprocess.Popen) -> None:
+    """La commande et son moteur tués net (console fermée, courant coupé)."""
+    import psutil
+
+    arbre = []
+    try:
+        racine = psutil.Process(p.pid)
+        arbre = racine.children(recursive=True) + [racine]
+        for e in arbre:
+            try:
+                e.kill()
+            except psutil.Error:
+                pass
+    except psutil.Error:
+        pass
+    p.wait(30)
+    psutil.wait_procs(arbre, timeout=30)
+
+
+def poste_2x_complet(nom: str) -> tuple[Path, Path, dict]:
+    """
+    Le poste du travail, avec de vrais restes de WhiScribe 2.x de toutes
+    sortes : 51 journaux (dont 11 du 12/11) et son bilan, des reprises (source
+    disparue, source présente, segments sans état, écriture provisoire, état
+    illisible), réglages, glossaire, jeton, sauvegarde, extensions, cache,
+    modèle. Tous vieux de 60 jours, comme l'étaient ceux du 12/11.
+    """
+    maison, donnees, env = poste_partage(nom)
+    # Témoin de la puce : protocole partagé, réécrit à dessein par une ouverture sur la puce.
+    (donnees / "openvino-chargement-en-cours.txt").unlink()
+    vieux = time.time() - 60 * 86400
+    for k in range(51):
+        jour = "2026-11-12" if k >= 40 else f"2026-10-{1 + k % 28:02d}"
+        (donnees / "logs" / f"{jour}_{100000 + k}.log").write_text(f"journal de la 2.x numéro {k}\n", encoding="utf-8")
+    (donnees / "logs" / "verification.txt").write_text("bilan de la 2.x\n", encoding="utf-8")
+    reprises = donnees / "reprises"
+    reprises.mkdir()
+    presente = maison / "Documents" / "deux-x.ogg"
+    presente.write_bytes((RACINE / "banc" / "extrait_fr.ogg").read_bytes())
+
+    def etat_2x(source: Path) -> str:
+        return json.dumps({"version": 1, "source": str(source), "nom": source.name, "modele": "large-v3",
+                           "duree_audio": 60.0, "debut": "2026-09-15T10:00:00", "position": 10.0,
+                           "nb_segments": 1, "ecoule": 5.0, "maj": "2026-09-15T10:01:00"})
+
+    segment = json.dumps({"d": 0.0, "f": 10.0, "t": "Texte de la 2.x.", "m": []}) + "\n"
+    (reprises / "aaaaaaaaaaaaaaaa.json").write_text(etat_2x(maison / "disparu.ogg"), encoding="utf-8")
+    (reprises / "aaaaaaaaaaaaaaaa.jsonl").write_text(segment, encoding="utf-8")
+    (reprises / "bbbbbbbbbbbbbbbb.json").write_text(etat_2x(presente), encoding="utf-8")
+    (reprises / "bbbbbbbbbbbbbbbb.jsonl").write_text(segment, encoding="utf-8")
+    (reprises / "cccccccccccccccc.jsonl").write_text(segment, encoding="utf-8")
+    (reprises / "dddddddddddddddd.json.tmp").write_text("{", encoding="utf-8")
+    (reprises / "eeeeeeeeeeeeeeee.json").write_text("illisible", encoding="utf-8")
+    for nom_fichier, contenu in (("jeton_hf.txt", "hf_factice\n"), ("gabarit-ia.txt", "Résume.\n"),
+                                 ("maj-etat.json", "{}"), ("surveillance-vus.json", "[]"),
+                                 ("whiscribe-donnees-avant-import-20261001-1000.zip", "PK"),
+                                 ("extensions/locuteurs.txt", "2.x"), ("cache-pip/paquet.whl", "roue"),
+                                 ("modeles/models--Systran--faster-whisper-tiny/blobs/poids", "poids")):
+        (donnees / nom_fichier).parent.mkdir(parents=True, exist_ok=True)
+        (donnees / nom_fichier).write_text(contenu, encoding="utf-8")
+    for f in donnees.rglob("*"):
+        if f.is_file():
+            os.utime(f, (vieux, vieux))
+    return maison, donnees, env
+
+
+def fichiers_de(racine: Path, sauf=()) -> dict[str, tuple]:
+    """Empreinte des seuls fichiers (pas des dossiers, que nos propres fichiers redatent)."""
+    return {c: v for c, v in empreinte(racine).items() if not c.endswith("/") and not c.startswith(tuple(sauf))}
+
+
+def essai_dossier_partage_intact() -> None:
+    titre("11. Dossier partagé avec une WhiScribe 2.x : rien de la 2.x ne disparaît ni ne change")
+    from app import presets
+
+    maison, donnees, env = poste_2x_complet("poste-2x-complet")
+    nos_journaux = donnees / "logs" / "scribouille"
+    nos_journaux.mkdir()
+    maintenant = time.time()
+    for k in range(70):
+        f = nos_journaux / f"2026-09-{1 + k % 28:02d}_{200000 + k}.log"
+        f.write_text(f"journal de la 3.x numéro {k}\n", encoding="utf-8")
+        date = maintenant - (60 * 86400 if k < 60 else 86400) + k
+        os.utime(f, (date, date))
+    deux_x = fichiers_de(donnees)
+    deux_x = {c: v for c, v in deux_x.items() if not c.startswith("logs/scribouille/")}
+
+    def intacts(etape: str) -> None:
+        apres = fichiers_de(donnees)
+        changes = sorted(c for c in deux_x if apres.get(c) != deux_x[c])
+        verifier(not changes, f"{etape} : les {len(deux_x)} fichiers de la 2.x sont tous là, inchangés", str(changes[:6]))
+
+    # Ouverture de la fenêtre (côté Python), purge des journaux et des reprises comprise.
+    p = subprocess.run([PYTHON, "-c", _FENETRE_ET_MENAGE, str(RACINE / "transcriber.pyw")], capture_output=True,
+                       timeout=180, cwd=str(TEMPORAIRE), env=env, creationflags=SANS_FENETRE)
+    verifier(p.returncode == 0 and b"pret" in p.stdout, "démarrage de la fenêtre sur le dossier partagé",
+             p.stderr.decode("utf-8", "replace")[-300:])
+    intacts("ouverture de la fenêtre")
+    restants = sorted(nos_journaux.glob("*.log"), key=lambda f: f.stat().st_mtime)
+    recents = [f for f in restants if maintenant - f.stat().st_mtime < 30 * 86400]
+    verifier(len(restants) == 50 and len(recents) == 11,
+             "nos journaux seulement, et doucement : plus de 30 jours et au-delà des 50 derniers",
+             f"{len(restants)} restants, {len(recents)} récents")
+    # Une deuxième ouverture tout de suite : rien de plus n'est effacé.
+    subprocess.run([PYTHON, "-c", _FENETRE_ET_MENAGE, str(RACINE / "transcriber.pyw")], capture_output=True,
+                   timeout=180, cwd=str(TEMPORAIRE), env=env, creationflags=SANS_FENETRE)
+    apres = list(nos_journaux.glob("*.log"))
+    verifier(len(apres) == 50 and len([f for f in apres if maintenant - f.stat().st_mtime < 30 * 86400]) == 12,
+             "ouverture suivante : toujours les 50 derniers, rien de récent effacé", str(len(apres)))
+    intacts("deuxième ouverture")
+
+    # Une transcription complète (moteur factice), puis une coupée net sur la puce.
+    sorties = maison / "Documents" / "sorties"
+    source = maison / "Documents" / "trois-x.ogg"
+    source.write_bytes((RACINE / "banc" / "extrait_fr.ogg").read_bytes())
+    factice = {**env, "SCRIBOUILLE_MOTEUR_ESSAI": json.dumps({"segments": 4, "pause_s": 0.01})}
+    code, _sortie, erreur = lancer_dans(factice, "transcrire", str(source), "--sortie", str(sorties),
+                                        "--locuteurs", "non", "--telecharger", "--json")
+    verifier(code == 0, "transcription complète sur le dossier partagé", erreur[-200:])
+    intacts("transcription")
+    coupee = maison / "Documents" / "coupee.ogg"
+    coupee.write_bytes((RACINE / "banc" / "extrait_fr.ogg").read_bytes())
+    lente = {**env, "SCRIBOUILLE_MOTEUR_ESSAI": json.dumps({"segments": 40, "pause_s": 0.3, "puce": True})}
+    p = subprocess.Popen([PYTHON, str(RACINE / "transcriber.pyw"), "transcrire", str(coupee), "--sortie",
+                          str(sorties), "--locuteurs", "non", "--telecharger", "--json"],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=str(TEMPORAIRE),
+                         env={**lente, "PYTHONIOENCODING": "utf-8"}, creationflags=SANS_FENETRE)
+
+    def deux_segments() -> bool:
+        for f in (donnees / "reprises").glob("*.json"):
+            try:
+                etat = json.loads(f.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if etat.get("auteur") and etat.get("nb_segments", 0) >= 2:
+                return True
+        return False
+
+    limite = time.monotonic() + 90
+    while time.monotonic() < limite and not deux_segments():
+        time.sleep(0.1)
+    _tuer_arbre(p)
+    verrous = list((donnees / "reprises").glob("*.en-cours"))
+    code, sortie, _ = lancer_dans(env, "etat", "--json")
+    etat = (_json(sortie) or [{}])[-1].get("donnees", {})
+    taches, orphelines = etat.get("taches") or [], etat.get("orphelines") or []
+    attendu = presets.depot_openvino(presets.modele_du_preset("qualite"))
+    verifier(len(taches) == 1 and Path(taches[0]["chemin"]).name == "coupee.ogg",
+             "coupure : notre tâche reprenable, et pas celles de la 2.x", str([t.get("nom") for t in taches]))
+    verifier(bool(verrous) and not [o for o in orphelines if o.get("raison") == "verrou_mort"],
+             "le verrou laissé par la coupure va avec la tâche reprenable : pas d'orpheline « verrou_mort »",
+             f"{len(verrous)} verrou(s) ; {orphelines}")
+    verifier(not orphelines, "aucune orpheline : les restes de la 2.x ne sont pas pris pour les nôtres",
+             str([(o.get('raison'), o.get('fichiers')) for o in orphelines])[:300])
+    verifier(taches and taches[0].get("modele") == attendu and taches[0].get("calcul", "").lower() == "openvino-gpu"
+             and taches[0].get("modele_demande") == presets.modele_du_preset("qualite"),
+             "etat : le modèle réellement chargé sur la puce (OpenVINO), pas celui du catalogue",
+             str({k: (taches or [{}])[0].get(k) for k in ("modele", "calcul", "modele_demande")}))
+    intacts("coupure pendant la transcription")
+    code, _sortie, erreur = lancer_dans(factice, "reprendre", "--json")
+    verifier(code == 0, "reprise de notre tâche", erreur[-200:])
+    intacts("reprise")
+    code, sortie, _ = lancer_dans(env, "etat", "--nettoyer", "--json")
+    etat = (_json(sortie) or [{}])[-1].get("donnees", {})
+    verifier(code == 0 and not etat.get("taches") and not etat.get("nettoyees"),
+             "etat --nettoyer : rien à nous à nettoyer, rien de la 2.x effacé", str(etat.get("nettoyees"))[:200])
+    intacts("nettoyage des reprises")
+    code, sortie, erreur = lancer_dans(env, "effacer", "--liberable", "--oui", "--json")
+    verifier(code == 0 and not list(nos_journaux.glob("*.log"))[1:], "effacer --liberable : nos journaux partent",
+             erreur[-200:])
+    intacts("effacer --liberable")
+    code, sortie, _ = lancer_dans(env, "effacer", "--complet", "--apercu", "--json")
+    apercu = (_json(sortie) or [{}])[-1].get("donnees", {}).get("apercu", {})
+    chemins_postes = {Path(c).name for p_ in apercu.get("postes", []) for c in p_.get("chemins", [])}
+    partages = {Path(c).name for c in apercu.get("partages", [])}
+    verifier({"config.json", "vocabulaire.txt", "modeles", "extensions", "reprises", "logs"} <= partages
+             and not chemins_postes & {"config.json", "vocabulaire.txt", "modeles", "extensions", "reprises", "logs",
+                                       "jeton_hf.txt", "cache-pip"},
+             "effacer --complet : ce que la 2.x écrit aussi est montré à part, dans aucun poste effaçable",
+             f"partagés {sorted(partages)} ; postes {sorted(chemins_postes)[:12]}")
+    code, sortie, _ = lancer_dans(env, "diagnostic")
+    verifier("Données gardées dans" in sortie and "WhiScribe.exe" in sortie,
+             "diagnostic : « Données gardées dans … » (dossier partagé avec la 2.x)", sortie[-300:])
+    code, sortie, _ = lancer_dans(env, "verifier")
+    verifier("Données gardées dans" in sortie, "verifier : la même phrase", sortie[:400])
+    code, sortie, _ = lancer_dans(env, "materiel", "proposer")
+    verifier("materiel proposer --appliquer" in sortie and "--reconnaitre" not in sortie,
+             "materiel proposer : la commande pour appliquer est dans la syntaxe actuelle", sortie[-200:])
 
 
 def principal() -> int:
@@ -915,6 +1147,7 @@ def principal() -> int:
         essai_documentation()
         essai_aucune_console()
         essai_lecture_sans_ecriture()
+        essai_dossier_partage_intact()
     finally:
         import shutil
 

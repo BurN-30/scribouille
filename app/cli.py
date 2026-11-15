@@ -451,7 +451,7 @@ OPTIONS_MESURES = {
     "rythmes": ("--moteur", "--peripherique", "--repetitions", "--rythmes", "--sans-enregistrer",
                 "--sans-temoin-passif", "--variantes-ov"),
     "endurance": ("--corpus", "--memoire-libre", "--passages", "--peripherique", "--pression", "--recommencer",
-                  "--reglage", "--sans-diagnostic"),
+                  "--reglage"),
     "comparer": ("--debut", "--duree", "--faisceau-ctranslate2", "--faisceau-openvino", "--glossaire", "--ouvrir",
                  "--peripherique", "--preset", "--reference", "--sans-corrections", "--sans-glossaire", "--sortie"),
     "vocabulaire": ("--corpus", "--corpus-paquet", "--peripherique", "--recommencer", "--reference", "--reglage",
@@ -833,6 +833,10 @@ def _config_de_commande(options, materiel_poste) -> dict:
         else:
             actuel["moteur"] = "openvino"
             actuel["peripherique"] = peripherique or str(actuel.get("peripherique") or "CPU")
+            if peripherique and peripherique != "CPU":
+                # Périphérique nommé ici : vaut demande de réessai d'une puce
+                # suspendue (`reglage_machine.REESSAI_EXPLICITE`), en mémoire seulement.
+                actuel[reglage_machine.REESSAI_EXPLICITE] = True
         actuel["signature"] = calibration.signature_machine(materiel_poste)
         config[reglage_machine.CLE] = actuel
     return config
@@ -956,8 +960,12 @@ def _executer_file(sortie: Sortie, elements: list, config: dict, telecharger: bo
     essai = copy.copy(mat)
     reglage_machine.appliquer_au_materiel(config, essai)
     rythme_retenu = rythme_module.retenu(config, essai)
+    from . import diarisation
+
     sortie.evenement("debut", fichiers=[e.chemin for e in elements], version=VERSION,
                      preset=config.get("preset"), rythme=rythme_retenu,
+                     locuteurs={"demandes": bool(config.get("diarisation")),
+                                "disponibles": diarisation.disponible()},
                      pour_une_heure=presets.pour_une_heure(config.get("preset", "qualite"), essai, rythme_retenu))
     interrompu = False
     file.demarrer(config, rappels)
@@ -1037,13 +1045,13 @@ def _options_satisfaites(options, config: dict, mat, sortie: Sortie) -> None:
 
         disque = config_module.charger()
         if not disque.get("avis_locuteurs"):
-            # Dit une fois (réglage hérité d'une 2.x, où il était coché par
-            # défaut), puis seulement dans le JSON et dans `diagnostic`.
+            # Dit une fois pour de bon (réglage hérité d'une 2.x, où il était
+            # coché par défaut) ; ensuite plus aucun avis à chaque commande :
+            # seulement `diagnostic` (avertissements) et, en JSON, le champ
+            # `locuteurs` de l'événement `debut`.
             _avertir(sortie, texte)
             disque["avis_locuteurs"] = True
             config_module.sauver(disque)
-        else:
-            sortie.evenement("journal", niveau="info", texte=texte)
     if options.noms and not config.get("diarisation"):
         raise Echec("arguments", "--noms demande des voix séparées : ajouter --locuteurs auto (ou leur nombre)",
                     ARGUMENTS)
@@ -1068,6 +1076,14 @@ def _options_satisfaites(options, config: dict, mat, sortie: Sortie) -> None:
                         "scribouille materiel puce --lever (réessayer la puce)" if effet.get("plantage")
                         else "scribouille diagnostic --materiel ; ou --moteur ctranslate2")
         _avertir(sortie, f"Réglage du poste : {raison} ; CTranslate2 prend la main.")
+    elif effet.get("reessai"):
+        from . import temoin_puce
+
+        peripherique = str(effet.get("peripherique") or "GPU").upper()
+        _avertir(sortie, f"Puce graphique {temoin_puce.resume(effet['puce'])} : --peripherique {peripherique} "
+                         "demandé explicitement, nouvel essai sous garde (un nouveau plantage la suspend de "
+                         "nouveau et le fichier repart sur le processeur ; sans --peripherique, la suspension "
+                         "tient jusqu'à « scribouille materiel puce --lever »).")
     elif (effet.get("puce") or {}).get("etat") == "a_verifier":
         from . import temoin_puce
 
@@ -1180,12 +1196,14 @@ def cmd_reprendre(options, sortie: Sortie) -> int:
             config["formats"] = {"txt": True, "srt": False, "vtt": False, "horodatage": False}
             config["compagnon_confiance"] = True
     # Une reprise garde son modèle : le texte ne mêle jamais deux modèles.
-    if presets.modele_du_preset(config.get("preset", "qualite"), "") != choisie["modele"]:
-        cles = [c for c, p in presets.PRESETS.items() if p["modele"] == choisie["modele"]]
+    # (Le modèle du catalogue : sur la puce, c'est son équivalent OpenVINO qui calcule.)
+    demande_modele = choisie.get("modele_demande") or choisie["modele"]
+    if presets.modele_du_preset(config.get("preset", "qualite"), "") != demande_modele:
+        cles = [c for c, p in presets.PRESETS.items() if p["modele"] == demande_modele]
         if cles:
             config["preset"] = cles[0]
         else:
-            config["mode_avance"], config["modele_avance"] = True, choisie["modele"]
+            config["mode_avance"], config["modele_avance"] = True, demande_modele
     source = Path(choisie["chemin"])
     # Sans --sortie : le dossier que la transcription interrompue visait.
     ancien = str(etat.get("sortie") or "")
@@ -1261,7 +1279,8 @@ def cmd_etat(options, sortie: Sortie) -> int:
     for t in taches:
         ou = ("rien d'enregistré, reprend du début" if t["depuis_debut"] else
               f"{t['pct']} % ({presets.formater_duree(t['position'])} sur {presets.formater_duree(t['duree_audio'])})")
-        lignes.append(f"  {t['nom']} : {ou}, {t['etat']}, clé {t['cle']}")
+        lignes.append(f"  {t['nom']} : {ou}, {t['etat']}, modèle {t['modele'] or '?'}"
+                      + (f" ({t['calcul']})" if t.get("calcul") else "") + f", clé {t['cle']}")
     if options.nettoyer:
         lignes.append(f"Sauvegardes orphelines effacées : {len(nettoyees)}")
     elif orphelines:
@@ -1563,6 +1582,8 @@ def cmd_diagnostic(options, sortie: Sortie) -> int:
         "programme": str(chemins.DOSSIER_PROGRAMME),
         "commande": str(chemins.executable_console() or ""),
         "donnees": str(chemins.RACINE),
+        # Pourquoi là (partagé avec une 2.x, lu sur place...) : la phrase du journal.
+        "donnees_raison": chemins.phrase_dossier_donnees(),
         "modeles_dossier": str(chemins.DOSSIER_MODELES),
         "materiel": {**mat.en_dict(), "provisoire": provisoire},
         "moteurs": {
@@ -1592,6 +1613,8 @@ def cmd_diagnostic(options, sortie: Sortie) -> int:
     }
     lignes = [f"Scribouille {VERSION} ({resultat['mode']})",
               f"  Programme : {resultat['programme']}", f"  Données   : {resultat['donnees']}",
+              *([f"  {resultat['donnees_raison']}"]
+                if resultat["donnees_raison"] != f"Données dans {chemins.RACINE}" else []),
               f"  Modèles   : {resultat['modeles_dossier']}",
               f"  Matériel  : {mat.resume()}",
               f"  Réglage   : {config.get('preset')}, moteur {mat.moteur} ({resultat['reglage']['peripherique']}), "
@@ -1659,7 +1682,7 @@ def cmd_materiel(options, sortie: Sortie) -> int:
                   langues.t("adapt.cli.source", source=langues.t(f"adapt.source.{proposition['source']}"),
                             regle=proposition["regle"]),
                   "  " + proposition["phrase"],
-                  "  " + langues.t("adapt.cli.rythme", rythme=langues.t(f"rythme.nom.{proposition['rythme']}")),
+                  "  " + adaptation.phrase_rythme(proposition),
                   *("  " + note for note in proposition["notes"]), "",
                   langues.t("adapt.cli.deja") if deja else langues.t("adapt.cli.applique") if applique
                   else langues.t("adapt.cli.pour_appliquer")]
@@ -1694,10 +1717,22 @@ def cmd_espace(options, sortie: Sortie) -> int:
              + f"\n  Libérable sans rien perdre : {langues.octets(resultat['liberable_octets'])}"
              + f"\n  Transcriptions (à part, jamais effacées sans demande) : "
                f"{langues.octets(resultat['transcriptions_octets'])} dans {resultat['transcriptions']['dossier']}")
-    if resultat["non_reconnus"]:
-        texte += "\n  Non reconnus, jamais touchés : " + ", ".join(resultat["non_reconnus"][:10])
+    texte += _laisses(resultat, "jamais touchés")
     sortie.donnees(resultat, texte)
     return OK
+
+
+def _laisses(resultat: dict, mot: str) -> str:
+    """Ce que l'inventaire ne touche pas : ce qu'une WhiScribe 2.x écrit aussi, puis le non reconnu."""
+    texte = ""
+    partages = resultat.get("partages") or []
+    if partages:
+        texte += (f"\n  Partagés avec la version installée {resultat.get('partage_avec')}, {mot} : "
+                  + ", ".join(Path(c).name for c in partages[:12]))
+    autres = [c for c in resultat.get("non_reconnus") or [] if c not in partages]
+    if autres:
+        texte += f"\n  Non reconnus, {mot} : " + ", ".join(autres[:10])
+    return texte
 
 
 def _confirmer(sortie: Sortie, question: str, oui: bool) -> bool:
@@ -1732,8 +1767,7 @@ def cmd_effacer(options, sortie: Sortie) -> int:
                  + (f"\n  Puis désinstallation silencieuse : {apercu['desinstalleur']}" if apercu["desinstalleur"] else "")
                  + (f"\n  Le dossier du programme reste, à supprimer vous-même : {apercu['programme_reste']}"
                     if apercu["programme_reste"] else ""))
-        if apercu["non_reconnus"]:
-            texte += "\n  Non reconnus, laissés : " + ", ".join(apercu["non_reconnus"][:10])
+        texte += _laisses(apercu, "laissés")
         if options.resume:
             # Avec marque d'ordre : le désinstalleur (Inno Setup) la lit en UTF-8.
             Path(options.resume).write_text(_resume_desinstalleur(apercu), encoding="utf-8-sig")

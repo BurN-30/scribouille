@@ -1227,6 +1227,27 @@ def essai_calibration(base: Path) -> None:
                  "un fichier de mesures illisible ne fait pas tomber l'application")
         verifier(presets.facteur_temps_reel("qualite", machine) == statique,
                  "et l'estimation revient au facteur statique")
+
+        # -- OpenVINO : la clé porte le modèle qui calcule (PC du travail, 15/11) --
+        depot_turbo = presets.depot_openvino(presets.MODELE_TURBO)
+        verifier(calibration.cle_mesure(presets.MODELE_TURBO, "openvino-gpu", 1)
+                 == f"{depot_turbo}|openvino-gpu|beam1"
+                 and calibration.cle_mesure(presets.MODELE_TURBO, "cpu", 5) == f"{presets.MODELE_TURBO}|cpu|beam5",
+                 "mesure OpenVINO rangée sous le modèle OpenVINO réellement chargé, pas celui du catalogue",
+                 calibration.cle_mesure(presets.MODELE_TURBO, "openvino-gpu", 1))
+        ancienne = f"{presets.MODELE_TURBO}|openvino-gpu|beam1"
+        calibration.fichier().write_text(json.dumps({
+            "version": calibration.VERSION_FICHIER, "machine": calibration.signature_machine(machine),
+            "mesures": {ancienne: {"facteur": 0.2, "historique": [{"facteur": 0.2, "duree": 3600.0,
+                                                                    "date": "2026-11-12T10:00:00"}]}}}),
+            encoding="utf-8")
+        verifier(abs(calibration.facteur_mesure(presets.MODELE_TURBO, "openvino-gpu", 1, machine) - 0.2) < 0.001,
+                 "une mesure rangée sous l'ancienne clé (modèle du catalogue) reste lue")
+        calibration.enregistrer(presets.MODELE_TURBO, "openvino-gpu", 1, 1200.0, 0.3 * 1200.0, machine)
+        mesures = calibration.charger(calibration.signature_machine(machine))["mesures"]
+        verifier(ancienne not in mesures
+                 and len(mesures.get(f"{depot_turbo}|openvino-gpu|beam1", {}).get("historique", [])) == 2,
+                 "et la mesure suivante la reprend sous la nouvelle clé, historique gardé", str(list(mesures)))
     finally:
         chemins.RACINE = racine_reelle
         calibration.PIVOT_CONFIANCE_S = pivot
@@ -1756,6 +1777,60 @@ def essai_reglage_machine(base: Path) -> None:
             verifier(classe == "plantage" and effet.get("plantage") == "GPU" and poste.moteur == "ctranslate2"
                      and temoin_puce.etat().get("code") == 0xC0000005,
                      "plantage constaté (violation d'accès) : OpenVINO suspendu, code noté", str(effet))
+            # Choix explicite du périphérique (« transcrire --peripherique GPU ») :
+            # vaut demande de réessai, sous garde, et c'est dit (PC du travail,
+            # 15/11) ; le réglage automatique, lui, reste suspendu.
+            import contextlib
+            import io
+            import types
+
+            from app import cli as cli_module
+
+            explicite = {**config, reglage_machine.CLE: {**config[reglage_machine.CLE],
+                                                         reglage_machine.REESSAI_EXPLICITE: True}}
+            effet = reglage_machine.appliquer_au_materiel(explicite, poste)
+            verifier(effet.get("reessai") and not effet.get("indisponible") and poste.moteur == "openvino"
+                     and reglage_machine.REESSAI_EN_COURS and temoin_puce.etat().get("etat") == "suspendue",
+                     "puce suspendue, périphérique choisi explicitement : nouvel essai sur la puce, témoin intact",
+                     str(effet))
+            confirmes = moteur_openvino.peripheriques_confirmes
+            moteur_openvino.peripheriques_confirmes = lambda: True
+            sortie_json, sortie_err = io.StringIO(), io.StringIO()
+            try:
+                with contextlib.redirect_stdout(sortie_json), contextlib.redirect_stderr(sortie_err):
+                    cli_module._options_satisfaites(
+                        types.SimpleNamespace(locuteurs="", noms="", moteur="openvino", peripherique="GPU",
+                                              vocabulaire=[]),
+                        explicite, poste, cli_module.Sortie("transcrire", True))
+            finally:
+                moteur_openvino.peripheriques_confirmes = confirmes
+            evenements = [json.loads(x) for x in sortie_json.getvalue().splitlines() if x.strip()]
+            verifier("demandé explicitement" in sortie_err.getvalue() and "suspendue" in sortie_err.getvalue()
+                     and any(e.get("evenement") == "journal" and e.get("niveau") == "attention"
+                             and "nouvel essai sous garde" in e.get("texte", "") for e in evenements),
+                     "et la commande le dit (sortie d'erreur et JSON) : réessai explicite, sous garde",
+                     sortie_err.getvalue()[-300:])
+            effet = reglage_machine.appliquer_au_materiel(config, poste)
+            verifier(effet.get("plantage") == "GPU" and poste.moteur == "ctranslate2"
+                     and not reglage_machine.REESSAI_EN_COURS,
+                     "réglage automatique (sans choix explicite) : la suspension tient", str(effet))
+            # Le superviseur connaît la situation de calcul du moteur
+            # (« openvino-gpu ») : le plantage noté ainsi suspend bien « GPU »
+            # (au PC du travail, il était écrit « OPENVINO-GPU » et ne
+            # suspendait rien : la puce resservait sans --lever).
+            brut_avant = temoin_puce.fichier().read_bytes()
+            temoin_puce.noter_fin_moteur("openvino-gpu", 0xC0000005, "chargement")
+            effet = reglage_machine.appliquer_au_materiel(config, poste)
+            verifier(temoin_puce.etat().get("peripherique") == "GPU" and effet.get("plantage") == "GPU"
+                     and temoin_puce.suspendue("GPU") and temoin_puce.suspendue("openvino-gpu")
+                     and poste.moteur == "ctranslate2",
+                     "plantage noté « openvino-gpu » par le superviseur : la puce « GPU » est bien suspendue",
+                     str(temoin_puce.etat()))
+            temoin_puce._ecrire({**json.loads(brut_avant), "peripherique": "OPENVINO-GPU"})
+            verifier(temoin_puce.etat().get("peripherique") == "GPU"
+                     and reglage_machine.appliquer_au_materiel(config, poste).get("plantage") == "GPU",
+                     "témoin déjà écrit « OPENVINO-GPU » (version précédente) : relu comme « GPU », suspendue")
+            temoin_puce.fichier().write_bytes(brut_avant)
             verifier(temoin_puce.suspendue("NPU") == {}, "une suspension de la puce graphique ne vise pas le NPU")
             brut = json.loads(temoin_puce.fichier().read_text(encoding="utf-8"))
             temoin_puce._ecrire({**brut, "version": "2.9.9"})
@@ -2154,7 +2229,7 @@ def essai_campagne(base: Path) -> None:
                                  {"ov-v3-f1": 5.0}, {}, {"termes": 12, "exemples": 12}, "GPU", 600.0)
     verifier(not any(s in rapport.lower() for s in secrets + ("hexagone",)),
              "le rapport de la campagne ne contient aucun mot de la référence ni du texte")
-    verifier(str(Path.home()) not in rapport and "09:00" in rapport and "--campagne --appliquer" in rapport,
+    verifier(str(Path.home()) not in rapport and "09:00" in rapport and "mesurer campagne --appliquer" in rapport,
              "rapport sans chemin, avec l'heure de chaque réglage et la commande pour appliquer")
     verifier("12" in rapport and "exemple" in rapport.lower(),
              "le rapport dit combien de termes du glossaire sont des exemples d'origine, sans les citer")
@@ -2562,8 +2637,14 @@ def essai_filet_openvino() -> None:
             self.ouvertures = self.liberations = 0
             self.departs: list[float] = []
 
-        def charger(self, modele, signaler=None):
+        def charger(self, modele, signaler=None, annoncer=True, annonce=""):
+            # Comme les vrais moteurs : la ligne « Chargement », sauf au second
+            # essai d'OpenVINO ; celle du repli dit le processeur.
             self.ouvertures += 1
+            if signaler and self.nom != "ct2" and annoncer:
+                signaler("info", langues.t("ov.chargement", modele="turbo", peripherique="GPU"))
+            elif signaler and self.nom == "ct2":
+                signaler("info", annonce or langues.t("moteur.chargement", modele="turbo"))
             if self.echecs_ouverture > 0:
                 self.echecs_ouverture -= 1
                 raise RuntimeError("compilation du modèle impossible")
@@ -2653,11 +2734,19 @@ def essai_filet_openvino() -> None:
         verifier(filet.sur_openvino and ov.ouvertures == 2 and ct2.ouvertures == 0
                  and [(i["phase"], i["issue"]) for i in filet.incidents] == [("ouverture", "rejeu_reussi")],
                  "ouverture ratée une fois : pipeline recréé après une pause, la puce graphique reste")
+        chargements = [t for _n, t in lignes if t.startswith(("Chargement", "Loading"))]
+        verifier(len(chargements) == 1,
+                 "second essai d'ouverture sur la puce : une seule ligne « Chargement du modèle »", str(chargements))
         ov, ct2 = FauxMoteur("ov", echecs_ouverture=2), FauxMoteur("ct2")
         filet, lignes = monter(ov, ct2)
         verifier(not filet.sur_openvino and ct2.ouvertures == 1
                  and [i["issue"] for i in filet.incidents] == ["repli"],
                  "ouverture ratée deux fois : repli sur CTranslate2")
+        chargements = [t for _n, t in lignes if t.startswith(("Chargement", "Loading"))]
+        verifier(len(chargements) == 2 and "OpenVINO" in chargements[0] and "processeur" in chargements[1]
+                 and "OpenVINO" not in chargements[1],
+                 "puce en échec à l'ouverture (« erreur ») : une ligne pour la puce, la seconde dit le processeur",
+                 str(chargements))
 
         ov, ct2 = FauxMoteur("stop", echecs_fenetres=[20.0]), FauxMoteur("ct2")
         filet, _lignes = monter(ov, ct2)
@@ -2712,43 +2801,11 @@ def essai_endurance(base: Path) -> None:
              and b["pression_ratee"] == 1 and b["libre_ouv_min"] == 4.0 and b["facteur_med"] == 0.2,
              "panne avant rejeu, après rejeu, et pression ratée mise à part")
 
-    # Diagnostic du 12/11 : réunion en échec retrouvée, journal lu sans en recopier une ligne.
-    campagnes_reelles = cp.DOSSIER_CAMPAGNES
-    cp.DOSSIER_CAMPAGNES = base / "endurance-campagnes"
-    try:
-        for nom, erreur in (("reunion-aaa", "RuntimeError: Exception from src\\core\\src\\runtime\\tensor.cpp:125:"
-                                            "\nException from runtime/iremote_tensor.hpp:32:\nNot Implemented"),
-                            ("reunion-bbb", "")):
-            dossier = cp.DOSSIER_CAMPAGNES / nom / "reglages"
-            dossier.mkdir(parents=True)
-            (dossier / "ov-turbo-f1.json").write_text(json.dumps(
-                {"etat": "erreur" if erreur else "ok", "erreur": erreur}), encoding="utf-8")
-            np.save(cp.DOSSIER_CAMPAGNES / nom / "extrait.npy", np.zeros(160, dtype=np.float32))
-        diag = en.diagnostics("ov-turbo-f1")
-        verifier([(p["id"], p["garde"]) for p in diag] == [("r1-ancien", "faisceau"), ("r1-nouveau", "auto")]
-                 and "reunion-aaa" in diag[0]["npy"],
-                 "la réunion du 12/11 en échec est rejouée avec l'ancien puis le nouveau garde-fou")
-    finally:
-        cp.DOSSIER_CAMPAGNES = campagnes_reelles
-    journaux = base / "endurance-logs"
-    journaux.mkdir()
-    (journaux / "2026-11-12_101500.log").write_text(
-        "10:15:00  INFO  Chargement OpenVINO OpenVINO/whisper-large-v3-turbo-int8-ov sur GPU (x)\n"
-        "10:15:09  INFO  Transcription OpenVINO : GPU, langue=fr, faisceau=1, 23 fenêtre(s), amorce=0 caractères\n"
-        "10:16:10  WARNING  Fenêtre répétitive (taux 2.71), refaite avec un faisceau de 5\n"
-        "10:16:11  ERROR  Campagne : réglage en échec\nTraceback (most recent call last):\n"
-        '  File "app\\campagne.py", line 223, in executer_reglage\n'
-        '  File "app\\moteur_openvino.py", line 414, in transcrire\n'
-        "RuntimeError: Exception from src\\core\\src\\runtime\\tensor.cpp:125:\n"
-        "Exception from runtime/iremote_tensor.hpp:32:\nNot Implemented\n", encoding="utf-8")
-    (journaux / "2026-11-13_090000.log").write_text(
-        "Reprise d'une fenêtre répétitive impossible\n  File \"app\\moteur_openvino.py\", line 430\n"
-        "iremote_tensor.hpp:32 Not Implemented\n", encoding="utf-8")
-    traces = en.lire_journaux(journaux)
-    verifier(len(traces) == 1 and traces[0]["lignes"] == [414] and traces[0]["lieu"] == "garde_faisceau"
-             and traces[0]["repetitive"] and traces[0]["ouvert"] and traces[0]["fenetres"] == 23,
-             "journal du processus tombé : ligne de l'erreur, fenêtre qui bouclait juste avant ; "
-             "les journaux de l'épreuve elle-même sont ignorés")
+    # Reliquat d'une enquête passée (PC du travail, 15/11) : l'épreuve ne rejoue
+    # plus le « diagnostic de l'échec du 12/11 », ni ne lit de journal.
+    verifier(not hasattr(en, "diagnostics") and not hasattr(en, "lire_journaux")
+             and not hasattr(en, "reunions_en_echec"),
+             "endurance : plus de diagnostic du 12/11 (ni passages en plus, ni lecture des journaux)")
 
     # Un passage, avec un moteur simulé : classement, mémoire, pression ratée.
     class FauxFilet:
@@ -2800,15 +2857,13 @@ def essai_endurance(base: Path) -> None:
 
     # Orchestration : un processus qui tombe est noté, la file repart ; une relance reprend.
     reels = (en._lancer, en.DOSSIER, corpus.preparer, moteur.etat_modele, cp._peripherique_ov,
-             cp.dernier_verdict, en.lire_journaux, en.diagnostics)
+             cp.dernier_verdict)
     en.DOSSIER = base / "endurance"
     corpus.preparer = lambda *a, **k: [corpus.Extrait(ident=e["id"], reunion=e["reunion"], duree=e["duree_s"],
                                                       wav=Path(e["wav"]), reference={}) for e in extraits]
     moteur.etat_modele = lambda depot: {"etat": "complet"}
     cp._peripherique_ov = lambda force="": "GPU"
     cp.dernier_verdict = lambda: {"cle": "ov-turbo-f1"}
-    en.lire_journaux = lambda dossier=None: []
-    en.diagnostics = lambda cle: []
     lancements: list[list[str]] = []
 
     def lancer_simule(fichier, recevoir, interrompu):
@@ -2826,6 +2881,7 @@ def essai_endurance(base: Path) -> None:
     try:
         resultat = en.executer(passages=6, pression=True)
         verifier(lancements == [["p01", "p02", "p03", "p04", "p05", "p06"], ["p04", "p05", "p06"]]
+                 and len(resultat["rapport"].split("\n")) > 5 and "12/11" not in resultat["rapport"]
                  and resultat["complet"] and resultat["bilan"]["plantage"] == 1
                  and resultat["bilan"]["avant"] == 1 and resultat["bilan"]["n"] == 6,
                  "processus tombé : passage noté « processus tombé », la file repart au suivant")
@@ -2838,22 +2894,16 @@ def essai_endurance(base: Path) -> None:
                  "le rapport donne le code de sortie du processus tombé, sans chemin")
     finally:
         (en._lancer, en.DOSSIER, corpus.preparer, moteur.etat_modele, cp._peripherique_ov,
-         cp.dernier_verdict, en.lire_journaux, en.diagnostics) = reels
+         cp.dernier_verdict) = reels
 
-    # Rapport : diagnostic concluant, aucun texte.
-    diag_lignes = [
-        {"id": "r1-ancien", "mode": "diagnostic", "etat": "ok", "fenetres_repetitives": 1, "echecs_garde": 1,
-         "erreur_garde": "RuntimeError: ... iremote_tensor.hpp:32 Not Implemented", "facteur": 0.13,
-         "incidents": []},
-        {"id": "r1-nouveau", "mode": "diagnostic", "etat": "ok", "fenetres_repetitives": 1, "echecs_garde": 0,
-         "facteur": 0.12, "incidents": []},
+    # Rapport : les passages d'un diagnostic d'une version antérieure, restés
+    # dans un dossier d'épreuve, ne sont ni comptés ni montrés.
+    anciennes = [
+        {"id": "r1-ancien", "mode": "diagnostic", "etat": "ok", "facteur": 0.13, "incidents": []},
         {"id": "p01", "mode": "normal", "etat": "ok", "facteur": 0.12, "duree_s": 130.0, "incidents": []}]
-    rapport = en.rediger_rapport(mat, "ov-turbo-f1", "GPU", diag_lignes,
-                                 [{"date": "2026-11-12_1015", "lignes": [414], "lieu": "garde_faisceau",
-                                   "repetitive": True, "ouvert": True, "faisceau": 1, "fenetres": 23}],
-                                 False, 4.0, 60.0)
-    verifier("cause confirmée" in rapport and "414" in rapport and "faisceau de 5" in rapport,
-             "diagnostic : l'ancien garde-fou reproduit l'erreur, le nouveau la passe, cause confirmée")
+    rapport = en.rediger_rapport(mat, "ov-turbo-f1", "GPU", anciennes, False, 4.0, 60.0)
+    verifier("r1-ancien" not in rapport and "12/11" not in rapport and "p01" in rapport,
+             "rapport : rien d'un ancien diagnostic, seulement les passages demandés")
     verifier(en.options_reconnues(["--endurance"]) and en.options_reconnues(["--endurance-essai", "x"]),
              "options de la ligne de commande")
 
@@ -2952,6 +3002,21 @@ def essai_adaptation(base: Path) -> None:
                  and reglage_machine.lire(config, mat).get("source") == "table",
                  "appliquer : preset, rythme et moteur écrits, signés pour ce poste")
         verifier(adaptation.deja_en_place(p, config, mat), "ensuite, la proposition est reconnue en place")
+        # Le texte dit ce qui est posé (PC du travail, 15/11 : « s'adapte tout
+        # seul » annoncé, rythme_auto=false appliqué).
+        phrase = adaptation.phrase_rythme(p)
+        verifier(not config["rythme_auto"] and "fixe" in phrase and "adapte" not in phrase,
+                 "proposition sur la puce : rythme annoncé « fixe », appliqué sans adaptation", phrase)
+        sur_processeur = adaptation.proposer(mat, P(**{**travail.__dict__, "openvino_puce": False}), None, None,
+                                             present)
+        config_cpu = {"preset": "qualite", "rythme": "vitesse", "rythme_auto": False, "reglage_machine": {}}
+        adaptation.appliquer(config_cpu, mat, sur_processeur)
+        verifier(config_cpu["rythme_auto"] and "adapte" in adaptation.phrase_rythme(sur_processeur),
+                 "proposition sur le processeur : « s'adapte tout seul » annoncé et appliqué",
+                 adaptation.phrase_rythme(sur_processeur))
+        verifier("--reconnaitre" not in langues.t("adapt.cli.pour_appliquer")
+                 and "materiel proposer --appliquer" in langues.t("adapt.cli.pour_appliquer"),
+                 "pour appliquer : la commande d'aujourd'hui (materiel proposer --appliquer)")
     finally:
         chemins.RACINE, moteur_openvino.TEMOIN_CHARGEMENT = racine_reelle, temoin_reel
         moteur_openvino.installe, moteur_openvino.peripheriques_disponibles = installe, vus

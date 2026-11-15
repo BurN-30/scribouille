@@ -66,6 +66,29 @@ DOSSIERS = (
 )
 
 
+#: Ce qu'une WhiScribe 2.x (2.0 à 2.4) écrit elle aussi dans le dossier de
+#: données. Tant qu'elle est installée et lit le même dossier
+#: (`chemins.donnees_partagees_ancienne_version`), ces entrées sont les
+#: siennes autant que les nôtres : l'inventaire les montre à part et rien ne
+#: les efface (`inventaire`). Dans `logs` et `reprises`, seuls nos propres
+#: fichiers restent effaçables (`chemins.DOSSIER_LOGS`, `reprise.fichiers_a_nous`).
+FICHIERS_2X = (
+    "config.json", "config.json.tmp", "vocabulaire.txt", "corrections.txt", "jeton_hf.txt", "gabarit-ia.txt",
+    NOM_CHOIX_MODELES, "calibration.json", "maj-etat.json", "surveillance-vus.json",
+    "openvino-chargement-en-cours.txt",
+)
+MOTIFS_2X = ("whiscribe-donnees-avant-import-*.zip", "scribouille-donnees-avant-import-*.zip")
+DOSSIERS_2X = ("logs", "modeles", "reprises", "extensions", "cache-pip", "extensions-openvino", "cache-openvino",
+               "paquets-hors-ligne", "rapports-banc")
+
+
+def est_partage_2x(nom: str, dossier: bool) -> bool:
+    """Une entrée qu'une WhiScribe 2.x écrit aussi (voir `FICHIERS_2X`)."""
+    if dossier:
+        return nom.lower() in DOSSIERS_2X
+    return nom.lower() in {f.lower() for f in FICHIERS_2X} or any(fnmatch.fnmatch(nom.lower(), m) for m in MOTIFS_2X)
+
+
 def est_a_nous(nom: str, dossier: bool) -> bool:
     if dossier:
         return nom in DOSSIERS

@@ -112,7 +112,7 @@ _FR: dict[str, str] = {
     ),
     "err.inattendu.titre": "Échec inattendu",
     "err.inattendu.titre_contexte": "Échec inattendu ({contexte})",
-    "err.inattendu.msg": "Le détail technique est consigné dans logs/{journal}.",
+    "err.inattendu.msg": "Le détail technique est consigné dans logs/scribouille/{journal}.",
 
     # -- presets et estimations (app/presets.py) ---------------------------
     "preset.qualite.nom": "Qualité maximale",
@@ -240,7 +240,7 @@ _FR: dict[str, str] = {
     "inv.affichage.libelle": "Profil d'affichage",
     "inv.affichage.description": "Fichiers temporaires du composant d'affichage (WebView2), refaits au lancement.",
     "inv.journaux.libelle": "Journaux",
-    "inv.journaux.description": "Journaux des sessions (30 gardés), utiles pour un diagnostic.",
+    "inv.journaux.description": "Journaux des sessions (ceux du dernier mois, et au moins les 50 derniers), utiles pour un diagnostic.",
     "inv.reprises.libelle": "Transcriptions interrompues",
     "inv.reprises.description": "Ce qui a été transcrit avant une coupure, pour reprendre au segment près.",
     "inv.mesures.libelle": "Mesures",
@@ -387,7 +387,7 @@ _FR: dict[str, str] = {
     "comp.etape.analyse": "Comparaison des deux textes...",
     "comp.etape.fini": "Comparaison terminée.",
     "comp.cli.usage": (
-        "Usage : --comparer FICHIER [--debut 00:05:00] [--duree 600] [--reference TRANSCRIPTION] "
+        "Usage : scribouille mesurer comparer FICHIER [--debut 00:05:00] [--duree 600] [--reference TRANSCRIPTION] "
         "[--sortie DOSSIER] [--peripherique GPU|CPU|NPU] [--preset qualite|rapide] "
         "[--faisceau-openvino N] [--faisceau-ctranslate2 N] [--glossaire FICHIER] [--sans-glossaire] "
         "[--sans-corrections] "
@@ -503,6 +503,7 @@ _FR: dict[str, str] = {
         "https://huggingface.co/{depot}"
     ),
     "moteur.chargement": "Chargement du modèle {modele}...",
+    "moteur.chargement_repli": "Chargement du modèle {modele} sur le processeur (moteur habituel), à la place de la puce...",
     "moteur.taille_inconnue": "quelques centaines de Mo à 3 Go",
 
     # -- séparation des locuteurs (app/diarisation.py) ---------------------
@@ -635,9 +636,13 @@ _FR: dict[str, str] = {
     "adapt.cli.batterie": "batterie",
     "adapt.cli.source": "Réglage proposé, d'après {source} ({regle}) :",
     "adapt.cli.rythme": "Rythme : {rythme}, qui s'adapte tout seul (vitesse maximale quand le poste est au repos).",
+    "adapt.cli.rythme_fixe": (
+        "Rythme : {rythme}, fixe (la puce graphique calcule et laisse le processeur presque libre : "
+        "un rythme plus lent n'y gagnerait presque rien)."
+    ),
     "adapt.cli.deja": "C'est déjà le réglage en service.",
     "adapt.cli.applique": "Réglage appliqué.",
-    "adapt.cli.pour_appliquer": "Rien n'a été modifié. Pour l'appliquer : scribouille.com --reconnaitre --appliquer",
+    "adapt.cli.pour_appliquer": "Rien n'a été modifié. Pour l'appliquer : scribouille materiel proposer --appliquer",
     "rbanc.modele_absent.titre": "Modèle absent",
     "rbanc.modele_absent.msg": "Le banc des rythmes utilise {modele}, qui n'est pas sur ce poste. Rien n'est téléchargé : lancez d'abord une transcription en « Rapide », ou le banc d'essai avec téléchargement.",
     "rbanc.etape.repos": "Mesure du poste au repos (6 s)",
@@ -682,6 +687,7 @@ _FR: dict[str, str] = {
         "Le retrait n'a pas pu se faire entièrement. Fermez l'application, puis "
         "recommencez."
     ),
+    "ext.retrait_partage": "Composants laissés en place : la version installée {version} s'en sert aussi (dossier de données partagé). À retirer après sa désinstallation.",
     "ext.retiree": "Séparation des locuteurs retirée, {taille} Go libérés.",
 
     # -- glossaire et corrections (app/vocabulaire.py) ---------------------
@@ -1039,7 +1045,7 @@ _FR: dict[str, str] = {
     "app.fenetre_impossible": (
         "La fenêtre n'a pas pu s'ouvrir.\n\nSous Windows, cela vient presque toujours de "
         "« Microsoft Edge WebView2 Runtime », absent du poste. Installez-le puis "
-        "relancez.\n\nDétail : logs/{journal}"
+        "relancez.\n\nDétail : logs/scribouille/{journal}"
     ),
     "app.telechargement_annonce": (
         "Le modèle « {modele} » n'est pas encore sur cette machine. Il sera téléchargé "
@@ -1334,7 +1340,7 @@ Transcription :
     "camp.rapport.duree": "Durée de la campagne : {duree}",
     "camp.rapport.appliquer": (
         "Pour appliquer ce verdict, dans le dossier du programme : "
-        "scribouille.com --campagne --appliquer (rien n'est recalculé)"
+        "scribouille mesurer campagne --appliquer (rien n'est recalculé)"
     ),
     "camp.rapport.remarque": (
         "Ce rapport ne contient que des nombres : aucun mot transcrit, aucun nom, aucun chemin."
@@ -1381,10 +1387,10 @@ Transcription :
         "Ce rapport ne contient que des nombres : aucun mot transcrit, aucun nom, aucun chemin."
     ),
     "camp.cli.usage": (
-        "Usage : --campagne [--appliquer] [--recommencer] [--reglages CLE,CLE] "
+        "Usage : scribouille mesurer campagne [--appliquer] [--recommencer] [--reglages CLE,CLE] "
         "[--limite-extraits N] [--corpus PAQUET.zip] [--peripherique GPU|CPU] [--telecharger]\n"
         "        (--reglages candidats : modèles candidats seulement ; --reglages tous : le tout)\n"
-        "        --campagne --reunion FICHIER [--debut 00:05:00] [--duree 600] [--reglages CLE,CLE]"
+        "        scribouille mesurer campagne --reunion FICHIER [--debut 00:05:00] [--duree 600] [--reglages CLE,CLE]"
     ),
     "camp.cli.fichier": "Rapport : {fichier}",
     "camp.cli.applique": "Réglage {code} appliqué : il sert dès la prochaine transcription.",
@@ -1433,7 +1439,6 @@ Transcription :
     ),
     "end.mode.normal": "normal",
     "end.mode.pression": "sous pression",
-    "end.mode.diagnostic": "diagnostic",
     "end.rapport.section.erreurs": "Erreurs relevées, texte exact",
     "end.rapport.aucune_erreur": "aucune",
     "end.rapport.erreur": "{id} ({phase}, {issue}) : {erreur}",
@@ -1445,35 +1450,6 @@ Transcription :
     "end.issue.rejeu_reussi": "rejeu réussi",
     "end.issue.repli": "repli sur CTranslate2",
     "end.issue.premiere_version_gardee": "première version gardée",
-    "end.rapport.section.diagnostic": "Diagnostic de l'échec du 12/11",
-    "end.rapport.diag_journal_aucun": "Journal du processus tombé : introuvable (purgé ou effacé).",
-    "end.rapport.diag_journal": (
-        "Journal {date} : erreur levée dans moteur_openvino.py, ligne {lignes} ({lieu}) ; "
-        "fenêtre qui bouclait juste avant : {repetitive} ; pipeline ouvert : {ouvert} ; "
-        "fenêtres prévues : {fenetres}"
-    ),
-    "end.lieu.glouton": "décodage glouton d'une fenêtre",
-    "end.lieu.garde_faisceau": "garde-fou des répétitions, faisceau de 5",
-    "end.lieu.ouverture": "ouverture du pipeline",
-    "end.lieu.inconnu": "autre endroit",
-    "end.oui": "oui",
-    "end.non": "non",
-    "end.rapport.diag_ancien": (
-        "Réunion {reunion}, ancien garde-fou (faisceau de 5) : {etat} ; fenêtres qui bouclaient : {fenetres} ; "
-        "reprises en échec : {echecs} ; facteur {facteur}"
-    ),
-    "end.rapport.diag_nouveau": (
-        "Réunion {reunion}, nouveau garde-fou (température) : {etat} ; fenêtres qui bouclaient : {fenetres} ; "
-        "reprises en échec : {echecs} ; facteur {facteur}"
-    ),
-    "end.rapport.diag_conclusion_oui": (
-        "L'ancien garde-fou reproduit l'erreur du 12/11 sur cette réunion et le nouveau la passe : "
-        "cause confirmée."
-    ),
-    "end.rapport.diag_conclusion_non": (
-        "L'ancien garde-fou ne reproduit pas l'erreur sur cette réunion, ou le nouveau ne la passe "
-        "pas : cause non confirmée."
-    ),
     "end.rapport.section.detail": "Détail par passage",
     "end.rapport.ligne": (
         "{id} {mode} : {etat} ; libre {libre_ouv} Go avant l'ouverture, {libre_pass} Go avant le passage ; "
@@ -1560,7 +1536,7 @@ _EN: dict[str, str] = {
     ),
     "err.inattendu.titre": "Unexpected failure",
     "err.inattendu.titre_contexte": "Unexpected failure ({contexte})",
-    "err.inattendu.msg": "The technical details are recorded in logs/{journal}.",
+    "err.inattendu.msg": "The technical details are recorded in logs/scribouille/{journal}.",
 
     "preset.qualite.nom": "Highest quality",
     "preset.qualite.resume": "The best text possible. For meetings and anything you will read back.",
@@ -1681,7 +1657,7 @@ _EN: dict[str, str] = {
     "inv.affichage.libelle": "Display profile",
     "inv.affichage.description": "Temporary files of the display component (WebView2), rebuilt at start.",
     "inv.journaux.libelle": "Logs",
-    "inv.journaux.description": "Session logs (30 kept), useful for a diagnosis.",
+    "inv.journaux.description": "Session logs (the last month, and at least the latest 50), useful for a diagnosis.",
     "inv.reprises.libelle": "Interrupted transcriptions",
     "inv.reprises.description": "What was transcribed before an interruption, to resume from the last segment.",
     "inv.mesures.libelle": "Measurements",
@@ -1825,7 +1801,7 @@ _EN: dict[str, str] = {
     "comp.etape.analyse": "Comparing both texts...",
     "comp.etape.fini": "Comparison finished.",
     "comp.cli.usage": (
-        "Usage: --comparer FILE [--debut 00:05:00] [--duree 600] [--reference TRANSCRIPT] "
+        "Usage: scribouille mesurer comparer FILE [--debut 00:05:00] [--duree 600] [--reference TRANSCRIPT] "
         "[--sortie FOLDER] [--peripherique GPU|CPU|NPU] [--preset qualite|rapide] "
         "[--faisceau-openvino N] [--faisceau-ctranslate2 N] [--glossaire FILE] [--sans-glossaire] "
         "[--sans-corrections] "
@@ -1941,6 +1917,7 @@ _EN: dict[str, str] = {
         "repository: https://huggingface.co/{depot}"
     ),
     "moteur.chargement": "Loading model {modele}...",
+    "moteur.chargement_repli": "Loading model {modele} on the processor (usual engine), instead of the graphics chip...",
     "moteur.taille_inconnue": "a few hundred MB up to 3 GB",
 
     "diar.locuteur": "Speaker {n}",
@@ -2068,9 +2045,13 @@ _EN: dict[str, str] = {
     "adapt.cli.batterie": "battery",
     "adapt.cli.source": "Proposed setting, based on {source} ({regle}):",
     "adapt.cli.rythme": "Pace: {rythme}, adapting automatically (maximum speed when the computer is idle).",
+    "adapt.cli.rythme_fixe": (
+        "Pace: {rythme}, fixed (the graphics chip computes and leaves the processor almost free: "
+        "a slower pace would gain almost nothing there)."
+    ),
     "adapt.cli.deja": "This is already the setting in use.",
     "adapt.cli.applique": "Setting applied.",
-    "adapt.cli.pour_appliquer": "Nothing was changed. To apply it: scribouille.com --reconnaitre --appliquer",
+    "adapt.cli.pour_appliquer": "Nothing was changed. To apply it: scribouille materiel proposer --appliquer",
     "rbanc.modele_absent.titre": "Model missing",
     "rbanc.modele_absent.msg": "The pace benchmark uses {modele}, which is not on this computer. Nothing is downloaded: first run a transcription in \"Fast\", or the benchmark with download.",
     "rbanc.etape.repos": "Measuring the idle computer (6 s)",
@@ -2114,6 +2095,7 @@ _EN: dict[str, str] = {
     "ext.retrait_echec": (
         "The removal could not complete. Close the application, then try again."
     ),
+    "ext.retrait_partage": "Components left in place: the installed version {version} uses them too (shared data folder). Remove them after uninstalling it.",
     "ext.retiree": "Speaker separation removed, {taille} GB freed.",
 
     "voc.glossaire_vide": "Glossary empty: no prompt is sent to the model.",
@@ -2457,7 +2439,7 @@ _EN: dict[str, str] = {
     "app.fenetre_impossible": (
         "The window could not be opened.\n\nOn Windows this almost always comes from "
         "\"Microsoft Edge WebView2 Runtime\" being absent. Install it, then start "
-        "again.\n\nDetails: logs/{journal}"
+        "again.\n\nDetails: logs/scribouille/{journal}"
     ),
     "app.telechargement_annonce": (
         "The \"{modele}\" model is not on this machine yet. It will be downloaded once, "
@@ -2741,7 +2723,7 @@ Transcript:
     "camp.rapport.duree": "Campaign duration: {duree}",
     "camp.rapport.appliquer": (
         "To apply this verdict, in the program folder: "
-        "scribouille.com --campagne --appliquer (nothing is computed again)"
+        "scribouille mesurer campagne --appliquer (nothing is computed again)"
     ),
     "camp.rapport.remarque": (
         "This report holds numbers only: no transcribed word, no name, no path."
@@ -2788,10 +2770,10 @@ Transcript:
         "This report holds numbers only: no transcribed word, no name, no path."
     ),
     "camp.cli.usage": (
-        "Usage: --campagne [--appliquer] [--recommencer] [--reglages KEY,KEY] "
+        "Usage: scribouille mesurer campagne [--appliquer] [--recommencer] [--reglages KEY,KEY] "
         "[--limite-extraits N] [--corpus PACK.zip] [--peripherique GPU|CPU] [--telecharger]\n"
         "       (--reglages candidats: candidate models only; --reglages tous: everything)\n"
-        "       --campagne --reunion FILE [--debut 00:05:00] [--duree 600] [--reglages KEY,KEY]"
+        "       scribouille mesurer campagne --reunion FILE [--debut 00:05:00] [--duree 600] [--reglages KEY,KEY]"
     ),
     "camp.cli.fichier": "Report: {fichier}",
     "camp.cli.applique": "Setting {code} applied: it is used from the next transcription.",
@@ -2840,7 +2822,6 @@ Transcript:
     ),
     "end.mode.normal": "normal",
     "end.mode.pression": "under pressure",
-    "end.mode.diagnostic": "diagnostic",
     "end.rapport.section.erreurs": "Errors seen, exact text",
     "end.rapport.aucune_erreur": "none",
     "end.rapport.erreur": "{id} ({phase}, {issue}): {erreur}",
@@ -2852,35 +2833,6 @@ Transcript:
     "end.issue.rejeu_reussi": "replay succeeded",
     "end.issue.repli": "fallback to CTranslate2",
     "end.issue.premiere_version_gardee": "first version kept",
-    "end.rapport.section.diagnostic": "Diagnosis of the 12/11 failure",
-    "end.rapport.diag_journal_aucun": "Log of the crashed process: not found (purged or deleted).",
-    "end.rapport.diag_journal": (
-        "Log {date}: error raised in moteur_openvino.py, line {lignes} ({lieu}); "
-        "looping window just before: {repetitive}; pipeline opened: {ouvert}; "
-        "planned windows: {fenetres}"
-    ),
-    "end.lieu.glouton": "greedy decoding of a window",
-    "end.lieu.garde_faisceau": "repetition guard, beam of 5",
-    "end.lieu.ouverture": "pipeline opening",
-    "end.lieu.inconnu": "elsewhere",
-    "end.oui": "yes",
-    "end.non": "no",
-    "end.rapport.diag_ancien": (
-        "Meeting {reunion}, old guard (beam of 5): {etat}; looping windows: {fenetres}; "
-        "failed redos: {echecs}; factor {facteur}"
-    ),
-    "end.rapport.diag_nouveau": (
-        "Meeting {reunion}, new guard (temperature): {etat}; looping windows: {fenetres}; "
-        "failed redos: {echecs}; factor {facteur}"
-    ),
-    "end.rapport.diag_conclusion_oui": (
-        "The old guard reproduces the 12/11 error on this meeting and the new one gets through: "
-        "cause confirmed."
-    ),
-    "end.rapport.diag_conclusion_non": (
-        "The old guard does not reproduce the error on this meeting, or the new one does not get "
-        "through: cause not confirmed."
-    ),
     "end.rapport.section.detail": "Run by run",
     "end.rapport.ligne": (
         "{id} {mode}: {etat}; {libre_ouv} GB free before opening, {libre_pass} GB before the run; "

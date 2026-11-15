@@ -25,10 +25,10 @@ Ce que fait l'épreuve
 - pour chaque passage : réussi ou non, erreur exacte, phase (ouverture ou
   transcription), rejeu réussi ou non, repli, mémoire libre du poste juste
   avant l'ouverture du pipeline et juste avant le passage, vitesse ;
-- diagnostic de l'échec du 12/11, si ses traces sont encore sur le poste : le
-  journal du processus tombé (numéros de ligne seulement), et la réunion
-  elle-même rejouée deux fois, avec l'ancien garde-fou des répétitions puis
-  avec le nouveau.
+- rien d'autre que les passages demandés : le diagnostic de l'échec du 12/11
+  (journal du processus tombé, réunion rejouée avec l'ancien puis le nouveau
+  garde-fou), qui ajoutait deux passages, a servi à cette enquête et n'est
+  plus joué (l'option `--sans-diagnostic` n'a plus d'objet).
 
 Le rapport ne contient que des nombres et les messages d'erreur d'OpenVINO :
 aucun mot transcrit, aucun nom, aucun chemin. Le poste ne se met pas en veille
@@ -38,8 +38,8 @@ repart dans un nouveau processus au passage suivant.
 
 Ligne de commande :
 
-    scribouille.com --endurance [--passages 30] [--reglage CLE]
-        [--pression] [--memoire-libre 4] [--sans-diagnostic] [--recommencer]
+    scribouille mesurer endurance [--passages 30] [--reglage CLE]
+        [--pression] [--memoire-libre 4] [--recommencer]
         [--corpus PAQUET.zip] [--peripherique GPU|CPU]
 """
 
@@ -49,7 +49,6 @@ import gc
 import json
 import math
 import os
-import re
 import shutil
 import statistics
 import subprocess
@@ -78,17 +77,8 @@ PRESSION_CT2_S = 60.0
 LEST_MAX_GO = 20.0
 #: Un passage sans signe de vie pendant ce temps est tenu pour bloqué.
 INACTIVITE_MAX_S = 900.0
-#: Réunions dont l'échec est rejoué en diagnostic, au plus.
-DIAGNOSTICS_MAX = 2
-
 #: Issues d'un incident du moteur (voir `MoteurAvecRepli.incidents`).
 ISSUES = ("rejeu", "rejeu_reussi", "repli", "premiere_version_gardee")
-
-#: Lignes de `app/moteur_openvino.py` dans la version de la campagne du 12/11
-#: (commit de4302c), pour lire le journal du processus tombé.
-LIGNES_12_11 = {400: "glouton", 401: "glouton", 414: "garde_faisceau", 415: "garde_faisceau",
-                315: "ouverture", 316: "ouverture", 324: "ouverture", 325: "ouverture"}
-
 
 # ---------------------------------------------------------------------------
 # Plan des passages
@@ -121,64 +111,6 @@ def planifier(extraits: list[dict], nombre: int, pression: bool) -> list[dict]:
         passages.append({"id": f"p{k + 1:02d}", "wavs": [e["wav"] for e in pris], "duree_s": round(duree, 1),
                          "mode": "pression" if pression and k % 2 == 1 else "normal", "garde": "auto"})
     return passages
-
-
-def reunions_en_echec(cle: str) -> list[Path]:
-    """Extraits de réunions de la campagne où ce réglage a échoué sur l'erreur de la puce graphique."""
-    trouves = []
-    for dossier in sorted(cp.DOSSIER_CAMPAGNES.glob("reunion-*")):
-        try:
-            resultat = json.loads((dossier / "reglages" / f"{cle}.json").read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        extrait = dossier / "extrait.npy"
-        if resultat.get("etat") == "erreur" and "iremote_tensor" in str(resultat.get("erreur", "")) \
-                and extrait.is_file():
-            trouves.append(extrait)
-    return trouves[:DIAGNOSTICS_MAX]
-
-
-def diagnostics(cle: str) -> list[dict]:
-    """Deux passages par réunion en échec : ancien garde-fou (faisceau 5), puis le nouveau."""
-    passages = []
-    for rang, extrait in enumerate(reunions_en_echec(cle), 1):
-        for garde, suffixe in (("faisceau", "ancien"), ("auto", "nouveau")):
-            passages.append({"id": f"r{rang}-{suffixe}", "npy": str(extrait), "mode": "diagnostic",
-                             "garde": garde, "reunion": rang})
-    return passages
-
-
-def lire_journaux(dossier: Path | None = None) -> list[dict]:
-    """
-    Traces de l'échec dans les journaux des processus de la campagne.
-
-    Seulement des numéros de ligne et des drapeaux : aucune ligne du journal
-    n'est recopiée. Le journal d'un processus de réglage ne contient pas de
-    texte transcrit, mais on n'en garde rien de toute façon.
-    """
-    dossier = dossier or chemins.DOSSIER_LOGS
-    traces = []
-    for fichier in sorted(dossier.glob("*.log")):
-        try:
-            contenu = fichier.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        # Seuls les journaux d'un réglage de campagne tombé sur l'erreur de la
-        # puce graphique : pas ceux de l'épreuve elle-même.
-        if "Campagne : réglage en échec" not in contenu or "iremote_tensor" not in contenu:
-            continue
-        lignes = [int(n) for n in re.findall(r'moteur_openvino\.py", line (\d+)', contenu)]
-        fenetres = re.findall(r"Transcription OpenVINO : \w+, langue=\w+, faisceau=(\d+), (\d+) fen", contenu)
-        traces.append({
-            "date": fichier.stem[:15],
-            "lignes": lignes,
-            "lieu": next((LIGNES_12_11[n] for n in reversed(lignes) if n in LIGNES_12_11), "inconnu"),
-            "repetitive": "Fenêtre répétitive" in contenu,
-            "ouvert": bool(fenetres),
-            "faisceau": int(fenetres[-1][0]) if fenetres else 0,
-            "fenetres": int(fenetres[-1][1]) if fenetres else 0,
-        })
-    return traces
 
 
 # ---------------------------------------------------------------------------
@@ -219,8 +151,6 @@ def lester(cible_go: float) -> list[np.ndarray]:
 
 
 def _signal(passage: dict) -> np.ndarray:
-    if passage.get("npy"):
-        return np.ascontiguousarray(np.load(passage["npy"]), dtype=np.float32)
     from .corpus import lire_wav16
 
     morceaux = [lire_wav16(Path(w)) for w in passage["wavs"]]
@@ -411,15 +341,17 @@ def _n(valeur: float, decimales: int = 1) -> str:
     return langues.nombre(valeur, decimales)
 
 
-def rediger_rapport(mat, cle: str, peripherique: str, lignes: list[dict], traces: list[dict] | None,
-                    pression: bool, cible_go: float, duree_totale: float) -> str:
+def rediger_rapport(mat, cle: str, peripherique: str, lignes: list[dict], pression: bool, cible_go: float,
+                    duree_totale: float) -> str:
     from .banc import _masquer
 
     t = langues.t
     reglage = cp.PAR_CLE[cle]
     rapport = cp._entete(mat, "end.rapport.titre")
-    courants = [l for l in lignes if l["mode"] != "diagnostic"]
-    diag = [l for l in lignes if l["mode"] == "diagnostic"]
+    # Passages d'un diagnostic d'une version antérieure, gardés dans un dossier
+    # d'épreuve : ni comptés ni montrés.
+    lignes = [l for l in lignes if l.get("mode") != "diagnostic"]
+    courants = lignes
     rapport.append(t("end.rapport.reglage", code=cle, reglage=cp.libelle(reglage, peripherique)))
     durees = [l["duree_s"] for l in courants if l.get("duree_s")]
     rapport.append(t("end.rapport.plan", n=len(courants),
@@ -465,34 +397,6 @@ def rediger_rapport(mat, cle: str, peripherique: str, lignes: list[dict], traces
                                   phase=t(f"end.phase.{incident.get('phase', 'passage')}"),
                                   issue=t(f"end.issue.{issue}") if issue in ISSUES else t(f"end.etat.{issue}"),
                                   erreur=incident.get("erreur", "")))
-
-    if traces is not None or diag:
-        rapport += ["", t("end.rapport.section.diagnostic")]
-        if traces is not None:
-            if not traces:
-                rapport.append("  - " + t("end.rapport.diag_journal_aucun"))
-            for trace in traces:
-                rapport.append("  - " + t("end.rapport.diag_journal", date=trace["date"],
-                                          lignes=", ".join(str(n) for n in trace["lignes"]) or "-",
-                                          lieu=t(f"end.lieu.{trace['lieu']}"),
-                                          repetitive=t("end.oui" if trace["repetitive"] else "end.non"),
-                                          ouvert=t("end.oui" if trace["ouvert"] else "end.non"),
-                                          fenetres=trace["fenetres"]))
-        for rang in sorted({l["id"].split("-")[0] for l in diag}):
-            ancien = next((l for l in diag if l["id"] == f"{rang}-ancien"), None)
-            nouveau = next((l for l in diag if l["id"] == f"{rang}-nouveau"), None)
-            for libelle_cle, l in (("end.rapport.diag_ancien", ancien), ("end.rapport.diag_nouveau", nouveau)):
-                if l is None:
-                    continue
-                rapport.append("  - " + t(libelle_cle, reunion=rang[1:], etat=t(f"end.etat.{l['etat']}"),
-                                          fenetres=int(l.get("fenetres_repetitives") or 0),
-                                          echecs=int(l.get("echecs_garde") or 0),
-                                          facteur=_n(float(l.get("facteur") or 0), 3)))
-            if ancien and nouveau:
-                reproduit = bool(ancien.get("echecs_garde")) and "iremote_tensor" in str(ancien.get("erreur_garde"))
-                passe = nouveau["etat"] == "ok" and not nouveau.get("echecs_garde")
-                rapport.append("      " + t("end.rapport.diag_conclusion_oui" if reproduit and passe
-                                            else "end.rapport.diag_conclusion_non"))
 
     rapport += ["", t("end.rapport.section.detail")]
     for l in lignes:
@@ -593,18 +497,17 @@ def _lire_faits(fichier: Path) -> list[dict]:
 
 
 def executer(passages: int = PASSAGES, cle: str = "", pression: bool = False,
-             memoire_libre: float = MEMOIRE_LIBRE_GO, diagnostic: bool = True, recommencer: bool = False,
+             memoire_libre: float = MEMOIRE_LIBRE_GO, recommencer: bool = False,
              paquet: str = "", peripherique: str = "", rappel: Callable[[str], None] | None = None,
              interrompu: Callable[[], bool] | None = None) -> dict:
     from . import energie
 
     with energie.sans_veille():
-        return _executer(passages, cle, pression, memoire_libre, diagnostic, recommencer, paquet,
+        return _executer(passages, cle, pression, memoire_libre, recommencer, paquet,
                          peripherique, rappel, interrompu)
 
 
-def _executer(passages: int, cle: str, pression: bool, memoire_libre: float, diagnostic: bool,
-              recommencer: bool, paquet: str, peripherique: str, rappel: Callable[[str], None] | None,
+def _executer(passages: int, cle: str, pression: bool, memoire_libre: float, recommencer: bool, paquet: str, peripherique: str, rappel: Callable[[str], None] | None,
               interrompu: Callable[[], bool] | None) -> dict:
     from . import config as config_module, corpus
 
@@ -641,9 +544,7 @@ def _executer(passages: int, cle: str, pression: bool, memoire_libre: float, dia
                                     langues.t("camp.corpus_absent.msg", paquet=corpus.NOM_PAQUET,
                                               detail=exc.detail or exc.motif)) from exc
     liste = [{"id": e.ident, "wav": str(e.wav), "reunion": e.reunion, "duree_s": e.duree} for e in extraits]
-    plan = (diagnostics(cle) if diagnostic and reglage.moteur == "openvino" else []) + \
-        planifier(liste, passages, pression)
-    traces = lire_journaux() if diagnostic and reglage.moteur == "openvino" else None
+    plan = planifier(liste, passages, pression)
 
     faits = {l["id"]: l for l in _lire_faits(fichier)}
     restants = [p for p in plan if p["id"] not in faits]
@@ -686,13 +587,10 @@ def _executer(passages: int, cle: str, pression: bool, memoire_libre: float, dia
 
     lignes = [faits[p["id"]] for p in plan if p["id"] in faits]
     mat = materiel.detecter()
-    rapport = rediger_rapport(mat, cle, peripherique, lignes, traces, pression, memoire_libre,
-                              time.time() - depart)
+    rapport = rediger_rapport(mat, cle, peripherique, lignes, pression, memoire_libre, time.time() - depart)
     sortie = dossier / f"rapport-endurance-{datetime.now():%Y%m%d-%H%M}.txt"
     sortie.write_text(rapport, encoding="utf-8")
-    return {"rapport": rapport, "fichier": str(sortie), "bilan": bilan([l for l in lignes
-                                                                         if l["mode"] != "diagnostic"]),
-            "complet": len(lignes) == len(plan)}
+    return {"rapport": rapport, "fichier": str(sortie), "bilan": bilan(lignes), "complet": len(lignes) == len(plan)}
 
 
 # ---------------------------------------------------------------------------
@@ -725,7 +623,7 @@ def principal_cli(arguments: list[str]) -> int:
             passages=int(cp._valeur(arguments, "--passages", str(PASSAGES)) or PASSAGES),
             cle=cp._valeur(arguments, "--reglage"), pression="--pression" in arguments,
             memoire_libre=float(cp._valeur(arguments, "--memoire-libre", str(MEMOIRE_LIBRE_GO)).replace(",", ".")),
-            diagnostic="--sans-diagnostic" not in arguments, recommencer="--recommencer" in arguments,
+            recommencer="--recommencer" in arguments,
             paquet=cp._valeur(arguments, "--corpus"), peripherique=cp._valeur(arguments, "--peripherique"),
             rappel=afficher)
     except journal.ErreurLisible as exc:

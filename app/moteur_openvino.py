@@ -374,7 +374,9 @@ class MoteurOpenVINO:
     def tokeniseur(self):
         return self._tokeniseur
 
-    def charger(self, modele: str, signaler: Callable[[str, str], None] | None = None) -> None:
+    def charger(self, modele: str, signaler: Callable[[str, str], None] | None = None,
+                annoncer: bool = True) -> None:
+        """`annoncer` : faux pour le second essai d'ouverture (`MoteurAvecRepli`), déjà annoncé."""
         if self._pipeline is not None and self._nom_modele == modele:
             return
         self.liberer()
@@ -393,7 +395,7 @@ class MoteurOpenVINO:
             cache.mkdir(parents=True, exist_ok=True)
         except OSError:
             pass
-        if signaler:
+        if signaler and annoncer:
             signaler("info", langues.t(
                 "ov.chargement", modele=moteur.nom_court(modele),
                 peripherique=nom_peripherique(self.peripherique_ov)))
@@ -853,7 +855,10 @@ class MoteurAvecRepli:
                 "ov.repli", peripherique=nom_peripherique(self._ov.peripherique_ov)))
         self._ov.liberer()
         self._actif = self._ct2
-        self._ct2.charger(self._modele, self._signaler)
+        # Une seule ligne « Chargement » par moteur : celle-ci dit qu'on repart
+        # sur le processeur, après celle de la puce.
+        self._ct2.charger(self._modele, self._signaler, annonce=langues.t(
+            "moteur.chargement_repli", modele=moteur.nom_court(self._modele)))
 
     def _adouci(self, niveau: str, texte: str) -> None:
         # Une panne d'OpenVINO n'est pas une erreur du fichier : le rejeu, puis
@@ -867,7 +872,9 @@ class MoteurAvecRepli:
         gc.collect()
         if self.PAUSE_RECREATION_S > 0:
             time.sleep(self.PAUSE_RECREATION_S)
-        self._ov.charger(self._modele, self._adouci)
+        # Second essai sur le même périphérique : déjà annoncé, pas de seconde
+        # ligne « Chargement du modèle » (le succès ou le repli sera dit).
+        self._ov.charger(self._modele, self._adouci, annoncer=False)
 
     def charger(self, modele: str, signaler: Callable[[str, str], None] | None = None) -> None:
         self._modele = modele

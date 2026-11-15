@@ -818,8 +818,14 @@ def essai_coupure_avant_premier_segment(dossier: Path) -> None:
              "etat : orphelines listées avec leur raison, rien d'effacé d'office", str(raisons))
     code, lignes, _ = cli("etat", "--nettoyer", "--json")
     restants = sorted(p.name for p in rep_.glob("0000*"))
+    from app import instance as instance_module
+
+    # Seuls restent les verrous des transcriptions encore reprenables (ils
+    # vont avec elles : PC du travail, 15/11) ; les autres sont effacés.
+    des_reprenables = {instance_module._fichier_verrou(t["chemin"]).name.lower()
+                       for t in reprise_module.lister()}
     verifier(code == 0 and restants == ["0000reprenable001.json", "0000reprenable001.jsonl"]
-             and not list(rep_.glob("*.en-cours"))
+             and {v.name.lower() for v in rep_.glob("*.en-cours")} <= des_reprenables
              and len((lignes[-1]["donnees"] if lignes else {}).get("nettoyees", [])) >= 2,
              "etat --nettoyer : les orphelines effacées, la reprise valable gardée",
              f"{restants} {[p.name for p in rep_.glob('*.en-cours')]} "

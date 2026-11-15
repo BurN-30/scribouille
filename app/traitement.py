@@ -141,6 +141,19 @@ def _pause_essai(cle: str) -> None:
         time.sleep(attente)
 
 
+def modele_du_calcul(modele: str, cle_calcul: str) -> str:
+    """Le modèle qui calcule vraiment : sur OpenVINO, le dépôt OpenVINO du modèle du catalogue."""
+    if str(cle_calcul or "").lower().startswith("openvino"):
+        return presets.depot_openvino(modele) or modele
+    return modele
+
+
+def _noter_calcul(session, instance, modele: str) -> None:
+    """Moteur et modèle réellement en service, dans l'état de reprise (`scribouille etat`)."""
+    cle_calcul = str(getattr(instance, "cle_calcul", "") or "")
+    session.noter_calcul(cle_calcul, modele_du_calcul(modele, cle_calcul))
+
+
 def fabriquer_moteur(mat: Materiel, reglages: dict):
     """
     Moteur de la file : OpenVINO si le réglage du poste le demande, sinon
@@ -573,6 +586,8 @@ class FileTraitement:
         if config.get("sauvegarde_progressive", True) and not element.reprise:
             precoce = self._session = reprise_module.Session(
                 reprise_module.cle(source, reglages["modele"]), active=True)
+            precoce.noter_calcul(self.materiel.cle_calcul,
+                                 modele_du_calcul(reglages["modele"], self.materiel.cle_calcul))
             precoce.ouvrir(source, reglages["modele"], float(element.duree_annoncee or 0),
                            sortie=str(config.get("dossier_sortie") or ""),
                            demande=reprise_module.demande_de(config), nouvelle=True)
@@ -668,6 +683,8 @@ class FileTraitement:
                 if precoce.identifiant != identifiant:
                     precoce.effacer()   # autre modèle, autre clé
             session = self._session = reprise_module.Session(identifiant, active=True)
+            session.noter_calcul(self.materiel.cle_calcul,
+                                 modele_du_calcul(reglages["modele"], self.materiel.cle_calcul))
             session.alerte = lambda _detail: signaler("attention", langues.t("trait.reprise_coupee"))
             session.ouvrir(
                 source, reglages["modele"], duree_audio,
@@ -713,6 +730,7 @@ class FileTraitement:
         })
         debut_chargement = time.time()
         instance.charger(reglages["modele"], signaler)
+        _noter_calcul(session, instance, reglages["modele"])
         # Le pied de page montre la dernière ligne du journal : sans celle-ci,
         # il affichait « Chargement du modèle... » pendant toute la transcription.
         signaler("info", langues.t(
@@ -787,7 +805,9 @@ class FileTraitement:
             a_transcrire, duree_audio, config.get("langue", "fr"), reglages,
             amorce=amorce, progression=progression,
             interrompu=self._interrompu, decalage=decalage,
-            sur_segment=lambda seg: session.ajouter(seg, time.time() - depart),
+            # Un repli sur le processeur en cours de route se note avec le segment suivant.
+            sur_segment=lambda seg: (_noter_calcul(session, instance, reglages["modele"]),
+                                     session.ajouter(seg, time.time() - depart)),
         )
         temps_transcription = time.time() - debut_transcription
         # Filet commun aux deux moteurs : une boucle de mots restée dans un

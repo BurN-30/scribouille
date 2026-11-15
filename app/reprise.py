@@ -35,6 +35,15 @@ illisible, segments sans état, plus de trente jours) est « orphelin » :
 `orphelines()` le liste avec sa raison, `scribouille etat` le montre,
 `scribouille etat --nettoyer` l'efface, et la fenêtre le purge à son démarrage
 en journalisant chaque fichier retiré.
+
+Dossier partagé avec une WhiScribe 2.x installée (même `reprises\\`, même
+format) : seuls les fichiers de Scribouille 3.x sont lus, proposés ou
+effacés. Un état est à nous s'il porte `auteur` (`AUTEUR`), ou la demande de
+départ que seule la 3.x enregistre ; ses segments vont avec lui. Les verrous
+(`.en-cours`) et les écritures provisoires (`.json.scribouille-tmp`) n'ont
+pas d'équivalent en 2.x. La clé d'une transcription de la 3.x ne peut pas
+non plus tomber sur celle d'une 2.x (`cle`). Le reste n'est jamais touché ;
+une fois la 2.x désinstallée, tout le dossier redevient le nôtre.
 """
 
 from __future__ import annotations
@@ -69,6 +78,24 @@ CLES_PAR_FICHIER = ("formats", "compagnon_confiance", "langue", "utiliser_glossa
                     "noms_locuteurs", "motif_sortie")
 
 
+#: Marque des états écrits par Scribouille 3.x.
+AUTEUR = "scribouille-3"
+#: Écriture provisoire d'un état (renommée aussitôt écrite).
+SUFFIXE_PROVISOIRE = ".json.scribouille-tmp"
+
+
+def partage() -> bool:
+    """Une WhiScribe 2.x installée lit-elle le même dossier de reprises ?"""
+    return chemins.donnees_partagees_ancienne_version() is not None
+
+
+def etat_a_nous(etat: dict | None, partage_: bool | None = None) -> bool:
+    """Cet état de reprise est-il de Scribouille 3.x ? Toujours vrai hors partage avec une 2.x."""
+    if not (partage() if partage_ is None else partage_):
+        return True
+    return isinstance(etat, dict) and (etat.get("auteur") == AUTEUR or "demande" in etat or "sortie" in etat)
+
+
 def demande_de(config: dict) -> dict:
     """La part de la configuration qu'une reprise doit retrouver."""
     return {cle: json.loads(json.dumps(config[cle])) for cle in CLES_DEMANDE if cle in config}
@@ -84,9 +111,13 @@ def dossier() -> Path:
 
 
 def cle(source: str | Path, modele: str) -> str:
-    """Identifiant stable d'un couple fichier source / modèle."""
+    """
+    Identifiant stable d'un couple fichier source / modèle. Préfixé pour la
+    3.x : une WhiScribe 2.x qui partage le dossier calcule la sienne sans, et
+    une transcription de la 3.x n'écrit donc jamais par-dessus une des siennes.
+    """
     fichier = Path(source)
-    empreinte = [str(fichier.resolve() if fichier.exists() else fichier), modele]
+    empreinte = [AUTEUR, str(fichier.resolve() if fichier.exists() else fichier), modele]
     try:
         etat = fichier.stat()
         empreinte += [str(etat.st_size), str(int(etat.st_mtime))]
@@ -121,6 +152,9 @@ class Session:
         self.nb_segments = 0
         self.position = 0.0
         self._infos: dict = {}
+        #: Moteur et modèle réellement utilisés (`noter_calcul`).
+        self._calcul: dict = {}
+        self._ecoule = 0.0
         self._flux = None
         #: Appelée une fois si l'écriture échoue (disque plein, clé retirée) :
         #: l'interface le dit, au lieu de laisser croire que tout est protégé.
@@ -143,6 +177,7 @@ class Session:
         self.nb_segments = nb_segments
         self._infos = {
             "version": 1,
+            "auteur": AUTEUR,
             "source": str(source),
             "nom": source.name,
             "modele": modele,
@@ -155,6 +190,7 @@ class Session:
         # Toute la demande de départ (formats, langue, vocabulaire, voix...).
         if demande:
             self._infos["demande"] = demande
+        self._infos.update(self._calcul)
         try:
             self._flux = _fichier_segments(self.identifiant).open("w" if nouvelle else "a", encoding="utf-8")
         except OSError as exc:
@@ -162,6 +198,20 @@ class Session:
             self.active = False
             return
         self.ecrire_etat(ecoule)
+
+    def noter_calcul(self, cle_calcul: str, modele_reel: str) -> None:
+        """
+        Situation de calcul (« openvino-GPU », « cpu »...) et modèle réellement
+        chargé (le dépôt OpenVINO sur la puce, pas le modèle du catalogue) :
+        ce que `scribouille etat` annonce. L'état est réécrit s'il change.
+        """
+        calcul = {"calcul": str(cle_calcul or ""), "modele_reel": str(modele_reel or "")}
+        if calcul == self._calcul:
+            return
+        self._calcul = calcul
+        if self.active and self._infos:
+            self._infos.update(calcul)
+            self.ecrire_etat(self._ecoule)
 
     def fermer(self) -> None:
         if self._flux is not None:
@@ -217,6 +267,7 @@ class Session:
     def ecrire_etat(self, ecoule: float) -> None:
         if not self.active:
             return
+        self._ecoule = float(ecoule or 0)
         etat = dict(self._infos)
         etat.update({
             "position": round(float(self.position), 2),
@@ -228,7 +279,7 @@ class Session:
         # pendant l'écriture laisse l'ancien état, jamais un état à moitié écrit
         # qui rendrait la reprise impossible.
         cible = _fichier_etat(self.identifiant)
-        provisoire = cible.with_name(cible.name + ".tmp")
+        provisoire = cible.with_name(cible.stem + SUFFIXE_PROVISOIRE)
         try:
             provisoire.write_text(json.dumps(etat, ensure_ascii=False), encoding="utf-8")
             os.replace(provisoire, cible)
@@ -291,6 +342,22 @@ def lire_segments(identifiant: str) -> list[Segment]:
     return segments
 
 
+def modele_reel(etat: dict) -> str:
+    """
+    Le modèle réellement chargé pour cette transcription : celui que le moteur
+    a noté (`Session.noter_calcul`), sinon, pour un calcul OpenVINO, le dépôt
+    OpenVINO du modèle du catalogue, sinon le modèle du catalogue.
+    """
+    if etat.get("modele_reel"):
+        return str(etat["modele_reel"])
+    modele = str(etat.get("modele") or "")
+    if str(etat.get("calcul") or "").startswith("openvino"):
+        from . import presets
+
+        return presets.depot_openvino(modele) or modele
+    return modele
+
+
 def lister() -> list[dict]:
     """
     Transcriptions interrompues que l'on peut reprendre.
@@ -299,14 +366,19 @@ def lister() -> list[dict]:
     lecture de l'audio ou le chargement du modèle) en fait partie : elle
     repart du début (`depuis_debut`), avec toute la demande de départ. Celle
     dont le fichier source a disparu n'est pas proposée : voir `orphelines()`.
+    Dossier partagé avec une 2.x : seulement les nôtres (`etat_a_nous`).
+
+    `modele` : le modèle réellement utilisé (`modele_reel`) ; `modele_demande` :
+    celui du catalogue, d'après lequel la reprise rechoisit son réglage.
     """
     resultat: list[dict] = []
     if not (chemins.RACINE / "reprises").is_dir():
         return resultat
+    commun = partage()
     for fichier in sorted(dossier().glob("*.json")):
         identifiant = fichier.stem
         etat = lire_etat(identifiant)
-        if not etat:
+        if not etat or not etat_a_nous(etat, commun):
             continue
         source = Path(etat.get("source", ""))
         if not source.is_file():
@@ -318,7 +390,9 @@ def lister() -> list[dict]:
             "cle": identifiant,
             "nom": etat.get("nom", source.name),
             "chemin": str(source),
-            "modele": etat.get("modele", ""),
+            "modele": modele_reel(etat),
+            "modele_demande": etat.get("modele", ""),
+            "calcul": etat.get("calcul", ""),
             "position": position,
             "duree_audio": duree,
             "pct": int(min(99, position / duree * 100)) if duree else 0,
@@ -330,17 +404,56 @@ def lister() -> list[dict]:
     return resultat
 
 
+def _verrous_des_reprenables() -> set[str]:
+    """Noms des verrous qui appartiennent à une transcription reprenable."""
+    from . import instance
+
+    noms = set()
+    for r in lister():
+        try:
+            noms.add(instance._fichier_verrou(r["chemin"]).name.lower())
+        except OSError:
+            continue
+    return noms
+
+
+def fichiers_a_nous() -> list[Path]:
+    """
+    Tout ce qui, dans `reprises\\`, est de Scribouille 3.x (le dossier entier
+    hors partage avec une 2.x) : ce que l'inventaire peut libérer ou effacer.
+    """
+    if not (chemins.RACINE / "reprises").is_dir():
+        return []
+    racine = dossier()
+    if not partage():
+        return sorted(f for f in racine.iterdir())
+    trouves: list[Path] = sorted(racine.glob("*.en-cours")) + sorted(racine.glob("*" + SUFFIXE_PROVISOIRE))
+    for fichier in sorted(racine.glob("*.json")):
+        if etat_a_nous(lire_etat(fichier.stem), True):
+            trouves.append(fichier)
+            if _fichier_segments(fichier.stem).exists():
+                trouves.append(_fichier_segments(fichier.stem))
+    return trouves
+
+
 def orphelines(jours: int = RETENTION_JOURS) -> list[dict]:
     """
     Ce qui, dans `reprises/`, ne peut plus être repris, avec la raison :
     `source_absente` (fichier déplacé ou effacé), `etat_illisible`,
     `segments_sans_etat`, `trop_vieille` (plus de `jours` jours), `verrou_mort`
     (verrou d'un processus disparu), `provisoire` (écriture coupée net).
+
+    Le verrou mort d'une transcription encore reprenable n'en est pas une : il
+    va avec elle (la reprise le reprend, puis le retire). Dossier partagé
+    avec une WhiScribe 2.x : seuls nos fichiers sont regardés ; un état
+    illisible, des segments sans état ou une écriture provisoire de la 2.x
+    (sans marque) ne sont jamais pris pour les nôtres.
     """
     from . import instance
 
     if not (chemins.RACINE / "reprises").is_dir():
         return []
+    commun = partage()
     limite = time.time() - jours * 86400
     trouvees: list[dict] = []
 
@@ -351,13 +464,17 @@ def orphelines(jours: int = RETENTION_JOURS) -> list[dict]:
                              "fichiers": [str(f) for f in presents],
                              "octets": sum(f.stat().st_size for f in presents)})
 
+    reprenables = _verrous_des_reprenables()
     for verrou in sorted(dossier().glob("*.en-cours")):
+        if verrou.name.lower() in reprenables:
+            continue
         try:
             pid = int(verrou.read_text(encoding="ascii").strip() or 0)
         except (OSError, ValueError):
             pid = 0
         if not instance._vivant(pid):
             noter([verrou], "verrou_mort")
+
     def recent(f: Path) -> bool:
         # Peut-être une transcription qui démarre dans un autre processus.
         try:
@@ -365,17 +482,23 @@ def orphelines(jours: int = RETENTION_JOURS) -> list[dict]:
         except OSError:
             return True
 
-    for provisoire in sorted(dossier().glob("*.json.tmp")):
+    provisoires = sorted(dossier().glob("*" + SUFFIXE_PROVISOIRE))
+    if not commun:
+        provisoires += sorted(dossier().glob("*.json.tmp"))
+    for provisoire in provisoires:
         if not recent(provisoire):
             noter([provisoire], "provisoire")
     etats = {f.stem for f in dossier().glob("*.json")}
-    for segments in sorted(dossier().glob("*.jsonl")):
-        if segments.stem not in etats and not recent(segments):
-            noter([segments], "segments_sans_etat", cle_=segments.stem)
+    if not commun:
+        for segments in sorted(dossier().glob("*.jsonl")):
+            if segments.stem not in etats and not recent(segments):
+                noter([segments], "segments_sans_etat", cle_=segments.stem)
     for fichier in sorted(dossier().glob("*.json")):
         identifiant = fichier.stem
         paire = [fichier, _fichier_segments(identifiant)]
         etat = lire_etat(identifiant)
+        if not etat_a_nous(etat, commun):
+            continue
         if not etat:
             noter(paire, "etat_illisible", cle_=identifiant)
             continue
@@ -417,4 +540,8 @@ def purger(jours: int = RETENTION_JOURS) -> int:
 
 
 def oublier(identifiant: str) -> None:
+    """Abandon d'une reprise : seulement une des nôtres (jamais celle d'une 2.x qui partage le dossier)."""
+    if _fichier_etat(identifiant).exists() and not etat_a_nous(lire_etat(identifiant)):
+        journal.attention("Reprise %s laissée : elle n'est pas de Scribouille 3.x", identifiant)
+        return
     Session(identifiant, active=True).effacer()

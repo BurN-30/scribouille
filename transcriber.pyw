@@ -228,6 +228,11 @@ def verification() -> int:
                                              "sources": "sources"}[chemins.mode_programme()])
     lignes.append(f"  Ressources    : {chemins.DOSSIER_RESSOURCES}")
     lignes.append(f"  Données       : {chemins.RACINE}")
+    # Pourquoi là (dossier partagé avec une WhiScribe 2.x, lu sur place...) :
+    # la même phrase que le journal, là où on la cherche.
+    raison_donnees = chemins.phrase_dossier_donnees()
+    if raison_donnees != f"Données dans {chemins.RACINE}":
+        lignes.append(f"                  {raison_donnees}")
     lignes.append(f"  Modèles       : {chemins.DOSSIER_MODELES}")
     lignes.append("")
 
@@ -1682,6 +1687,8 @@ class Passerelle:
             reglage_machine.oublier(self.config, self.materiel)
             self._enregistrer_config()
         resultat = ext_module.retirer(ext_module.DOSSIER_OPENVINO, vider_cache=False)
+        if resultat.get("partage"):
+            return {"ok": False, "message": langues.t("ext.retrait_partage", version=resultat["partage"])}
         if not resultat["ok"]:
             # Les DLL d'OpenVINO déjà chargées par ce processus restent
             # verrouillées jusqu'à la fermeture : on le dit.
@@ -1949,6 +1956,8 @@ class Passerelle:
         if self._installation_locuteurs is not None:
             return {"ok": False, "message": langues.t("ext.deja_en_cours")}
         resultat = extensions.retirer()
+        if resultat.get("partage"):
+            return {"ok": False, "message": langues.t("ext.retrait_partage", version=resultat["partage"])}
         if not resultat["ok"]:
             journal.erreur("Retrait de l'extension en échec : %s",
                            resultat["message_technique"])

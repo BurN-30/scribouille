@@ -12,6 +12,13 @@ choisi à la main peut contenir les fichiers d'autres outils.
 Les transcriptions vivent dans le dossier de sortie : elles sont comptées à
 part (`transcriptions_octets`) et ne sont effacées qu'avec un drapeau explicite.
 
+Dossier de données partagé avec une WhiScribe 2.x installée
+(`chemins.donnees_partagees_ancienne_version`) : ce qu'elle écrit aussi
+(`migration.FICHIERS_2X`, `DOSSIERS_2X` : réglages, glossaire, modèles,
+extensions...) est montré à part (`partages`) et jamais libéré ni effacé ;
+dans `logs` et `reprises`, seuls nos fichiers à nous restent effaçables
+(`chemins.DOSSIER_LOGS`, `reprise.fichiers_a_nous`).
+
 Postes (clé : contenu) :
     programme            le programme (version installée ou portable, ou les sources)
     modele:<dépôt>       un modèle de transcription ; libérable s'il ne sert pas au réglage
@@ -285,10 +292,36 @@ def _libeller(poste: Poste, modele: str = "") -> None:
                                                               else ""), modele=modele)
 
 
+def partage_2x() -> Path | None:
+    """L'exécutable de la WhiScribe 2.x installée qui partage le dossier de données, sinon None."""
+    return chemins.donnees_partagees_ancienne_version()
+
+
+def partages(config: dict | None = None) -> list[Path]:
+    """Entrées du dossier de données qu'une WhiScribe 2.x installée écrit aussi : jamais touchées."""
+    if partage_2x() is None:
+        return []
+    trouves: list[Path] = []
+    racine = chemins.RACINE
+    try:
+        entrees = sorted(racine.iterdir())
+    except OSError:
+        entrees = []
+    for entree in entrees:
+        if migration.est_partage_2x(entree.name, entree.is_dir()):
+            trouves.append(entree)
+    modeles = Path(chemins.DOSSIER_MODELES)
+    if modeles.is_dir() and not _dans(modeles, racine):
+        trouves.append(modeles)
+    return trouves
+
+
 def postes(config: dict | None = None, mesurer: bool = True) -> tuple[list[Poste], list[Path]]:
     """
     Les postes de Scribouille sur ce poste, et les entrées non reconnues
-    trouvées dans ses dossiers (montrées, jamais touchées).
+    trouvées dans ses dossiers (montrées, jamais touchées). Dossier partagé
+    avec une WhiScribe 2.x : ce qu'elle écrit aussi n'est dans aucun poste
+    (voir `partages`), sauf nos propres journaux et reprises.
     """
     racine = chemins.RACINE
     # Depuis les sources sans dossier imposé, données et sources se mêlent :
@@ -297,6 +330,7 @@ def postes(config: dict | None = None, mesurer: bool = True) -> tuple[list[Poste
     livres = {str(f.resolve()).lower() for f in chemins.MODELES_FICHIERS_EXEMPLE.values()}
     par_cle: dict[str, Poste] = {}
     inconnus: list[Path] = []
+    commun = partage_2x() is not None
 
     def ajouter(cle: str, chemin: Path, liberable: bool = False) -> None:
         poste = par_cle.setdefault(cle, Poste(cle=cle, liberable=liberable))
@@ -322,6 +356,17 @@ def postes(config: dict | None = None, mesurer: bool = True) -> tuple[list[Poste
                 continue  # compté modèle par modèle plus bas
             if str(entree.resolve()).lower() in livres:
                 continue  # exemple livré avec les sources (glossaire, corrections)
+            if commun and migration.est_partage_2x(entree.name, dossier):
+                # À la 2.x autant qu'à nous : hors des postes. Seuls nos
+                # journaux et nos reprises, reconnaissables, en sortent.
+                if entree.name.lower() == "logs" and chemins.DOSSIER_LOGS.is_dir():
+                    ajouter("journaux", chemins.DOSSIER_LOGS, True)
+                elif entree.name.lower() == "reprises":
+                    from . import reprise
+
+                    for fichier in reprise.fichiers_a_nous():
+                        ajouter("reprises", fichier)
+                continue
             groupe = _groupe_de(entree.name, dossier)
             if groupe:
                 ajouter(groupe, entree, groupe in LIBERABLES)
@@ -330,7 +375,9 @@ def postes(config: dict | None = None, mesurer: bool = True) -> tuple[list[Poste
 
     # Modèles : un poste par modèle. Dans le dossier par défaut, tout est à
     # nous ; dans un dossier choisi à la main, seulement les dépôts connus.
-    if modeles.is_dir():
+    # Partagés avec une 2.x installée (elle lit le même dossier de modèles) :
+    # aucun poste, voir `partages`.
+    if modeles.is_dir() and not commun:
         a_nous = _dans(modeles, racine) and modeles.name == "modeles"
         connus = depots_connus()
         servis = _modeles_du_reglage(config)
@@ -450,14 +497,18 @@ def inventaire(config: dict | None = None) -> dict:
     liste, inconnus = postes(config)
     trans = transcriptions(config)
     total = sum(p.octets for p in liste)
+    communs = partages(config)
     return {
         "postes": [p.en_dict() for p in liste],
+        # Entrées qu'une WhiScribe 2.x installée écrit aussi : montrées, jamais touchées.
+        "partages": [str(c) for c in communs],
+        "partage_avec": str(partage_2x() or ""),
         "total_octets": total,
         "total": langues.octets(total),
         "liberable_octets": sum(p.octets for p in liste if p.liberable),
         "transcriptions_octets": trans["octets"],
         "transcriptions": {k: v for k, v in trans.items() if k != "fichiers"},
-        "non_reconnus": [str(c) for c in inconnus],
+        "non_reconnus": [str(c) for c in inconnus + communs],
         "donnees": str(chemins.RACINE),
         "modeles": str(chemins.DOSSIER_MODELES),
         "installee": _dossier_installation() is not None,
@@ -541,7 +592,7 @@ def _a_liberer(poste: Poste) -> list[Path]:
     """
     Ce que « libérer » supprime d'un poste. Les journaux : tous sauf celui de
     la session en cours, que ce processus tient ouvert (le supprimer échouait
-    et l'écran annonçait un élément « non supprimé »).
+    et l'écran annonçait un élément « non supprimé »), sous-dossiers compris.
     """
     if poste.cle != "journaux":
         return list(poste.chemins)
@@ -554,7 +605,8 @@ def _a_liberer(poste: Poste) -> list[Path]:
     fichiers: list[Path] = []
     for dossier in poste.chemins:
         if dossier.is_dir():
-            fichiers += [f for f in dossier.iterdir() if courant is None or f.resolve() != courant]
+            fichiers += [f for f in sorted(dossier.rglob("*"), reverse=True)
+                         if f.is_file() and (courant is None or f.resolve() != courant)]
         else:
             fichiers.append(dossier)
     return fichiers
@@ -599,6 +651,7 @@ def apercu_effacement(garder_transcriptions: bool = True, config: dict | None = 
     """
     liste, inconnus = postes(config)
     retenus = [p for p in liste if avec_programme or p.cle not in ("programme", "installation")]
+    communs = partages(config)
     trans = transcriptions(config)
     total = sum(p.octets for p in retenus)
     if not garder_transcriptions:
@@ -616,7 +669,9 @@ def apercu_effacement(garder_transcriptions: bool = True, config: dict | None = 
         "garder_transcriptions": bool(garder_transcriptions),
         "transcriptions_octets": trans["octets"],
         "transcriptions": {k: v for k, v in trans.items() if k != "fichiers"},
-        "non_reconnus": [str(c) for c in inconnus],
+        "non_reconnus": [str(c) for c in inconnus + communs],
+        "partages": [str(c) for c in communs],
+        "partage_avec": str(partage_2x() or ""),
         "desinstalleur": str(desinst) if (desinst and avec_programme) else "",
         "valide_s": VALIDITE_APERCU_S,
     }

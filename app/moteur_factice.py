@@ -49,7 +49,7 @@ class MoteurFactice:
         # Comme le réglage du poste : puce écartée après une mort du moteur sur
         # elle, ou suspendue après un plantage constaté.
         self.sur_puce = bool(options.get("puce")) and not reglage_machine.PUCE_ECARTEE \
-            and not temoin_puce.suspendue("GPU")
+            and (not temoin_puce.suspendue("GPU") or reglage_machine.REESSAI_EN_COURS)
         self.peripherique = "GPU" if self.sur_puce else "cpu"
         self.cle_calcul = "openvino-GPU" if self.sur_puce else "cpu"
         self.type_calcul = "int8"

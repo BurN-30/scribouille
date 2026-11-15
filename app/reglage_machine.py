@@ -33,6 +33,16 @@ MOTEURS = ("ctranslate2", "openvino")
 #: puce, même quand rien ne prouve un plantage (voir `temoin_puce`).
 PUCE_ECARTEE = False
 
+#: Clé posée (en mémoire seulement) par une commande qui nomme elle-même le
+#: périphérique (`transcrire --moteur openvino --peripherique GPU`) : ce choix
+#: explicite vaut demande de réessai d'une puce suspendue après un plantage.
+#: L'ouverture se fait dans le processus moteur, sous la garde du superviseur
+#: (un nouveau plantage la suspend de nouveau). Le réglage automatique, lui,
+#: ne la retente jamais d'office.
+REESSAI_EXPLICITE = "reessai_explicite"
+#: Vrai dans ce processus quand un réessai explicite de la puce suspendue est en cours.
+REESSAI_EN_COURS = False
+
 
 def lire(config: dict, mat: Materiel) -> dict:
     """Réglage enregistré pour CE poste, dictionnaire vide sinon."""
@@ -52,7 +62,9 @@ def appliquer_au_materiel(config: dict, mat: Materiel) -> dict:
     réglage est gardé, mais l'application retombe sur CTranslate2, et la clé
     « indisponible » le dit à l'interface.
     """
+    global REESSAI_EN_COURS
     reglage = lire(config, mat)
+    REESSAI_EN_COURS = False
     mat.fils_imposes = max(0, int(reglage.get("fils") or 0))
     mat.moteur, mat.peripherique_openvino = "ctranslate2", ""
     effet = dict(reglage)
@@ -63,7 +75,20 @@ def appliquer_au_materiel(config: dict, mat: Materiel) -> dict:
 
         peripherique = str(reglage.get("peripherique") or "CPU").upper()
         temoin = temoin_puce.etat() if peripherique != "CPU" else {"etat": "libre"}
-        if temoin.get("etat") == "suspendue" and temoin.get("peripherique") in (peripherique, "?"):
+        suspendue = temoin.get("etat") == "suspendue" and temoin.get("peripherique") in (
+            temoin_puce.normaliser(peripherique), "?")
+        if (suspendue and reglage.get(REESSAI_EXPLICITE) and not PUCE_ECARTEE
+                and moteur_openvino.installe() and peripherique in moteur_openvino.peripheriques_disponibles()):
+            # Périphérique nommé par la commande elle-même : demande de réessai,
+            # dite à l'écran (`cli`) et ici ; ouverture sous garde.
+            mat.moteur, mat.peripherique_openvino = "openvino", peripherique
+            effet["puce"] = temoin
+            effet["reessai"] = True
+            REESSAI_EN_COURS = True
+            journal.attention("Puce graphique suspendue (%s) : %s demandé explicitement, nouvel essai sous la "
+                              "garde du superviseur (un nouveau plantage la suspend de nouveau)",
+                              temoin_puce.resume(temoin), peripherique)
+        elif suspendue:
             # Plantage constaté sur ce périphérique : on ne recommence pas
             # d'office (lever : interface, `materiel puce --lever`).
             effet["indisponible"] = True

@@ -100,9 +100,23 @@ def _version() -> str:
     return VERSION
 
 
+def normaliser(peripherique: str) -> str:
+    """
+    Le périphérique tel que le réglage le nomme (« GPU », « NPU »), quelle que
+    soit la forme reçue : « openvino-gpu » (situation de calcul du moteur, ce
+    que le superviseur connaît), « GPU.0 » (numéro d'OpenVINO), casse. Sans
+    cela, un plantage noté « OPENVINO-GPU » ne suspendait pas le réglage
+    « GPU » (PC du travail, 15/11 : la puce resservait sans --lever).
+    """
+    texte = str(peripherique or "").strip().upper()
+    if texte.startswith("OPENVINO-"):
+        texte = texte[len("OPENVINO-"):]
+    return texte.split(".", 1)[0] or ""
+
+
 def poser_chargement(peripherique: str) -> dict | None:
     """Ce processus ouvre un modèle sur `peripherique` : témoin posé, et renvoyé."""
-    marque = {"format": FORMAT, "etape": "chargement", "peripherique": (peripherique or "GPU").upper(),
+    marque = {"format": FORMAT, "etape": "chargement", "peripherique": normaliser(peripherique) or "GPU",
               "pid": os.getpid(), "cree": round(_creation(os.getpid()), 3), "pose": round(time.time(), 3),
               "parent": os.getppid() if hasattr(os, "getppid") else 0, "version": _version()}
     return marque if _ecrire(marque) else None
@@ -178,7 +192,7 @@ def noter_fin_moteur(peripherique: str, code, phase: str = "", cause: str = "") 
     if classe != "plantage":
         journal.info("Moteur terminé sur %s (code %s, %s) : puce non suspendue", peripherique, code, classe)
         return classe
-    _ecrire({"format": FORMAT, "etape": "plantage", "peripherique": (peripherique or "GPU").upper(),
+    _ecrire({"format": FORMAT, "etape": "plantage", "peripherique": normaliser(peripherique) or "GPU",
              "code": None if code is None else int(code) & 0xFFFFFFFF, "phase": phase or "",
              "cause": cause or "plantage", "pose": round(time.time(), 3), "pid": os.getpid(),
              "version": _version(), "pilote": _pilote_graphique(), "openvino": _version_openvino()})
@@ -264,10 +278,10 @@ def etat() -> dict:
             pose = fichier().stat().st_mtime
         except OSError:
             pose = 0.0
-        peripherique = str(brut or "").strip().upper()[:8] or "?"
+        peripherique = normaliser(str(brut or "")[:16])[:8] or "?"
         return {"etat": "a_verifier", "origine": "ancien_format", "peripherique": peripherique,
                 "pose": round(pose, 3), "detail": "témoin sans auteur (version antérieure)"}
-    peripherique = str(brut.get("peripherique") or "?").upper()
+    peripherique = normaliser(str(brut.get("peripherique") or "")) or "?"
     base = {"peripherique": peripherique, "pose": brut.get("pose"), "pid": brut.get("pid"),
             "version": brut.get("version") or ""}
     if brut.get("etape") == "plantage":
@@ -312,7 +326,7 @@ def suspendue(peripherique: str = "") -> dict:
     e = etat()
     if e.get("etat") != "suspendue":
         return {}
-    vise = (peripherique or "").upper()
+    vise = normaliser(peripherique)
     if vise and e.get("peripherique") not in (vise, "?"):
         return {}
     return e

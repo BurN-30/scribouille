@@ -100,17 +100,51 @@ def signature_machine(mat: Materiel) -> str:
     ])
 
 
+def modele_calcule(modele: str, peripherique: str) -> str:
+    """
+    Le modèle qui calcule vraiment dans cette situation : sur OpenVINO, le
+    dépôt OpenVINO du modèle du catalogue (« OpenVINO/whisper-large-v3-turbo-
+    int8-ov » pour « deepdml/faster-whisper-large-v3-turbo-ct2 »).
+    """
+    if str(peripherique or "").lower().startswith("openvino"):
+        from . import presets
+
+        return presets.depot_openvino(modele) or modele
+    return modele
+
+
 def cle_mesure(modele: str, peripherique: str, beam: int, lot: int = 0) -> str:
     """
-    Identifiant d'une situation de calcul : modèle, périphérique, faisceau, lots.
+    Identifiant d'une situation de calcul : modèle réellement chargé,
+    périphérique, faisceau, lots.
 
     Le traitement par lots change le coût du tout au tout : il a sa propre clé.
     Sans lots, la clé reste celle des versions précédentes, et les mesures déjà
-    prises restent valables.
+    prises restent valables. Sur OpenVINO, la clé porte le dépôt OpenVINO
+    (jusqu'au 15/11/2026, le modèle du catalogue : `cle_ancienne`, encore lue).
     """
+    return _cle(modele_calcule(modele, peripherique), peripherique, beam, lot)
+
+
+def cle_ancienne(modele: str, peripherique: str, beam: int, lot: int = 0) -> str:
+    """La clé d'avant (modèle du catalogue même sur OpenVINO), vide si c'est la même."""
+    ancienne = _cle(modele, peripherique, beam, lot)
+    return ancienne if ancienne != cle_mesure(modele, peripherique, beam, lot) else ""
+
+
+def _cle(modele: str, peripherique: str, beam: int, lot: int) -> str:
     cle = f"{modele}|{peripherique or 'cpu'}|beam{max(1, int(beam or 1))}"
     lot = int(lot or 0)
     return f"{cle}|lot{lot}" if lot > 1 else cle
+
+
+def _entree(donnees: dict, modele: str, peripherique: str, beam: int, lot: int):
+    """Mesures de cette situation : sous la clé actuelle, sinon sous l'ancienne."""
+    entree = donnees["mesures"].get(cle_mesure(modele, peripherique, beam, lot))
+    ancienne = cle_ancienne(modele, peripherique, beam, lot)
+    if entree is None and ancienne:
+        entree = donnees["mesures"].get(ancienne)
+    return entree
 
 
 # ---------------------------------------------------------------------------
@@ -212,7 +246,7 @@ def mesure_et_confiance(modele: str, peripherique: str, beam: int,
                         mat: Materiel | None = None, lot: int = 0) -> tuple[float, float]:
     """Facteur lissé et sa confiance (voir `confiance`), (0, 0) sans mesure."""
     donnees = charger(signature_machine(mat) if mat else "")
-    entree = donnees["mesures"].get(cle_mesure(modele, peripherique, beam, lot))
+    entree = _entree(donnees, modele, peripherique, beam, lot)
     if not isinstance(entree, dict) or not isinstance(entree.get("historique"), list):
         return 0.0, 0.0
     historique = entree["historique"]
@@ -230,7 +264,7 @@ def facteur_mesure(modele: str, peripherique: str, beam: int,
     le facteur statique du preset.
     """
     donnees = charger(signature_machine(mat) if mat else "")
-    entree = donnees["mesures"].get(cle_mesure(modele, peripherique, beam, lot))
+    entree = _entree(donnees, modele, peripherique, beam, lot)
     if not isinstance(entree, dict):
         return 0.0
     historique = entree.get("historique")
@@ -265,7 +299,11 @@ def enregistrer(modele: str, peripherique: str, beam: int, duree_audio: float,
     donnees["machine"] = signature or donnees.get("machine", "")
 
     cle = cle_mesure(modele, peripherique, beam, lot)
-    entree = donnees["mesures"].get(cle)
+    entree = _entree(donnees, modele, peripherique, beam, lot)
+    # Mesures rangées sous l'ancienne clé : reprises sous la nouvelle.
+    ancienne = cle_ancienne(modele, peripherique, beam, lot)
+    if ancienne:
+        donnees["mesures"].pop(ancienne, None)
     historique = entree.get("historique", []) if isinstance(entree, dict) else []
     if not isinstance(historique, list):
         historique = []

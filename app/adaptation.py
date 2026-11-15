@@ -2,10 +2,10 @@
 Choix automatique du réglage selon le poste.
 
 Au premier lancement, et sur demande (bouton « Reconnaître ce poste » des
-réglages, ou `scribouille.com --reconnaitre`), l'application regarde le
+réglages, ou `scribouille materiel proposer`), l'application regarde le
 poste et PROPOSE un réglage, expliqué en une phrase. Rien n'est appliqué, rien
 n'est téléchargé ni installé sans un clic sur « Appliquer » (ou l'option
-`--appliquer`) ; si le modèle proposé manque, la phrase donne sa taille, et le
+`materiel proposer --appliquer`) ; si le modèle proposé manque, la phrase donne sa taille, et le
 téléchargement n'a lieu qu'au premier lancement d'une transcription, comme
 pour tout premier usage.
 
@@ -275,6 +275,12 @@ def _raison(choix: dict, mat: Materiel, essai: Materiel, rythme_choix: str = RYT
                      preset_habituel=presets.nom_preset(preset_habituel))
 
 
+def phrase_rythme(proposition: dict) -> str:
+    """Le rythme proposé, en une phrase qui dit ce que l'application posera (adaptation automatique ou non)."""
+    cle = "adapt.cli.rythme" if proposition.get("rythme_auto") else "adapt.cli.rythme_fixe"
+    return langues.t(cle, rythme=langues.t(f"rythme.nom.{proposition['rythme']}"))
+
+
 def deja_en_place(proposition: dict, config: dict, mat: Materiel) -> bool:
     """La proposition est-elle déjà le réglage en service ?"""
     from . import reglage_machine
@@ -335,7 +341,7 @@ def decrire(p: Profil) -> list[str]:
 
 
 def principal_cli(arguments: list[str]) -> int:
-    """`--reconnaitre [--appliquer]` : le poste, la règle, la proposition."""
+    """Ancienne forme `--reconnaitre [--appliquer]` (`materiel proposer`) : le poste, la règle, la proposition."""
     from . import config as _config_langue
 
     # Langue de l'interface, celle des messages et du rapport : posée au
@@ -359,7 +365,7 @@ def principal_cli(arguments: list[str]) -> int:
     print(langues.t("adapt.cli.source", source=langues.t(f"adapt.source.{proposition['source']}"),
                     regle=proposition["regle"]))
     print("  " + proposition["phrase"])
-    print("  " + langues.t("adapt.cli.rythme", rythme=langues.t(f"rythme.nom.{proposition['rythme']}")))
+    print("  " + phrase_rythme(proposition))
     for note in proposition["notes"]:
         print("  " + note)
     print()

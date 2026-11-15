@@ -235,6 +235,27 @@ def donnees_partagees_ancienne_version() -> Path | None:
     return None
 
 
+def phrase_dossier_donnees() -> str:
+    """
+    Où sont les données, et pourquoi là, en une phrase : ce que `diagnostic`
+    et `verifier` montrent, et ce que le journal garde (`journaliser_dossier_donnees`).
+    """
+    etat = MIGRATION.get("etat")
+    partagee = donnees_partagees_ancienne_version()
+    if etat == "partage" or partagee is not None:
+        return (f"Données gardées dans {RACINE} : la version installée {MIGRATION.get('ancienne') or partagee} "
+                "le lit encore ; reprise après sa désinstallation ou sa mise à jour")
+    if etat == "differee":
+        return f"Données lues sur place dans {RACINE} : reprise à la prochaine commande qui écrit"
+    if etat not in (None, "rien"):
+        return (f"Données reprises de {NOM_DOSSIER_ANCIEN} dans {RACINE}"
+                + (f" (reprise en cours : {'; '.join(MIGRATION.get('restes') or [])})" if MIGRATION.get("restes")
+                   else ""))
+    if DONNEES_IMPOSEES:
+        return f"Données dans {RACINE} (imposé par SCRIBOUILLE_DONNEES)"
+    return f"Données dans {RACINE}"
+
+
 def journaliser_dossier_donnees() -> None:
     """
     Où sont les données et pourquoi, au journal : la même ligne pour la
@@ -244,12 +265,8 @@ def journaliser_dossier_donnees() -> None:
     from . import journal
 
     etat = MIGRATION.get("etat")
-    partagee = donnees_partagees_ancienne_version()
-    if etat == "partage" or partagee is not None:
-        journal.info("Données gardées dans %s : la version installée %s le lit encore ; reprise après sa "
-                     "désinstallation ou sa mise à jour", RACINE, MIGRATION.get("ancienne") or partagee)
-    elif etat == "differee":
-        journal.info("Données lues sur place dans %s : reprise à la prochaine commande qui écrit", RACINE)
+    if etat in ("partage", "differee") or donnees_partagees_ancienne_version() is not None:
+        journal.info("%s", phrase_dossier_donnees())
     elif etat not in (None, "rien"):
         journal.info("Données reprises de %s : déplacées %s, doublons rangés à part %s, état %s%s",
                      NOM_DOSSIER_ANCIEN, len(MIGRATION.get("deplaces") or []), len(MIGRATION.get("conflits") or []),
@@ -281,7 +298,16 @@ def executable_console() -> Path | None:
 RACINE = _dossier_donnees()
 
 DOSSIER_WEB = DOSSIER_RESSOURCES / "web"
-DOSSIER_LOGS = RACINE / "logs"
+#: Dossier des journaux, celui que partagent toutes les versions (une
+#: WhiScribe 2.x y écrit les siens, et y efface tout `*.log` au-delà des 30
+#: derniers).
+DOSSIER_LOGS_COMMUN = RACINE / "logs"
+#: Journaux de Scribouille 3.x : un sous-dossier à elle, où une 2.x ne
+#: regarde pas (sa purge ne descend pas dans les sous-dossiers) et le seul où
+#: la 3.x efface quoi que ce soit (`journal.purger`). Les journaux posés
+#: directement dans `logs\` (2.x, ou 3.0 avant ce rangement) ne sont jamais
+#: effacés d'office.
+DOSSIER_LOGS = DOSSIER_LOGS_COMMUN / "scribouille"
 
 FICHIER_CONFIG = RACINE / "config.json"
 FICHIER_CONFIG_EXEMPLE = DOSSIER_RESSOURCES / "config.example.json"
