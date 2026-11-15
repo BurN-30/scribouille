@@ -14,7 +14,14 @@ JSON (toutes les clés sont facultatives) :
                       produits dans ce processus
     temoin            fichier : si présent, pas de plantage ; créé juste avant
                       le plantage (un seul plantage, puis la reprise passe)
-    puce              vrai : se présente comme calculant sur la puce graphique
+    puce              vrai : se présente comme calculant sur la puce graphique, et
+                      pose le témoin de la puce pendant le chargement (comme
+                      OpenVINO), point d'essai SCRIBOUILLE_ESSAI_PUCE compris
+    chargement_puce_s  durée de chargement en plus, sur la puce seulement (un
+                      rejeu sur le processeur n'attend pas)
+    plantage_chargement  le processus s'arrête net pendant le chargement, avec
+                      le code `code_plantage` (3 par défaut ; un seul plantage
+                      si `temoin` est donné)
 
 Jamais utilisé par l'application elle-même.
 """
@@ -37,7 +44,12 @@ class MoteurFactice:
     def __init__(self, options: dict):
         self.options = options
         self.charge = ""
-        self.sur_puce = bool(options.get("puce"))
+        from . import reglage_machine, temoin_puce
+
+        # Comme le réglage du poste : puce écartée après une mort du moteur sur
+        # elle, ou suspendue après un plantage constaté.
+        self.sur_puce = bool(options.get("puce")) and not reglage_machine.PUCE_ECARTEE \
+            and not temoin_puce.suspendue("GPU")
         self.peripherique = "GPU" if self.sur_puce else "cpu"
         self.cle_calcul = "openvino-GPU" if self.sur_puce else "cpu"
         self.type_calcul = "int8"
@@ -45,9 +57,28 @@ class MoteurFactice:
     def charger(self, modele: str, signaler=None) -> None:
         if self.charge == modele:
             return
+        marque = None
+        if self.sur_puce:
+            # Comme `MoteurOpenVINO.charger` : témoin posé pendant l'ouverture,
+            # point d'essai `SCRIBOUILLE_ESSAI_PUCE` compris.
+            from . import temoin_puce
+
+            marque = temoin_puce.poser_chargement("GPU")
+            temoin_puce.simuler_echec("GPU")
         attente = float(self.options.get("chargement_s") or 0)
+        if self.sur_puce:
+            attente += float(self.options.get("chargement_puce_s") or 0)
         if attente > 0:
             time.sleep(attente)
+        if self.options.get("plantage_chargement") and not (
+                self.options.get("temoin") and Path(str(self.options["temoin"])).exists()):
+            if self.options.get("temoin"):
+                Path(str(self.options["temoin"])).write_text("plantage simulé", encoding="utf-8")
+            os._exit(int(self.options.get("code_plantage") or 3))
+        if marque is not None:
+            from . import temoin_puce
+
+            temoin_puce.lever_chargement(marque)
         self.charge = modele
 
     def liberer(self) -> None:

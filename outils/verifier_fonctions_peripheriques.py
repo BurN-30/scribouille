@@ -1710,15 +1710,73 @@ def essai_reglage_machine(base: Path) -> None:
         moteur_openvino.installe = lambda: True
         moteur_openvino.peripheriques_disponibles = lambda forcer=False: ["CPU", "GPU"]
         try:
+            from app import temoin_puce
+
             reglage_machine.enregistrer(config, poste, {"moteur": "openvino", "peripherique": "GPU"})
             verifier(poste.cle_calcul == "openvino-gpu", "OpenVINO sur puce graphique retenu")
-            moteur_openvino.TEMOIN_CHARGEMENT.write_text("GPU", encoding="utf-8")
+            # Témoin d'une version antérieure (3 octets, sans auteur), resté
+            # après une commande tuée pendant le chargement : rien ne prouve un
+            # plantage, la puce n'est pas suspendue (défaut vu sur un 225U).
+            temoin_puce.fichier().write_text("GPU", encoding="utf-8")
             effet = reglage_machine.appliquer_au_materiel(config, poste)
-            verifier(effet.get("plantage") == "GPU" and poste.moteur == "ctranslate2",
-                     "après un plantage au chargement, OpenVINO est suspendu au démarrage suivant")
+            verifier(not effet.get("plantage") and poste.moteur == "openvino"
+                     and (effet.get("puce") or {}).get("etat") == "a_verifier",
+                     "témoin ancien de 3 octets : puce « à vérifier », pas suspendue, OpenVINO garde la main",
+                     str(effet))
+            verifier(temoin_puce.fichier().read_text(encoding="utf-8") == "GPU",
+                     "lire l'état du témoin ne le réécrit pas")
+            # Témoin posé par un processus encore vivant : ouverture en cours ailleurs.
+            marque = temoin_puce.poser_chargement("GPU")
+            verifier(temoin_puce.etat().get("etat") == "en_cours" and marque["pid"] == os.getpid()
+                     and marque["cree"] > 0, "témoin d'un processus vivant : « en cours », auteur et date notés")
+            effet = reglage_machine.appliquer_au_materiel(config, poste)
+            verifier(not effet.get("plantage") and poste.moteur == "openvino", "ouverture en cours ailleurs : pas suspendue")
+            temoin_puce.lever_chargement(marque)
+            verifier(not temoin_puce.fichier().exists(), "ouverture finie : le témoin s'en va")
+            # Témoin d'un processus disparu (PID et date de création d'un autre).
+            temoin_puce._ecrire({**marque, "pid": 4_000_000_000, "cree": 1.0})
+            verifier(temoin_puce.etat().get("etat") == "a_verifier"
+                     and temoin_puce.etat().get("origine") in ("coupure", "extinction"),
+                     "témoin d'un processus disparu : « à vérifier »", str(temoin_puce.etat()))
+            # Plantage constaté par le superviseur : suspendue.
+            classe = temoin_puce.noter_fin_moteur("GPU", 0xC0000005, "chargement")
+            effet = reglage_machine.appliquer_au_materiel(config, poste)
+            verifier(classe == "plantage" and effet.get("plantage") == "GPU" and poste.moteur == "ctranslate2"
+                     and temoin_puce.etat().get("code") == 0xC0000005,
+                     "plantage constaté (violation d'accès) : OpenVINO suspendu, code noté", str(effet))
+            verifier(temoin_puce.suspendue("NPU") == {}, "une suspension de la puce graphique ne vise pas le NPU")
+            brut = json.loads(temoin_puce.fichier().read_text(encoding="utf-8"))
+            temoin_puce._ecrire({**brut, "version": "2.9.9"})
+            verifier(temoin_puce.etat().get("etat") == "a_verifier"
+                     and temoin_puce.etat().get("origine") == "mise_a_jour",
+                     "plantage d'avant une mise à jour : réessayé, protégé")
+            temoin_puce._ecrire(brut)
+            for code, attendu in ((0xC000013A, "arret"), (15, "arret"), (1, "inconnu"), (0, "inconnu"),
+                                  (3, "plantage"), (-1073741819, "plantage"), (0xC0000409, "plantage"),
+                                  (None, "inconnu")):
+                verifier(temoin_puce.classer_code(code) == attendu, f"code de sortie {code} : {attendu}")
+            verifier(temoin_puce.noter_fin_moteur("GPU", 0xC000013A, "chargement") == "arret"
+                     and temoin_puce.etat().get("etat") == "suspendue",
+                     "console fermée (0xC000013A) : jamais pris pour un plantage, rien de réécrit")
             reglage_machine.enregistrer(config, poste, {"moteur": "openvino", "peripherique": "GPU"})
-            verifier(not moteur_openvino.TEMOIN_CHARGEMENT.exists() and poste.moteur == "openvino",
+            verifier(not temoin_puce.fichier().exists() and poste.moteur == "openvino",
                      "réappliquer le conseil lève la suspension")
+            temoin_puce.noter_fin_moteur("GPU", 3, "transcription")
+            verifier(temoin_puce.lever("essai") and not temoin_puce.fichier().exists()
+                     and not temoin_puce.lever("essai"), "levée à la demande, une seule fois")
+            os.environ["SCRIBOUILLE_ESSAI_PUCE"] = "erreur"
+            try:
+                temoin_puce.simuler_echec("GPU")
+                leve = False
+            except RuntimeError:
+                leve = True
+            temoin_puce.simuler_echec("CPU")
+            os.environ["SCRIBOUILLE_ESSAI_PUCE"] = "nimporte"
+            temoin_puce.simuler_echec("GPU")
+            os.environ.pop("SCRIBOUILLE_ESSAI_PUCE")
+            temoin_puce.simuler_echec("GPU")
+            verifier(leve, "SCRIBOUILLE_ESSAI_PUCE=erreur : la puce lève une erreur ; processeur, valeur "
+                           "inconnue ou variable absente : rien")
             moteur_openvino.peripheriques_disponibles = lambda forcer=False: ["CPU"]
             effet = reglage_machine.appliquer_au_materiel(config, poste)
             verifier(effet.get("indisponible") and poste.moteur == "ctranslate2",

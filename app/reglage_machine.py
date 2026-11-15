@@ -28,6 +28,11 @@ from .materiel import Materiel
 CLE = "reglage_machine"
 MOTEURS = ("ctranslate2", "openvino")
 
+#: Puce graphique écartée pour la vie de ce processus moteur : le superviseur
+#: rejoue un fichier sans elle après une mort inattendue du moteur sur la
+#: puce, même quand rien ne prouve un plantage (voir `temoin_puce`).
+PUCE_ECARTEE = False
+
 
 def lire(config: dict, mat: Materiel) -> dict:
     """Réglage enregistré pour CE poste, dictionnaire vide sinon."""
@@ -54,17 +59,30 @@ def appliquer_au_materiel(config: dict, mat: Materiel) -> dict:
     if reglage.get("moteur") == "openvino":
         from . import moteur_openvino
 
+        from . import temoin_puce
+
         peripherique = str(reglage.get("peripherique") or "CPU").upper()
-        plantage = moteur_openvino.chargement_interrompu()
-        if plantage and peripherique != "CPU":
-            # La dernière ouverture sur ce périphérique a fait tomber
-            # l'application : on ne recommence pas d'office.
+        temoin = temoin_puce.etat() if peripherique != "CPU" else {"etat": "libre"}
+        if temoin.get("etat") == "suspendue" and temoin.get("peripherique") in (peripherique, "?"):
+            # Plantage constaté sur ce périphérique : on ne recommence pas
+            # d'office (lever : interface, `materiel puce --lever`).
             effet["indisponible"] = True
-            effet["plantage"] = plantage
-            journal.attention("OpenVINO suspendu : la dernière ouverture sur %s n'a pas abouti",
-                              plantage)
+            effet["plantage"] = peripherique
+            effet["puce"] = temoin
+            journal.attention("OpenVINO suspendu sur %s : %s", peripherique, temoin_puce.resume(temoin))
+        elif PUCE_ECARTEE and peripherique != "CPU":
+            effet["indisponible"] = True
+            effet["ecartee"] = True
+            journal.attention("OpenVINO sur %s écarté pour ce fichier : le moteur est tombé dessus", peripherique)
         elif moteur_openvino.installe() and peripherique in moteur_openvino.peripheriques_disponibles():
             mat.moteur, mat.peripherique_openvino = "openvino", peripherique
+            if temoin.get("etat") == "a_verifier":
+                # Ouverture précédente coupée sans plantage prouvé : la puce
+                # n'est pas suspendue ; la prochaine ouverture tranche, dans le
+                # processus moteur, sous la garde du superviseur.
+                effet["puce"] = temoin
+                journal.info("Puce graphique à vérifier (%s) : nouvel essai protégé",
+                             temoin.get("detail") or temoin.get("origine"))
         else:
             effet["indisponible"] = True
             journal.attention("Réglage OpenVINO (%s) inapplicable sur ce poste, "

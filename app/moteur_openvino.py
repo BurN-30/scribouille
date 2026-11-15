@@ -138,25 +138,26 @@ def faisceau_effectif(peripherique: str, faisceau: int) -> int:
 #: effacé dès qu'elle a réussi ou échoué proprement. Une compilation qui échoue
 #: peut faire tomber tout le processus au lieu de lever une exception (constaté :
 #: violation d'accès dans le greffon GPU quand un cache de compilation est
-#: demandé et que la compilation échoue). Un témoin resté en place au
-#: démarrage suivant dit que c'est arrivé : le réglage OpenVINO est alors
-#: suspendu (voir `reglage_machine`), au lieu de refaire tomber l'application.
+#: demandé et que la compilation échoue). Ce qu'il vaut ensuite (en cours
+#: ailleurs, à vérifier, suspendu après un plantage constaté) : `app/temoin_puce.py`.
 TEMOIN_CHARGEMENT = chemins.RACINE / "openvino-chargement-en-cours.txt"
 
 
-def chargement_interrompu() -> str:
-    """Périphérique dont la dernière ouverture a fait tomber l'application, sinon vide."""
-    try:
-        return TEMOIN_CHARGEMENT.read_text(encoding="utf-8").strip() or "?"
-    except OSError:
-        return ""
+def chargement_interrompu(peripherique: str = "") -> str:
+    """
+    Périphérique suspendu après un plantage CONSTATÉ, sinon vide. Un témoin
+    laissé par un arrêt venu de dehors (processus tué, console fermée, poste
+    éteint) ou par une version antérieure ne suspend rien : voir `temoin_puce`.
+    """
+    from . import temoin_puce
+
+    return str(temoin_puce.suspendue(peripherique).get("peripherique") or "")
 
 
 def effacer_temoin() -> None:
-    try:
-        TEMOIN_CHARGEMENT.unlink(missing_ok=True)
-    except OSError:
-        pass
+    from . import temoin_puce
+
+    temoin_puce.lever("réglage accepté")
 
 _peripheriques_vus: list[str] | None = None
 #: Version gardée par la détection de fond (`materiel.json`), pour que la
@@ -398,14 +399,15 @@ class MoteurOpenVINO:
                 peripherique=nom_peripherique(self.peripherique_ov)))
         journal.info("Chargement OpenVINO %s sur %s (%s)", depot, self.peripherique_ov, dossier)
         base = {"CACHE_DIR": str(cache)}
-        temoin = self.temoin and self.peripherique_ov != "CPU"
-        if temoin:
-            try:
-                TEMOIN_CHARGEMENT.write_text(self.peripherique_ov, encoding="utf-8")
-            except OSError:
-                temoin = False
+        from . import temoin_puce
+
+        sur_puce = self.temoin and self.peripherique_ov != "CPU"
+        marque = temoin_puce.poser_chargement(self.peripherique_ov) if sur_puce else None
         essais = [{**base, **self.proprietes}, base] if self.proprietes else [base]
         try:
+            # Point d'essai (SCRIBOUILLE_ESSAI_PUCE) : échec simulé de la puce,
+            # sans effet en usage normal.
+            temoin_puce.simuler_echec(self.peripherique_ov)
             for rang, proprietes in enumerate(essais):
                 try:
                     self._ouvrir(ov_genai, str(dossier), proprietes)
@@ -419,8 +421,7 @@ class MoteurOpenVINO:
                     journal.attention("OpenVINO refuse les propriétés du rythme (%s) : %s",
                                       ", ".join(sorted(self.proprietes)), exc)
         finally:
-            if temoin:
-                effacer_temoin()
+            temoin_puce.lever_chargement(marque)
         try:
             from tokenizers import Tokenizer
 

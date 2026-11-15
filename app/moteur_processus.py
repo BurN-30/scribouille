@@ -216,6 +216,10 @@ class Moteur:
         self.config = dict(config or {})
         langues.definir(self.config.get("langue_interface") or langues.detecter_systeme())
         moteur.TELECHARGEMENT_PERMIS = bool(options.get("telecharger", True))
+        from . import reglage_machine as reglage_module
+
+        # Le moteur précédent est mort sur la puce : ce fichier repart sans elle.
+        reglage_module.PUCE_ECARTEE = bool(options.get("sans_puce"))
         mat, _provisoire = materiel.detecter_au_demarrage()
         # Rythme équilibré ou discret : les fils de CTranslate2 attendent sans
         # tourner à vide. OpenMP lit la variable une seule fois, au premier
@@ -294,7 +298,18 @@ def principal(arguments: list[str]) -> int:
 
     parent = int(valeur("--parent") or 0)
     if parent:
-        processus.surveiller_parent(parent)
+        def sortir() -> None:
+            # Parent parti (fenêtre fermée, commande arrêtée) pendant une
+            # ouverture sur la puce : arrêt voulu, pas un plantage de la puce.
+            try:
+                from . import temoin_puce
+
+                temoin_puce.lever_si_pid(os.getpid())
+            except Exception:
+                pass
+            os._exit(0)
+
+        processus.surveiller_parent(parent, sortir)
 
     moteur = Moteur(canal)
     ordres: queue.Queue = queue.Queue()

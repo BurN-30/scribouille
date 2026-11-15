@@ -51,6 +51,11 @@ DELAI_BLOCAGE_S = 15 * 60.0
 SAUT_VEILLE_S = 30.0
 #: Un moteur lancé pour mesurer des durées, sans file, s'arrête après ce délai.
 DELAI_INACTIVITE_S = 30.0
+#: Ouverture d'un modèle sur la puce graphique ou le NPU au-delà de laquelle
+#: elle est tenue pour bloquée (le moteur est arrêté, la puce suspendue, le
+#: fichier rejoué sur le processeur). Une compilation sans cache dure de 40 s
+#: à 2 min : la borne laisse de la marge à un poste lent.
+DELAI_CHARGEMENT_PUCE_S = 10 * 60.0
 
 
 class ErreurMoteur(Exception):
@@ -110,6 +115,14 @@ class Superviseur:
         self.depuis = time.time()
         self.derniere_panne: dict | None = None
         self.version_protocole: int | None = None
+        #: Puce écartée pour la suite de cette session, après une mort du
+        #: moteur sur elle (plantage prouvé ou non) : le fichier est rejoué
+        #: sur le processeur, sans retenter la puce à chaque relance.
+        self.puce_ecartee = False
+        #: Début de l'ouverture en cours (horloge monotone), None hors chargement.
+        self._debut_chargement: float | None = None
+        #: Pourquoi la garde a arrêté le moteur (« blocage »), vide sinon.
+        self._cause_arret = ""
         #: Chargements de modèle et lancements du moteur depuis la création.
         self.chargements = 0
         self.lancements = 0
@@ -142,6 +155,8 @@ class Superviseur:
                 return
             self._annuler_minuterie()
             self._arret_voulu = False
+            self._cause_arret = ""
+            self._debut_chargement = None
             options = ["--parent", str(os.getpid())]
             fichier_journal = self._journal or str(journal.fichier())
             if fichier_journal:
@@ -215,11 +230,14 @@ class Superviseur:
                 return
             self._arret_voulu = True
         depart = time.perf_counter()
+        pid_moteur = getattr(self, "_pid_moteur", None) or p.pid
         self._tuer(p)
         try:
             p.wait(timeout=5)
         except subprocess.TimeoutExpired:  # pragma: no cover
             pass
+        # Arrêté exprès pendant une ouverture sur la puce : pas un plantage.
+        _lever_temoin_de(pid_moteur)
         journal.info("Moteur arrêté à la demande en %.0f ms", (time.perf_counter() - depart) * 1000)
 
     def quitter(self, delai: float = 10.0) -> None:
@@ -233,11 +251,13 @@ class Superviseur:
                     self._changer_etat("arrete")
                 return
             self._arret_voulu = True
+        pid_moteur = getattr(self, "_pid_moteur", None) or p.pid
         try:
             self._envoyer("quitter")
             p.wait(timeout=delai)
         except Exception:
             self._tuer(p)
+            _lever_temoin_de(pid_moteur)
         self._changer_etat("arrete")
         self.modele = ""
 
@@ -297,6 +317,9 @@ class Superviseur:
             etat = str(message.get("etat") or "")
             if etat == "chargement":
                 self.chargements += 1
+                self._debut_chargement = time.monotonic()
+            else:
+                self._debut_chargement = None
             self.modele = str(message.get("modele") or "") if etat != "libere" else ""
             self.peripherique = str(message.get("peripherique") or "")
             self.sur_puce = bool(message.get("sur_puce"))
@@ -346,11 +369,26 @@ class Superviseur:
                 # d'OpenVINO) ou mourra (plantage, reprise au segment près).
                 journal.info("Retour de veille (%.0f s) : garde du moteur remise à zéro", saut)
                 self._dernier_message = time.monotonic()
+                if self._debut_chargement is not None:
+                    self._debut_chargement = time.monotonic()
                 if self._rappels is not None:
                     self._rappels.journal_ui("info", langues.t("superviseur.veille"))
                 continue
+            debut = self._debut_chargement
+            if debut is not None and self.sur_puce and time.monotonic() - debut > DELAI_CHARGEMENT_PUCE_S:
+                # Ouverture sur la puce qui ne rend pas la main : bornée. Le
+                # moteur est arrêté et la mort traitée comme un plantage.
+                journal.erreur("Ouverture sur %s bloquée depuis %.0f s : moteur arrêté",
+                               self.peripherique or "la puce", time.monotonic() - debut)
+                self._cause_arret = "blocage"
+                if self._rappels is not None:
+                    self._rappels.journal_ui("erreur", langues.t(
+                        "superviseur.chargement_bloque", minutes=int(DELAI_CHARGEMENT_PUCE_S // 60)))
+                self._tuer(p)
+                return
             if self._config is not None and time.monotonic() - self._dernier_message > DELAI_BLOCAGE_S:
                 journal.erreur("Moteur muet depuis %.0f s : arrêté", time.monotonic() - self._dernier_message)
+                self._cause_arret = "blocage"
                 if self._rappels is not None:
                     self._rappels.journal_ui("erreur", langues.t(
                         "superviseur.bloque", minutes=int(DELAI_BLOCAGE_S // 60)))
@@ -410,7 +448,8 @@ class Superviseur:
     def _ouvrir(self) -> None:
         self.demarrer()
         reponse = self._attendre(self._envoyer("ouvrir", config=self._config,
-                                               options={"telecharger": self.telecharger}))
+                                               options={"telecharger": self.telecharger,
+                                                        "sans_puce": self.puce_ecartee}))
         if reponse.get("type") == "erreur":
             raise ErreurMoteur(str(reponse.get("message") or "ouverture de la file"))
         self.peripherique = str(reponse.get("peripherique") or "")
@@ -447,7 +486,14 @@ class Superviseur:
                 cause = f"code {mort.code}"
                 rappels.journal_ui("erreur", langues.t("superviseur.plantage", cause=cause))
                 if sur_puce:
-                    self._poser_temoin_puce(peripherique)
+                    from . import temoin_puce
+
+                    phase = str((self.derniere_panne or {}).get("etat") or "")
+                    # Plantage prouvé (code, blocage) : puce suspendue au-delà de
+                    # cette session. Arrêt venu de dehors ou code ambigu : rien
+                    # de suspendu, la prochaine session réessaie, protégée.
+                    temoin_puce.noter_fin_moteur(peripherique or "GPU", mort.code, phase, self._cause_arret)
+                    self.puce_ecartee = True
                     rappels.journal_ui("attention", langues.t("superviseur.repli_puce"))
                 cle = self._cles_reprise.get(element.identifiant) or element.reprise
                 if plantages >= 2:
@@ -499,15 +545,6 @@ class Superviseur:
         rappels.termine(element.identifiant, {"ok": False, "titre": titre, "message": cause,
                                               "plantage_moteur": True, "reprise": cle or ""})
         return "erreur"
-
-    @staticmethod
-    def _poser_temoin_puce(peripherique: str) -> None:
-        """Le moteur suivant ne retournera pas sur la puce graphique (voir `reglage_machine`)."""
-        try:
-            temoin = chemins.RACINE / "openvino-chargement-en-cours.txt"
-            temoin.write_text((peripherique or "GPU").upper() + "\n", encoding="utf-8")
-        except OSError as exc:
-            journal.debug("Témoin de la puce graphique non posé : %s", exc)
 
     def fermer_file(self, rappels=None) -> None:
         """Fin de file : modèle et rythme rendus, puis le moteur sort (mémoire rendue)."""
@@ -585,6 +622,15 @@ class Superviseur:
         if self._sonde is None or not self.vivant():
             return None
         return self._sonde.releve()
+
+
+def _lever_temoin_de(pid: int | None) -> None:
+    try:
+        from . import temoin_puce
+
+        temoin_puce.lever_si_pid(pid)
+    except Exception as exc:  # pragma: no cover - jamais bloquant
+        journal.debug("Témoin de la puce non relu : %s", exc)
 
 
 def _minutes(secondes: float) -> str:
