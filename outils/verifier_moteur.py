@@ -359,6 +359,9 @@ def essai_plantage() -> None:
              and "reprenable" not in str(termine.get("titre")) and not f.file.elements[0].reprise,
              "deux plantages avant tout segment gardé : rien n'est dit reprenable, la ligne propose « Relancer »",
              str(termine)[:200])
+    source_vide = str(Path(f.sources[0]).resolve()).lower()
+    verifier(not [r for r in reprise.lister() if str(Path(r["chemin"]).resolve()).lower() == source_vide],
+             "et la sauvegarde ouverte au départ est effacée : « etat » ne la propose pas non plus")
     from app import instance as instance_module
 
     verrou = instance_module._fichier_verrou(TEMPORAIRE / "fantome.wav")
@@ -564,6 +567,149 @@ def _lancer_sans_bureau(commande: list[str], env: dict, sortie: Path) -> int:
     return int(code.value)
 
 
+def _tuer_arbre(p: subprocess.Popen) -> None:
+    """Arrêt brutal (fenêtre de console fermée, courant coupé) : la commande
+    et son moteur tués net, sans rien leur laisser finir."""
+    import psutil
+
+    arbre = []
+    try:
+        racine = psutil.Process(p.pid)
+        arbre = racine.children(recursive=True) + [racine]
+        for e in arbre:
+            try:
+                e.kill()
+            except psutil.Error:
+                pass
+    except psutil.Error:
+        pass
+    p.wait(30)
+    # Tout l'arbre, pas seulement la racine : un moteur encore vivant une
+    # fraction de seconde garderait son verrou pour vivant.
+    psutil.wait_procs(arbre, timeout=30)
+
+
+def essai_coupure_avant_premier_segment(dossier: Path) -> None:
+    """Retour du PC du travail : commande tuée deux secondes après la première
+    ligne de progression, `etat` vide et `reprendre` « rien à reprendre »
+    alors qu'une sauvegarde sans segment était là."""
+    from app import reprise as reprise_module
+
+    for moment, essai, attendre_ligne in (
+            ("pendant le chargement du modèle", {"chargement_s": 600}, b'"progres"'),
+            ("pendant la lecture de l'audio", {"decodage_s": 600}, None)):
+        nom = "coupee-chargement.ogg" if "chargement" in moment else "coupee-lecture.ogg"
+        source = dossier / nom
+        source.write_bytes(EXTRAIT.read_bytes())
+        ailleurs = TEMPORAIRE / f"cli-sorties-{source.stem}"
+        env = dict(os.environ, SCRIBOUILLE_MOTEUR_ESSAI=json.dumps(essai))
+        p = subprocess.Popen([PYTHON, str(RACINE / "transcriber.pyw"), "transcrire", str(source), "--json",
+                              "--telecharger", "--formats", "txt,json,srt", "--sortie", str(ailleurs),
+                              "--langue", "en", "--rythme", "discret"],
+                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env, cwd=str(TEMPORAIRE),
+                             creationflags=SANS_FENETRE)
+        if attendre_ligne:
+            for x in p.stdout:
+                if attendre_ligne in x:
+                    break
+        else:
+            def sauvegarde_ecrite():
+                return any((reprise_module.lire_etat(f.stem) or {}).get("nom") == nom
+                           for f in (chemins.RACINE / "reprises").glob("*.json"))
+            attendre(sauvegarde_ecrite, 60)
+        time.sleep(2)
+        _tuer_arbre(p)
+        code, lignes, _ = cli("etat", "--json")
+        taches = lignes[-1]["donnees"]["taches"] if lignes else []
+        tache = next((t for t in taches if Path(t["chemin"]).name == nom), {})
+        verifier(tache.get("depuis_debut") is True and tache.get("nb_segments") == 0
+                 and tache.get("etat") == "interrompue",
+                 f"coupée {moment}, avant le premier segment : « etat » la liste, à reprendre du début",
+                 str(taches)[:300])
+        code, lignes, err = cli("reprendre", tache.get("cle", "?"), "--json", essai={"segments": 12, "pause_s": 0.0})
+        compagnons = sorted(ailleurs.glob("*.json"))
+        contenu = json.loads(compagnons[-1].read_text(encoding="utf-8")) if compagnons else {}
+        produits = sorted(f.suffix for f in ailleurs.glob("*"))
+        verifier(code == 0 and [s["t"] for s in contenu.get("segments", [])] == attendu(12)
+                 and produits == [".json", ".srt", ".txt"]
+                 and (contenu.get("transcription") or {}).get("langue") == "en",
+                 f"coupée {moment} : « reprendre » repart du début avec la demande de départ (.srt, dossier, langue)",
+                 f"{code} {produits} {err[-200:]}")
+        verifier(not reprise_module.lire_etat(tache.get("cle", "?")), "reprise faite : sauvegarde effacée")
+
+    # Une NOUVELLE transcription d'un fichier qui avait laissé une reprise
+    # repart d'une sauvegarde vide : avant, ses segments s'ajoutaient aux
+    # anciens, et une seconde coupure donnait un texte en double.
+    source = dossier / "deux-coupures.ogg"
+    source.write_bytes(EXTRAIT.read_bytes())
+    sorties = TEMPORAIRE / "cli-sorties-deux-coupures"
+    for _ in range(2):
+        env = dict(os.environ, SCRIBOUILLE_MOTEUR_ESSAI=json.dumps({"segments": 200, "pause_s": 0.1}))
+        p = subprocess.Popen([PYTHON, str(RACINE / "transcriber.pyw"), "transcrire", str(source), "--json",
+                              "--telecharger", "--sortie", str(sorties)],
+                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env, cwd=str(TEMPORAIRE),
+                             creationflags=SANS_FENETRE)
+        vus = 0
+        for x in p.stdout:
+            if b'"progres"' in x:
+                vus += 1
+                if vus >= 4:
+                    break
+        _tuer_arbre(p)
+    code, lignes, _ = cli("etat", "--json")
+    tache = next((t for t in (lignes[-1]["donnees"]["taches"] if lignes else [])
+                  if Path(t["chemin"]).name == source.name), {})
+    code, lignes, err = cli("reprendre", tache.get("cle", "?"), "--json", essai={"segments": 200, "pause_s": 0.0})
+    compagnons = sorted(sorties.glob("*.json"))
+    contenu = json.loads(compagnons[-1].read_text(encoding="utf-8")) if compagnons else {}
+    textes = [s["t"] for s in contenu.get("segments", [])]
+    verifier(code == 0 and textes == attendu(200) and tache.get("nb_segments", 0) > 0,
+             "transcrite de nouveau puis coupée encore : la reprise ne double aucun segment",
+             f"{code} {len(textes)} segments {err[-200:]}")
+
+    # Un échec avant le premier segment (audio illisible) ne laisse rien à
+    # reprendre : « Relancer » ferait la même chose, une reprise rejouerait l'échec.
+    illisible = dossier / "illisible.mp3"
+    illisible.write_bytes(b"pas de l'audio " * 400)
+    code, lignes, err = cli("transcrire", str(illisible), "--json", "--telecharger", "--sortie",
+                            str(TEMPORAIRE / "cli-sorties-illisible"), essai={"segments": 5})
+    code_etat, lignes_etat, _ = cli("etat", "--json")
+    verifier(code == 1 and not [t for t in (lignes_etat[-1]["donnees"]["taches"] if lignes_etat else [])
+                                if Path(t["chemin"]).name == illisible.name],
+             "audio illisible : échec (code 1), aucune sauvegarde laissée à reprendre", f"{code} {err[-200:]}")
+
+    # Orphelines : dites avec leur raison, effacées sur demande seulement.
+    rep_ = chemins.RACINE / "reprises"
+    (rep_ / "0000orpheline0001.json").write_text(json.dumps(
+        {"source": str(dossier / "disparu.ogg"), "nom": "disparu.ogg", "position": 12.0, "nb_segments": 3}),
+        encoding="utf-8")
+    (rep_ / "0000orpheline0001.jsonl").write_text("{}\n", encoding="utf-8")
+    seul = rep_ / "0000orpheline0002.jsonl"
+    seul.write_text("{}\n", encoding="utf-8")
+    os.utime(seul, (time.time() - 3600, time.time() - 3600))
+    vivante = dossier / "vivante.ogg"
+    vivante.write_bytes(EXTRAIT.read_bytes())
+    gardee = reprise_module.Session("0000reprenable001", active=True)
+    gardee.ouvrir(vivante, "tiny", 43.0, nouvelle=True)
+    gardee.fermer()
+    code, lignes, _ = cli("etat", "--json")
+    donnees = lignes[-1]["donnees"] if lignes else {}
+    # (les commandes tuées plus haut ont laissé leurs verrous : orphelins aussi)
+    raisons = sorted(o["raison"] for o in donnees.get("orphelines", []) if o["raison"] != "verrou_mort")
+    verifier(code == 0 and raisons == ["segments_sans_etat", "source_absente"]
+             and any(t["cle"] == "0000reprenable001" for t in donnees.get("taches", [])),
+             "etat : orphelines listées avec leur raison, rien d'effacé d'office", str(raisons))
+    code, lignes, _ = cli("etat", "--nettoyer", "--json")
+    restants = sorted(p.name for p in rep_.glob("0000*"))
+    verifier(code == 0 and restants == ["0000reprenable001.json", "0000reprenable001.jsonl"]
+             and not list(rep_.glob("*.en-cours"))
+             and len((lignes[-1]["donnees"] if lignes else {}).get("nettoyees", [])) >= 2,
+             "etat --nettoyer : les orphelines effacées, la reprise valable gardée",
+             f"{restants} {[p.name for p in rep_.glob('*.en-cours')]} "
+             f"{(lignes[-1]['donnees'] if lignes else {}).get('nettoyees')}"[:600])
+    reprise_module.oublier("0000reprenable001")
+
+
 def essai_ligne_de_commande() -> None:
     titre("7. Ligne de commande")
     dossier = TEMPORAIRE / "cli"
@@ -698,6 +844,7 @@ def essai_ligne_de_commande() -> None:
              f"{produits} {debut.get('rythme')} {(contenu.get('transcription') or {}).get('langue')}")
     code, lignes, _ = cli("reprendre", "cle-qui-n-existe-pas", "--json")
     verifier(code == 2 and lignes[-1]["erreur"]["code"] == "introuvable", "reprendre une clé inconnue : code 2")
+    essai_coupure_avant_premier_segment(dossier)
 
     # Sans bureau ni console, comme un service, une tâche planifiée ou SSH.
     sortie = TEMPORAIRE / "sans-bureau.ndjson"

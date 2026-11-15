@@ -485,6 +485,10 @@ class Superviseur:
         # rien à reprendre, la ligne propose « Relancer » (comme `etat`).
         etat = reprise_module.lire_etat(cle) if cle else None
         if not (etat and float(etat.get("position") or 0) > 0):
+            # Sauvegarde ouverte mais vide (plantages pendant la lecture ou le
+            # chargement) : effacée, `etat` ne la propose donc pas non plus.
+            if etat and not int(etat.get("nb_segments") or 0):
+                reprise_module.oublier(cle)
             cle = ""
         element.reprise = cle
         titre = langues.t("superviseur.echec_definitif" if cle else "superviseur.echec_definitif_vide",

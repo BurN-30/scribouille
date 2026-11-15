@@ -1512,7 +1512,10 @@ function ligneHTML(id) {
   // garde, le bouton le dit (« Reprendre ») ; un autre echec repart de zero.
   if (['annule', 'erreur'].includes(it.etat)) {
     const chemin = String(it.chemin || '').toLowerCase();
-    const reprendre = !!it.reprise || (etat.reprises || []).some((r) => String(r.chemin || '').toLowerCase() === chemin);
+    // Une sauvegarde sans aucun segment (coupure pendant la lecture de
+    // l'audio ou le chargement du modele) repart du debut : « Relancer ».
+    const gardee = (etat.reprises || []).find((r) => String(r.chemin || '').toLowerCase() === chemin);
+    const reprendre = gardee ? !gardee.depuis_debut : !!it.reprise;
     actions.push(`<button class="bouton bouton-petit" data-relancer>${icone('i-reprise', 'icone-s')}<span>${ech(t(reprendre ? 'ui.ligne.reprendre' : 'ui.ligne.relancer'))}</span></button>`);
   }
   if (it.etat === 'erreur') actions.push(boutonLigne('data-log', 'ui.ligne.journal', 'i-info'));

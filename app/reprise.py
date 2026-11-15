@@ -23,10 +23,18 @@ La clé identifie le couple fichier source / modèle : reprendre une transcripti
 avec un autre modèle n'aurait aucun sens, et deux fichiers homonymes rangés dans
 deux dossiers différents ne se mélangent pas.
 
+La sauvegarde est ouverte dès qu'un fichier est pris en charge, avant la
+lecture de l'audio et le chargement du modèle : une transcription coupée avant
+son premier segment reste reprenable, elle repart alors du début avec toute la
+demande de départ.
+
 À la reprise, seule la fin du signal est repassée au décodeur, à partir du
 dernier segment enregistré. Les fichiers sont effacés dès qu'une transcription
-se termine normalement, et les traces de plus de trente jours sont purgées au
-démarrage.
+se termine normalement. Ce qui ne peut plus être repris (source disparue, état
+illisible, segments sans état, plus de trente jours) est « orphelin » :
+`orphelines()` le liste avec sa raison, `scribouille etat` le montre,
+`scribouille etat --nettoyer` l'efface, et la fenêtre le purge à son démarrage
+en journalisant chaque fichier retiré.
 """
 
 from __future__ import annotations
@@ -122,7 +130,13 @@ class Session:
 
     def ouvrir(self, source: Path, modele: str, duree_audio: float,
                position: float = 0.0, nb_segments: int = 0, ecoule: float = 0.0,
-               sortie: str = "", demande: dict | None = None) -> None:
+               sortie: str = "", demande: dict | None = None, nouvelle: bool = False) -> None:
+        """
+        `nouvelle` : rien n'est repris, le fichier des segments repart vide.
+        Sans cela, une nouvelle transcription d'un fichier qui avait laissé une
+        reprise ajoutait ses segments après les anciens, et une seconde coupure
+        donnait un texte en double à la reprise.
+        """
         if not self.active:
             return
         self.position = position
@@ -142,7 +156,7 @@ class Session:
         if demande:
             self._infos["demande"] = demande
         try:
-            self._flux = _fichier_segments(self.identifiant).open("a", encoding="utf-8")
+            self._flux = _fichier_segments(self.identifiant).open("w" if nouvelle else "a", encoding="utf-8")
         except OSError as exc:
             journal.attention("Sauvegarde progressive désactivée pour ce fichier : %s", exc)
             self.active = False
@@ -279,10 +293,12 @@ def lire_segments(identifiant: str) -> list[Segment]:
 
 def lister() -> list[dict]:
     """
-    Transcriptions interrompues que l'on peut proposer de reprendre.
+    Transcriptions interrompues que l'on peut reprendre.
 
-    Une reprise dont le fichier source a disparu ou n'a pas avancé d'une seule
-    seconde n'est pas proposée : elle serait une fausse promesse.
+    Une transcription coupée avant son premier segment enregistré (pendant la
+    lecture de l'audio ou le chargement du modèle) en fait partie : elle
+    repart du début (`depuis_debut`), avec toute la demande de départ. Celle
+    dont le fichier source a disparu n'est pas proposée : voir `orphelines()`.
     """
     resultat: list[dict] = []
     if not (chemins.RACINE / "reprises").is_dir():
@@ -293,10 +309,11 @@ def lister() -> list[dict]:
         if not etat:
             continue
         source = Path(etat.get("source", ""))
-        if not source.is_file() or float(etat.get("position", 0) or 0) <= 0:
+        if not source.is_file():
             continue
         duree = float(etat.get("duree_audio", 0) or 0)
         position = float(etat.get("position", 0) or 0)
+        nb_segments = int(etat.get("nb_segments", 0) or 0)
         resultat.append({
             "cle": identifiant,
             "nom": etat.get("nom", source.name),
@@ -305,45 +322,98 @@ def lister() -> list[dict]:
             "position": position,
             "duree_audio": duree,
             "pct": int(min(99, position / duree * 100)) if duree else 0,
-            "nb_segments": int(etat.get("nb_segments", 0) or 0),
+            "nb_segments": nb_segments,
+            "depuis_debut": nb_segments == 0 or position <= 0,
             "ecoule": float(etat.get("ecoule", 0) or 0),
             "date": etat.get("maj", etat.get("debut", "")),
         })
     return resultat
 
 
-def purger(jours: int = RETENTION_JOURS) -> int:
-    """Retire les reprises trop vieilles ou dont la source a disparu, et les
-    verrous de fichier (`.en-cours`) laissés par un processus disparu."""
+def orphelines(jours: int = RETENTION_JOURS) -> list[dict]:
+    """
+    Ce qui, dans `reprises/`, ne peut plus être repris, avec la raison :
+    `source_absente` (fichier déplacé ou effacé), `etat_illisible`,
+    `segments_sans_etat`, `trop_vieille` (plus de `jours` jours), `verrou_mort`
+    (verrou d'un processus disparu), `provisoire` (écriture coupée net).
+    """
     from . import instance
 
+    if not (chemins.RACINE / "reprises").is_dir():
+        return []
     limite = time.time() - jours * 86400
-    retires = 0
-    for verrou in list(dossier().glob("*.en-cours")):
+    trouvees: list[dict] = []
+
+    def noter(fichiers: list[Path], raison: str, nom: str = "", cle_: str = "") -> None:
+        presents = [f for f in fichiers if f.exists()]
+        if presents:
+            trouvees.append({"cle": cle_, "nom": nom, "raison": raison,
+                             "fichiers": [str(f) for f in presents],
+                             "octets": sum(f.stat().st_size for f in presents)})
+
+    for verrou in sorted(dossier().glob("*.en-cours")):
         try:
             pid = int(verrou.read_text(encoding="ascii").strip() or 0)
         except (OSError, ValueError):
             pid = 0
         if not instance._vivant(pid):
-            try:
-                verrou.unlink()
-                retires += 1
-            except OSError:
-                pass
-    for fichier in list(dossier().glob("*.json")):
-        etat = lire_etat(fichier.stem)
-        trop_vieux = False
+            noter([verrou], "verrou_mort")
+    def recent(f: Path) -> bool:
+        # Peut-être une transcription qui démarre dans un autre processus.
         try:
-            trop_vieux = fichier.stat().st_mtime < limite
+            return time.time() - f.stat().st_mtime < 60
         except OSError:
-            trop_vieux = True
-        source_absente = not etat or not Path(etat.get("source", "")).is_file()
-        if trop_vieux or source_absente:
-            Session(fichier.stem, active=True).effacer()
-            retires += 1
-    if retires:
-        journal.info("Reprises purgées : %s", retires)
-    return retires
+            return True
+
+    for provisoire in sorted(dossier().glob("*.json.tmp")):
+        if not recent(provisoire):
+            noter([provisoire], "provisoire")
+    etats = {f.stem for f in dossier().glob("*.json")}
+    for segments in sorted(dossier().glob("*.jsonl")):
+        if segments.stem not in etats and not recent(segments):
+            noter([segments], "segments_sans_etat", cle_=segments.stem)
+    for fichier in sorted(dossier().glob("*.json")):
+        identifiant = fichier.stem
+        paire = [fichier, _fichier_segments(identifiant)]
+        etat = lire_etat(identifiant)
+        if not etat:
+            noter(paire, "etat_illisible", cle_=identifiant)
+            continue
+        nom = str(etat.get("nom") or Path(str(etat.get("source", ""))).name)
+        if not Path(etat.get("source", "")).is_file():
+            noter(paire, "source_absente", nom, identifiant)
+            continue
+        try:
+            vieille = fichier.stat().st_mtime < limite
+        except OSError:
+            vieille = False
+        if vieille:
+            noter(paire, "trop_vieille", nom, identifiant)
+    return trouvees
+
+
+def nettoyer(trouvees: list[dict] | None = None) -> list[dict]:
+    """Efface les orphelines (celles données, ou toutes) ; renvoie ce qui l'a été."""
+    faites = []
+    for orpheline in (orphelines() if trouvees is None else trouvees):
+        reste = []
+        for nom in orpheline["fichiers"]:
+            try:
+                Path(nom).unlink(missing_ok=True)
+            except OSError:
+                reste.append(nom)
+        faites.append({**orpheline, "restes": reste})
+    return faites
+
+
+def purger(jours: int = RETENTION_JOURS) -> int:
+    """Au démarrage de la fenêtre : efface les orphelines, chacune notée au
+    journal avec sa raison (rien ne disparaît sans trace)."""
+    faites = nettoyer(orphelines(jours))
+    for f in faites:
+        journal.info("Reprise orpheline effacée (%s) : %s %s", f["raison"], f["nom"] or f["cle"] or "",
+                     ", ".join(Path(x).name for x in f["fichiers"]))
+    return len(faites)
 
 
 def oublier(identifiant: str) -> None:

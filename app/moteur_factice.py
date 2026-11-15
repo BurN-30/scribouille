@@ -8,6 +8,8 @@ JSON (toutes les clés sont facultatives) :
     pause_s           pause après chaque segment, en secondes (0.05)
     chargement_s      durée du « chargement du modèle » (0) : sert à mesurer
                       l'annulation pendant un chargement
+    decodage_s        pause avant la lecture de l'audio (0), lue par
+                      `traitement._pause_essai` : coupure avant tout segment
     plantage_segment  le processus s'arrête net (code 3) après ce nombre de segments
                       produits dans ce processus
     temoin            fichier : si présent, pas de plantage ; créé juste avant

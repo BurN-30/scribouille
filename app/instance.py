@@ -103,6 +103,15 @@ def _vivant(pid: int) -> bool:
         return False
 
 
+def occupant(source: str | Path) -> int:
+    """PID du processus vivant qui transcrit ce fichier, sinon 0."""
+    try:
+        pid = int(_fichier_verrou(source).read_text(encoding="ascii").strip() or 0)
+    except (OSError, ValueError):
+        return 0
+    return pid if pid != os.getpid() and _vivant(pid) else 0
+
+
 def prendre_fichier(source: str | Path) -> int:
     """
     Pose le verrou du fichier pour ce processus. Renvoie 0 si c'est fait, ou

@@ -16,7 +16,7 @@ scribouille COMMANDE [options] [--json]
 - Aucun téléchargement sans `--telecharger`, aucun écrasement sans `--ecraser`, aucun effacement sans `--oui` (ou confirmation tapée dans un terminal).
 - Aucun appel réseau hors téléchargement d'un modèle demandé.
 - `transcrire` ne modifie jamais les réglages : ses options valent pour la commande seule.
-- `espace`, `effacer --apercu`, `etat`, `lire` et `agent` n'écrivent rien dans le dossier de données.
+- `espace`, `effacer --apercu`, `etat` (sans `--nettoyer`), `lire` et `agent` n'écrivent rien dans le dossier de données.
 - Chemins absolus dans les sorties JSON ; aucun texte transcrit dans les journaux.
 - Ctrl+C ou Ctrl+Pause : arrêt propre, code 5, le travail fait reste sur le disque, `reprendre` le poursuit. Fermeture de la session SSH ou arrêt de la tâche : le moteur s'arrête avec la commande, le travail fait reste aussi sur le disque.
 
@@ -67,11 +67,17 @@ Un fichier est « déjà transcrit » quand le dossier de sortie contient un com
 scribouille reprendre [CLE|FICHIER] [--sortie D] [--formats LISTE] [--rythme vitesse|equilibre|discret|auto] [--telecharger]
 ```
 
-Sans argument, la plus récente. La reprise rétablit tout ce que la demande de départ prévoyait : modèle (le texte ne mêle jamais deux modèles), formats, dossier de sortie, langue, vocabulaire, voix et leurs noms, rythme, moteur. `--sortie`, `--formats` et `--rythme` remplacent la valeur de départ. Une reprise laissée par la 3.0.0, qui ne gardait pas la demande, repart des réglages actuels, et le dit (`journal`, niveau `attention`).
+Sans argument, la plus récente que personne ne transcrit en ce moment. La reprise rétablit tout ce que la demande de départ prévoyait : modèle (le texte ne mêle jamais deux modèles), formats, dossier de sortie, langue, vocabulaire, voix et leurs noms, rythme, moteur. `--sortie`, `--formats` et `--rythme` remplacent la valeur de départ. Une reprise laissée par la 3.0.0, qui ne gardait pas la demande, repart des réglages actuels, et le dit (`journal`, niveau `attention`).
 
 ### etat
 
-`scribouille etat` : transcriptions reprenables (`interrompue`, ou `en_cours` si un moteur tourne et que la sauvegarde a bougé dans la minute), avec position, pourcentage et clé ; processus moteurs actifs (PID, mémoire).
+```
+scribouille etat [--nettoyer]
+```
+
+Transcriptions reprenables, avec position, pourcentage et clé : `interrompue`, ou `en_cours` (avec `pid`) quand un autre processus la transcrit en ce moment ; processus moteurs actifs (PID, mémoire). Une transcription coupée avant son premier segment (pendant la lecture de l'audio ou le chargement du modèle) est reprenable aussi : `depuis_debut` vaut `true`, `reprendre` la refait du début avec la demande de départ. Un échec (audio illisible, mémoire, deux plantages du moteur) avant le premier segment ne laisse rien à reprendre.
+
+`orphelines` : ce qui ne peut plus être repris, avec sa raison (`source_absente`, `etat_illisible`, `segments_sans_etat`, `trop_vieille` au-delà de 30 jours, `verrou_mort`, `provisoire`). Rien n'est effacé sans `--nettoyer` ; la fenêtre les efface à son ouverture et note chacune au journal.
 
 ### lire
 

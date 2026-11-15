@@ -341,7 +341,11 @@ def _analyseur() -> argparse.ArgumentParser:
     _ajouter(r, "--telecharger", action="store_true", aide="Permet de télécharger le modèle de départ s'il manque.")
     r.add_argument("--json", action="store_true")
 
-    e = commande("etat", "", "transcriptions en cours et reprenables, moteurs actifs")
+    e = commande("etat", "[--nettoyer]", "transcriptions en cours et reprenables, moteurs actifs",
+                 "Transcriptions en cours et reprenables, moteurs actifs, et sauvegardes orphelines (qui ne "
+                 "peuvent plus être reprises), avec leur raison.")
+    _ajouter(e, "--nettoyer", action="store_true",
+             aide="Efface les sauvegardes orphelines (source disparue, illisibles, plus de 30 jours).")
     e.add_argument("--json", action="store_true")
 
     lire = commande("lire", "SORTIE.json|SORTIE.txt [options]", "lire une transcription par pages",
@@ -1093,7 +1097,7 @@ def cmd_transcrire(options, sortie: Sortie) -> int:
 
 
 def cmd_reprendre(options, sortie: Sortie) -> int:
-    from . import presets, reprise, traitement
+    from . import instance, presets, reprise, traitement
     from .materiel import detecter_au_demarrage
 
     reprises = reprise.lister()
@@ -1102,7 +1106,12 @@ def cmd_reprendre(options, sortie: Sortie) -> int:
     cible = options.cible
     choisie = None
     if not cible:
-        choisie = sorted(reprises, key=lambda r: r.get("date") or "")[-1]
+        # Sans clé : la plus récente que personne ne transcrit en ce moment.
+        libres = [r for r in reprises if not instance.occupant(r["chemin"])]
+        if not libres:
+            raise Echec("rien_a_reprendre", f"aucune transcription interrompue ({len(reprises)} en cours "
+                                            "ailleurs, voir scribouille etat)", ARGUMENTS)
+        choisie = sorted(libres, key=lambda r: r.get("date") or "")[-1]
     else:
         for r in reprises:
             if r["cle"] == cible or str(Path(r["chemin"]).resolve()).lower() == str(Path(cible).expanduser().resolve()).lower():
@@ -1151,8 +1160,12 @@ def cmd_reprendre(options, sortie: Sortie) -> int:
     dossier.mkdir(parents=True, exist_ok=True)
     element = traitement.Element(identifiant="r1", chemin=str(source), nom=source.name, taille=source.stat().st_size,
                                  reprise=choisie["cle"], sortie=str(dossier))
-    sortie.dire(f"Reprise de {source.name} à {presets.formater_duree(choisie['position'])} "
-                f"sur {presets.formater_duree(choisie['duree_audio'])}.")
+    if choisie.get("depuis_debut"):
+        sortie.dire(f"Reprise de {source.name} depuis le début : rien n'avait été enregistré "
+                    f"avant la coupure, la demande de départ est rétablie.")
+    else:
+        sortie.dire(f"Reprise de {source.name} à {presets.formater_duree(choisie['position'])} "
+                    f"sur {presets.formater_duree(choisie['duree_audio'])}.")
     execution = _executer_file(sortie, [element], config, options.telecharger,
                                dict(config.get("noms_locuteurs") or {}))
     code = _code_de_fin(execution, 0)
@@ -1185,27 +1198,46 @@ def _moteurs_actifs() -> list[dict]:
     return trouves
 
 
-def cmd_etat(options, sortie: Sortie) -> int:
-    from . import presets, reprise
+RAISONS_ORPHELINE = {
+    "source_absente": "fichier source déplacé ou effacé",
+    "etat_illisible": "état illisible",
+    "segments_sans_etat": "segments sans état",
+    "trop_vieille": "plus de 30 jours",
+    "verrou_mort": "verrou d'un processus disparu",
+    "provisoire": "écriture coupée net",
+}
 
-    maintenant = time.time()
+
+def cmd_etat(options, sortie: Sortie) -> int:
+    from . import instance, presets, reprise
+
     taches = []
-    # « en_cours » : un moteur tourne et la sauvegarde a bougé dans la minute.
+    # « en_cours » : un processus vivant tient le verrou de ce fichier (la
+    # fenêtre ou une autre commande le transcrit en ce moment).
     moteurs = _moteurs_actifs()
     for r in reprise.lister():
-        try:
-            maj = time.mktime(time.strptime(str(r.get("date") or "")[:19], "%Y-%m-%dT%H:%M:%S"))
-        except ValueError:
-            maj = 0.0
-        taches.append({**r, "etat": "en_cours" if moteurs and maintenant - maj < 60 else "interrompue",
+        pid = instance.occupant(r["chemin"])
+        taches.append({**r, "etat": "en_cours" if pid else "interrompue", "pid": pid or None,
                        "reprendre": f"scribouille reprendre {r['cle']}"})
+    orphelines = reprise.orphelines()
+    nettoyees = reprise.nettoyer(orphelines) if options.nettoyer else []
     lignes = [f"Moteurs actifs : {len(moteurs)}"] + [f"  PID {m['pid']}, {langues.octets(m['memoire_octets'])}"
                                                       for m in moteurs]
     lignes.append(f"Transcriptions reprenables : {len(taches)}")
     for t in taches:
-        lignes.append(f"  {t['nom']} : {t['pct']} % ({presets.formater_duree(t['position'])} sur "
-                      f"{presets.formater_duree(t['duree_audio'])}), {t['etat']}, clé {t['cle']}")
-    sortie.donnees({"moteurs": moteurs, "taches": taches}, "\n".join(lignes))
+        ou = ("rien d'enregistré, reprend du début" if t["depuis_debut"] else
+              f"{t['pct']} % ({presets.formater_duree(t['position'])} sur {presets.formater_duree(t['duree_audio'])})")
+        lignes.append(f"  {t['nom']} : {ou}, {t['etat']}, clé {t['cle']}")
+    if options.nettoyer:
+        lignes.append(f"Sauvegardes orphelines effacées : {len(nettoyees)}")
+    elif orphelines:
+        lignes.append(f"Sauvegardes orphelines : {len(orphelines)} (scribouille etat --nettoyer les efface)")
+    for o in (nettoyees if options.nettoyer else orphelines):
+        lignes.append(f"  {o['nom'] or o['cle'] or Path(o['fichiers'][0]).name} : "
+                      f"{RAISONS_ORPHELINE.get(o['raison'], o['raison'])}"
+                      + (f", non effacé : {', '.join(o['restes'])}" if o.get("restes") else ""))
+    sortie.donnees({"moteurs": moteurs, "taches": taches, "orphelines": [] if options.nettoyer else orphelines,
+                    "nettoyees": nettoyees}, "\n".join(lignes))
     return OK
 
 

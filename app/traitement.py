@@ -14,6 +14,7 @@ part dans le fichier de log.
 from __future__ import annotations
 
 import gc
+import json
 import os
 import threading
 import time
@@ -124,6 +125,20 @@ def garder_le_modele(config: dict, echec: bool) -> tuple[bool, str]:
     if libre < MEMOIRE_LIBRE_MINIMALE_GO:
         return False, f"mémoire libre basse ({libre:.1f} Go)"
     return True, ""
+
+
+def _pause_essai(cle: str) -> None:
+    """Vérifications seulement (moteur factice) : une pause à un endroit
+    précis du traitement, pour y couper le processus."""
+    essai = os.environ.get("SCRIBOUILLE_MOTEUR_ESSAI", "").strip()
+    if not essai:
+        return
+    try:
+        attente = float(json.loads(essai).get(cle) or 0)
+    except (ValueError, AttributeError):
+        attente = 0.0
+    if attente > 0:
+        time.sleep(attente)
 
 
 def fabriquer_moteur(mat: Materiel, reglages: dict):
@@ -465,6 +480,9 @@ class FileTraitement:
         echec = True
         statut = "erreur"
         verrou = False
+        # Rien du fichier précédent : un échec avant l'ouverture de la
+        # sauvegarde de celui-ci ne doit pas toucher à celle d'un autre.
+        self._session = reprise_module.session_inactive()
         try:
             # Un même enregistrement n'est transcrit que par un processus à la
             # fois (une fenêtre et une commande, deux commandes) : voir
@@ -484,6 +502,20 @@ class FileTraitement:
             rappels.termine(element.identifiant, {"ok": False, "annule": True})
         except Exception as exc:
             element.etat = "erreur"
+            # Échec avant le premier segment (audio illisible, mémoire, modèle) :
+            # rien à reprendre, la cause est dite ; une reprise ne ferait que
+            # rejouer l'échec, « Relancer » fait la même chose. Après, le
+            # travail fait reste reprenable. Seule une INTERRUPTION (arrêt,
+            # coupure) garde une sauvegarde vide, à reprendre du début.
+            # (Sans le verrou, le fichier est à un autre processus : rien n'y est touché.)
+            if not verrou:
+                pass
+            elif self._session.active and self._session.nb_segments == 0:
+                self._session.effacer()
+            elif element.reprise and not self._session.active:
+                # Reprise du début qui échoue avant d'avoir rouvert sa sauvegarde.
+                if not int((reprise_module.lire_etat(element.reprise) or {}).get("nb_segments") or 0):
+                    reprise_module.oublier(element.reprise)
             incident = journal.formater_incident(exc, element.nom)
             rappels.etat(element.identifiant, "erreur", incident["titre"])
             rappels.journal_ui("erreur", f"{element.nom} : {incident['titre']}")
@@ -531,6 +563,23 @@ class FileTraitement:
 
         def signaler(niveau: str, texte: str) -> None:
             rappels.journal_ui(niveau, texte)
+
+        # 0. Sauvegarde ouverte dès la prise en charge, avant la lecture de
+        # l'audio et le chargement du modèle : une coupure à ce moment laisse
+        # une reprise, qui repart du début avec toute la demande de départ.
+        # Sa clé est revue plus bas si la mémoire impose un autre modèle.
+        precoce = None
+        if config.get("sauvegarde_progressive", True) and not element.reprise:
+            precoce = self._session = reprise_module.Session(
+                reprise_module.cle(source, reglages["modele"]), active=True)
+            precoce.ouvrir(source, reglages["modele"], float(element.duree_annoncee or 0),
+                           sortie=str(config.get("dossier_sortie") or ""),
+                           demande=reprise_module.demande_de(config), nouvelle=True)
+            if precoce.active:
+                # Le superviseur connaît ainsi la clé dès le départ : après deux
+                # plantages du moteur avant le premier segment, il l'efface.
+                getattr(rappels, "reprise", lambda i, c: None)(element.identifiant, precoce.identifiant)
+        _pause_essai("decodage_s")
 
         # 1. Décodage
         element.etat = "decodage"
@@ -613,13 +662,17 @@ class FileTraitement:
 
         if config.get("sauvegarde_progressive", True):
             identifiant = element.reprise or reprise_module.cle(source, reglages["modele"])
+            if precoce is not None:
+                precoce.fermer()
+                if precoce.identifiant != identifiant:
+                    precoce.effacer()   # autre modèle, autre clé
             session = self._session = reprise_module.Session(identifiant, active=True)
             session.alerte = lambda _detail: signaler("attention", langues.t("trait.reprise_coupee"))
             session.ouvrir(
                 source, reglages["modele"], duree_audio,
                 position=decalage, nb_segments=len(deja_transcrits),
                 ecoule=ecoule_anterieur, sortie=str(config.get("dossier_sortie") or ""),
-                demande=reprise_module.demande_de(config),
+                demande=reprise_module.demande_de(config), nouvelle=not deja_transcrits,
             )
             if session.active:
                 getattr(rappels, "reprise", lambda i, c: None)(element.identifiant, identifiant)

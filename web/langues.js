@@ -500,6 +500,7 @@ fr: {
 
   /* -- reprises ---------------------------------------------------------- */
   'ui.reprise.meta': "Interrompue à {position} sur {duree} ({pct} %). {ecoule} de calcul conservés.",
+  'ui.reprise.meta_debut': "Interrompue avant le premier passage enregistré : reprend du début, avec les mêmes réglages.",
   'ui.reprise.reprendre': 'Reprendre',
   'ui.reprise.oublier': 'Oublier',
   'ui.reprise.oubliee': 'Reprise oubliée.',
@@ -1276,6 +1277,7 @@ en: {
 
 
   'ui.reprise.meta': "Interrupted at {position} of {duree} ({pct}%). {ecoule} of computation kept.",
+  'ui.reprise.meta_debut': "Interrupted before the first passage was saved: starts again from the beginning, with the same settings.",
   'ui.reprise.reprendre': 'Resume',
   'ui.reprise.oublier': 'Forget',
   'ui.reprise.oubliee': 'Resume point forgotten.',

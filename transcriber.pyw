@@ -2439,8 +2439,13 @@ class Passerelle:
     # -- reprise d'une transcription interrompue ---------------------------
 
     def _reprises(self) -> list[dict]:
+        from app import instance
+
         elements = []
         for item in reprise.lister():
+            # Transcrite en ce moment par une commande : pas « à reprendre ».
+            if instance.occupant(item["chemin"]):
+                continue
             elements.append({
                 **item,
                 "position_texte": presets.formater_duree(item["position"]),
