@@ -812,6 +812,39 @@ def _systeme() -> str:
     return f"{platform.system()} {platform.release()}"
 
 
+def resume_calcul(mat: Materiel) -> str:
+    """
+    Le processeur et ce que le calcul en prend, sans ambiguïté entre fils
+    logiques du poste et fils de calcul (le bilan de `--verifier` disait
+    « 10 fils » sur un Core Ultra 5 225U qui en a 14 : c'étaient ses fils de
+    calcul, un par cœur performant ou efficace, ses 2 cœurs basse
+    consommation écartés, et l'hyperthreading des cœurs performants non
+    doublé). Les rythmes « équilibré » et « discret » en prennent moins
+    (`rythme.bornes`). En français : le bilan n'est pas traduit.
+    """
+    topo = mat.topologie
+    logiques = mat.coeurs_logiques or os.cpu_count() or 0
+    if topo.hybride and topo.coeurs_principaux:
+        coeurs = topo.coeurs_principaux + topo.basse_consommation
+        familles = f"{topo.performants} performants, {topo.efficaces} efficaces"
+        if topo.basse_consommation:
+            familles += f", {topo.basse_consommation} basse consommation"
+        poste = f"{logiques} fils logiques, {coeurs} cœurs ({familles})"
+    elif mat.coeurs_physiques and mat.coeurs_physiques != logiques:
+        poste = f"{logiques} fils logiques, {mat.coeurs_physiques} cœurs"
+    else:
+        poste = f"{logiques} fils logiques"
+    if mat.fils_imposes > 0:
+        regle = "imposé par le réglage du poste"
+    elif topo.hybride and topo.basse_consommation and topo.coeurs_principaux:
+        regle = "un par cœur performant ou efficace, cœurs basse consommation écartés"
+    elif 0 < mat.coeurs_physiques < logiques:
+        regle = "un par cœur physique"
+    else:
+        regle = "tous les fils sauf deux"
+    return f"{poste}, {mat.ram_go:.0f} Go ; calcul sur processeur : {mat.fils_calcul} fils au plus ({regle})"
+
+
 def detecter(forcer: bool = False) -> Materiel:
     """Détection complète, dans ce processus (outils de mesure, ligne de commande)."""
     global _CACHE
@@ -861,10 +894,17 @@ def ecrire_cache(lent: dict) -> None:
 
     cible = fichier_cache()
     temporaire = cible.with_name(cible.name + ".tmp")
+    contenu = json.dumps({"version": VERSION_CACHE, **lent}, ensure_ascii=False, indent=1)
+    try:
+        # Rien de changé depuis le lancement précédent : le fichier reste tel
+        # quel (ni réécrit, ni redaté), à chaque ouverture de la fenêtre.
+        if cible.read_text(encoding="utf-8") == contenu:
+            return
+    except (OSError, ValueError):
+        pass
     try:
         cible.parent.mkdir(parents=True, exist_ok=True)
-        temporaire.write_text(json.dumps({"version": VERSION_CACHE, **lent}, ensure_ascii=False, indent=1),
-                              encoding="utf-8")
+        temporaire.write_text(contenu, encoding="utf-8")
         os.replace(temporaire, cible)
     except OSError as exc:
         journal.debug("Cache du matériel non écrit : %s", exc)
@@ -926,13 +966,29 @@ def signature(lent: dict | None) -> str:
 
 
 def _commande_detection() -> tuple[list[str], str]:
+    """
+    Le processus de la détection lente. Il n'écrit rien sur ses flux (le
+    résultat va dans `materiel.json`) : c'est donc l'exécutable FENÊTRÉ qui le
+    fait, pas `scribouille.com`. Un programme console lancé sans fenêtre a
+    toujours son hôte de console caché (`conhost.exe`) : ce sont les « deux
+    processus de console » vus dans les 20 s qui suivent l'ouverture de la
+    fenêtre sur le PC du travail (`scribouille.com --detecter-materiel` et son
+    `conhost.exe`). Depuis les sources, de même `pythonw.exe`.
+    """
     from .extensions import commande_travailleur
 
     if chemins.EST_GELE:
+        fenetre = chemins.DOSSIER_PROGRAMME / f"{chemins.NOM_DOSSIER_UTILISATEUR}.exe"
+        if fenetre.is_file():
+            return [str(fenetre), "--detecter-materiel"], str(chemins.DOSSIER_PROGRAMME)
         return commande_travailleur(["--detecter-materiel"])
     racine = Path(__file__).resolve().parent.parent
     commande, dossier = commande_travailleur([])
-    return [commande[0], "-m", "app.materiel", "--detecter-materiel"], str(racine)
+    interprete = Path(commande[0])
+    sans_console = interprete.with_name("pythonw.exe")
+    if interprete.name.lower() == "python.exe" and sans_console.is_file():
+        interprete = sans_console
+    return [str(interprete), "-m", "app.materiel", "--detecter-materiel"], str(racine)
 
 
 def rafraichir(delai_max: float = 120.0) -> dict | None:
@@ -958,10 +1014,24 @@ def rafraichir(delai_max: float = 120.0) -> dict | None:
 
 
 def principal_detection() -> int:
-    """`--detecter-materiel` : détection lente, résultat dans `materiel.json`."""
-    lent = detection_complete_pour_cache()
-    ecrire_cache(lent)
-    return 0
+    """
+    `--detecter-materiel` : détection lente, résultat dans `materiel.json`
+    (réécrit seulement s'il a changé). Sans journal à lui : il en ouvrait un
+    nouveau à chaque ouverture de la fenêtre. Une erreur part sur la sortie
+    d'erreur, que le parent note au sien ; jamais de boîte d'erreur.
+    """
+    journal.sans_fichier()
+    try:
+        lent = detection_complete_pour_cache()
+        ecrire_cache(lent)
+        return 0
+    except Exception as exc:  # pragma: no cover - dépend du poste
+        try:
+            if sys.stderr is not None:
+                sys.stderr.write(f"{type(exc).__name__}: {exc}\n")
+        except Exception:
+            pass
+        return 1
 
 
 if __name__ == "__main__":

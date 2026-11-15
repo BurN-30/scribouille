@@ -459,6 +459,7 @@ begin
   if not DirExists(Base) then
     Exit;
   DeleteFile(Base + '\config.json');
+  DeleteFile(Base + '\config-scribouille.json');
   DeleteFile(Base + '\jeton_hf.txt');
   DeleteFile(Base + '\dossier-modeles.txt');
   DeleteFile(Base + '\vocabulaire.txt');

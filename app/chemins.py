@@ -103,6 +103,51 @@ def ancienne_version_installee() -> Path | None:
     return None
 
 
+#: Commandes de lecture : elles n'écrivent RIEN, ni réglages, ni journal, ni
+#: témoin, ni reprise de l'ancien dossier (`commande_de_lecture`).
+LECTURES = ("version", "aide", "diagnostic", "verifier", "lire", "espace")
+
+
+def commande_de_lecture(arguments: list[str] | None = None) -> bool:
+    """
+    Ces arguments sont-ils une commande qui ne fait que lire ? `version`,
+    `aide`, `diagnostic`, `verifier` (et `--verifier`), `lire`, `espace`,
+    `etat` sans `--nettoyer`, `agent afficher`, `reglages liste|lire`,
+    `vocabulaire etat`, `materiel` sans `--appliquer` ni `--lever`, toute
+    demande d'aide. (`diagnostic --materiel` et `materiel detecter` relancent
+    la détection : le cache du matériel n'est réécrit que s'il a changé.)
+    """
+    arguments = list(sys.argv[1:] if arguments is None else arguments)
+    reste = [a for a in arguments if a != "--json"]
+    if "--verifier" in reste or Path(sys.argv[0] if sys.argv else "").stem.lower().endswith("verifier"):
+        return True
+    if not reste:
+        return False
+    if any(a in ("-h", "--help", "--aide", "--version") for a in reste):
+        return True
+    positionnels = [a for a in reste if not a.startswith("-")]
+    if not positionnels or positionnels[0] != reste[0]:
+        return False
+    commande, action = positionnels[0], (positionnels[1] if len(positionnels) > 1 else "")
+    if commande in LECTURES:
+        return True
+    if commande == "etat":
+        return "--nettoyer" not in reste
+    if commande == "agent":
+        return action in ("", "afficher")
+    if commande == "reglages":
+        return action in ("", "liste", "lire")
+    if commande == "vocabulaire":
+        return action in ("", "etat")
+    if commande == "materiel":
+        return "--appliquer" not in reste and "--lever" not in reste
+    return False
+
+
+#: Ce processus ne fait que lire (voir `commande_de_lecture`).
+LECTURE_SEULE = commande_de_lecture()
+
+
 def _garder_ancien_dossier(ancien: Path, nouveau: Path) -> bool:
     """
     Une version 2.x installée lit encore l'ancien dossier : le déplacer la
@@ -141,6 +186,18 @@ def _dossier_donnees() -> Path:
     if "--revenir-whiscribe" not in sys.argv and _garder_ancien_dossier(ancien, nouveau):
         MIGRATION.update({"etat": "partage", "ancienne": str(ancienne_version_installee())})
         return ancien
+    if LECTURE_SEULE:
+        # Une commande de lecture ne déplace rien : l'ancien dossier, pas
+        # encore repris, est lu sur place ; la reprise se fera à la
+        # prochaine commande qui écrit, ou à l'ouverture de la fenêtre.
+        try:
+            if (ancien / "config.json").is_file() and not (nouveau / "config.json").exists() \
+                    and not (nouveau / "migration-whiscribe.json").exists():
+                MIGRATION.update({"etat": "differee"})
+                return ancien
+        except OSError:
+            pass
+        return nouveau
     if "--revenir-whiscribe" not in sys.argv:
         try:
             from . import migration
@@ -176,6 +233,31 @@ def donnees_partagees_ancienne_version() -> Path | None:
     except OSError:
         pass
     return None
+
+
+def journaliser_dossier_donnees() -> None:
+    """
+    Où sont les données et pourquoi, au journal : la même ligne pour la
+    fenêtre et pour la ligne de commande (dossier partagé avec une 2.x,
+    reprise de l'ancien dossier, reprise différée par une commande de lecture).
+    """
+    from . import journal
+
+    etat = MIGRATION.get("etat")
+    partagee = donnees_partagees_ancienne_version()
+    if etat == "partage" or partagee is not None:
+        journal.info("Données gardées dans %s : la version installée %s le lit encore ; reprise après sa "
+                     "désinstallation ou sa mise à jour", RACINE, MIGRATION.get("ancienne") or partagee)
+    elif etat == "differee":
+        journal.info("Données lues sur place dans %s : reprise à la prochaine commande qui écrit", RACINE)
+    elif etat not in (None, "rien"):
+        journal.info("Données reprises de %s : déplacées %s, doublons rangés à part %s, état %s%s",
+                     NOM_DOSSIER_ANCIEN, len(MIGRATION.get("deplaces") or []), len(MIGRATION.get("conflits") or []),
+                     etat, (" : " + "; ".join(MIGRATION.get("restes") or [])) if MIGRATION.get("restes") else "")
+        if MIGRATION.get("erreur"):
+            journal.attention("Reprise des données de %s en échec : %s", NOM_DOSSIER_ANCIEN, MIGRATION["erreur"])
+    else:
+        journal.info("Données dans %s", RACINE)
 
 
 def mode_programme() -> str:
@@ -295,6 +377,43 @@ def dossier_modeles_inscriptible(chemin: str | Path) -> str:
         temoin.unlink(missing_ok=True)
     except OSError:
         return langues.t("chemin.dossier_non_ecrivable")
+    return ""
+
+
+def dossier_ecrivable(chemin: str | Path) -> str:
+    """
+    Le dossier (ou, s'il n'existe pas encore, son plus proche parent) permet-il
+    d'y créer des fichiers ? Message d'erreur, ou chaîne vide si oui. Ne crée
+    ni n'écrit rien : sous Windows, demande d'ouverture du dossier avec le
+    droit de créer des fichiers et des sous-dossiers, refusée si les droits
+    manquent (sert à `--verifier`, qui ne doit rien laisser derrière lui).
+    """
+    from . import langues
+
+    cible = Path(str(chemin)).expanduser()
+    existant = cible
+    while not existant.exists():
+        if existant.parent == existant:
+            return langues.t("chemin.dossier_non_ecrivable")
+        existant = existant.parent
+    if not existant.is_dir():
+        return langues.t("chemin.dossier_non_ecrivable")
+    if sys.platform != "win32":
+        return "" if os.access(existant, os.W_OK) else langues.t("chemin.dossier_non_ecrivable")
+    import ctypes
+    from ctypes import wintypes
+
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateFileW.restype = wintypes.HANDLE
+    k32.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p,
+                                wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+    k32.CloseHandle.argtypes = [wintypes.HANDLE]
+    # FILE_ADD_FILE | FILE_ADD_SUBDIRECTORY ; partage complet ; OPEN_EXISTING ;
+    # FILE_FLAG_BACKUP_SEMANTICS (ouvrir un dossier).
+    poignee = k32.CreateFileW(str(existant), 0x2 | 0x4, 0x1 | 0x2 | 0x4, None, 3, 0x02000000, None)
+    if poignee in (None, wintypes.HANDLE(-1).value, ctypes.c_void_p(-1).value):
+        return langues.t("chemin.dossier_non_ecrivable")
+    k32.CloseHandle(poignee)
     return ""
 
 

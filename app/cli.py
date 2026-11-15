@@ -90,10 +90,12 @@ PSEUDO_CLES = ("moteur", "peripherique", "dossier_modeles")
 #: Clés de config.json tenues par l'application elle-même, hors de `reglages` :
 #: état de la fenêtre, et réglage du poste (écrit par les pseudo-clés moteur
 #: et peripherique, ou par le banc et la campagne).
-INTERNES = ("reglage_machine", "zoom", "journal_ouvert", "proposition_ecartee", "exemples_anciens")
+INTERNES = ("reglage_machine", "zoom", "journal_ouvert", "proposition_ecartee", "exemples_anciens",
+            "avis_locuteurs")
 
-#: Commandes qui n'écrivent rien dans le dossier de données, ni journal ni
-#: réglages : regarder l'espace occupé, ou l'effacer, ne recrée rien.
+#: Commandes sans journal : regarder l'espace occupé, ou l'effacer, ne recrée
+#: rien. Toutes les commandes de lecture (`chemins.commande_de_lecture`) n'en
+#: ont pas non plus, et n'écrivent rien du tout.
 SANS_ECRITURE = ("espace", "effacer", "etat", "lire", "agent")
 
 
@@ -105,17 +107,8 @@ def config_cli(commande: str = "") -> dict:
     """
     from . import config as config_module
 
-    if commande not in SANS_ECRITURE:
-        return config_module.charger(definir_langue=True)
-    try:
-        donnees = json.loads(chemins.FICHIER_CONFIG.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        donnees = {}
-    config = config_module._fusionner(config_module.DEFAUTS, donnees if isinstance(donnees, dict) else {})
-    if not config.get("dossier_sortie"):
-        config["dossier_sortie"] = str(chemins.dossier_sortie_defaut())
-    langues.definir(config.get("langue_interface") or langues.detecter_systeme())
-    return config
+    # `charger` n'écrit jamais rien, pour aucune commande.
+    return config_module.charger(definir_langue=True)
 
 
 class Echec(Exception):
@@ -426,10 +419,13 @@ def _analyseur() -> argparse.ArgumentParser:
     _ajouter(m, "quoi", choices=MESURES, metavar="|".join(MESURES), aide="Outil de mesure.")
     m.add_argument("reste", nargs=argparse.REMAINDER)
 
-    ma = commande("materiel", "[detecter|proposer [--appliquer]]", "matériel détecté, réglage proposé")
-    _ajouter(ma, "action", nargs="?", default="detecter", choices=("detecter", "proposer"),
-             metavar="detecter|proposer", aide="Défaut : detecter.")
+    ma = commande("materiel", "[detecter|proposer [--appliquer]|puce [--lever]]", "matériel détecté, réglage proposé",
+                  "puce : état du témoin de la puce graphique (libre, en cours, à vérifier, suspendue après un "
+                  "plantage) ; --lever lève la suspension, la prochaine ouverture réessaie la puce, protégée.")
+    _ajouter(ma, "action", nargs="?", default="detecter", choices=("detecter", "proposer", "puce"),
+             metavar="detecter|proposer|puce", aide="Défaut : detecter.")
     _ajouter(ma, "--appliquer", action="store_true", aide="proposer : enregistre le réglage proposé.")
+    _ajouter(ma, "--lever", action="store_true", aide="puce : lève la suspension de la puce graphique.")
     ma.add_argument("--json", action="store_true")
 
     do = commande("donnees", "revenir-whiscribe", "revenir à l'ancien dossier de données")
@@ -574,10 +570,12 @@ def principal(arguments: list[str]) -> int:
     except ErreurUsage as erreur:
         return _usage(commande, en_json, erreur.message, erreur.suggestion or f"scribouille {commande} --aide")
     _interruption_comme_ctrl_c()
-    if commande in SANS_ECRITURE:
+    if commande in SANS_ECRITURE or chemins.commande_de_lecture(arguments):
         journal.sans_fichier()
     else:
         journal.demarrer()
+        # Même ligne que la fenêtre : où sont les données, et pourquoi.
+        chemins.journaliser_dossier_donnees()
     journal.silence_bibliotheques()
     config_cli(commande)  # pose la langue de l'interface
     try:
@@ -723,6 +721,8 @@ def _controler_options(commande: str, o) -> None:
     elif commande == "materiel":
         if o.appliquer and o.action != "proposer":
             refuser("--appliquer : seulement avec « materiel proposer »")
+        if o.lever and o.action != "puce":
+            refuser("--lever : seulement avec « materiel puce »")
     elif commande == "mesurer":
         reste = [a for a in (o.reste or []) if a != "--json"]
         connues = OPTIONS_MESURES[o.quoi]
@@ -1002,8 +1002,11 @@ def _raison_openvino(effet: dict, peripherique: str) -> str:
     from . import moteur_openvino
 
     if effet.get("plantage"):
-        return (f"OpenVINO suspendu sur {peripherique} : la dernière ouverture n'a pas abouti "
-                f"({effet['plantage']})")
+        from . import temoin_puce
+
+        return f"OpenVINO suspendu : {temoin_puce.resume(effet.get('puce') or temoin_puce.etat())}"
+    if effet.get("ecartee"):
+        return f"puce {peripherique} écartée pour ce fichier après une mort du moteur"
     if not moteur_openvino.installe():
         return "moteur OpenVINO non installé"
     vus = moteur_openvino.peripheriques_disponibles()
@@ -1027,8 +1030,20 @@ def _options_satisfaites(options, config: dict, mat, sortie: Sortie) -> None:
                         + ("--locuteurs" if voix_demandees else "--noms") + ") mais non installée : "
                         + diarisation.indisponibilite(), PAS_PRET,
                         "l'installer (fenêtre, écran Réglages, ou installer.bat --locuteurs), ou --locuteurs non")
-        _avertir(sortie, "Séparation des voix cochée dans les réglages mais non installée : texte sans voix "
-                         "(--locuteurs non pour ne plus le voir).")
+        texte = ("Séparation des voix cochée dans les réglages mais non installée : texte sans voix "
+                 "(« scribouille reglages definir diarisation=false », ou installer l'extension ; "
+                 "rappelé par « scribouille diagnostic »).")
+        from . import config as config_module
+
+        disque = config_module.charger()
+        if not disque.get("avis_locuteurs"):
+            # Dit une fois (réglage hérité d'une 2.x, où il était coché par
+            # défaut), puis seulement dans le JSON et dans `diagnostic`.
+            _avertir(sortie, texte)
+            disque["avis_locuteurs"] = True
+            config_module.sauver(disque)
+        else:
+            sortie.evenement("journal", niveau="info", texte=texte)
     if options.noms and not config.get("diarisation"):
         raise Echec("arguments", "--noms demande des voix séparées : ajouter --locuteurs auto (ou leur nombre)",
                     ARGUMENTS)
@@ -1050,8 +1065,15 @@ def _options_satisfaites(options, config: dict, mat, sortie: Sortie) -> None:
         raison = _raison_openvino(effet, peripherique)
         if options.moteur == "openvino" or options.peripherique:
             raise Echec("moteur_absent", f"--moteur openvino ({peripherique}) : {raison}", PAS_PRET,
-                        "scribouille diagnostic --materiel ; ou --moteur ctranslate2")
+                        "scribouille materiel puce --lever (réessayer la puce)" if effet.get("plantage")
+                        else "scribouille diagnostic --materiel ; ou --moteur ctranslate2")
         _avertir(sortie, f"Réglage du poste : {raison} ; CTranslate2 prend la main.")
+    elif (effet.get("puce") or {}).get("etat") == "a_verifier":
+        from . import temoin_puce
+
+        texte = f"Puce graphique : {temoin_puce.resume(effet['puce'])}."
+        sortie.evenement("journal", niveau="info", texte=texte)
+        sortie.dire(f"  {texte}", erreur=True)
     for fichier in options.vocabulaire or []:
         try:
             vocabulaire_v2.lire(fichier)
@@ -1248,8 +1270,12 @@ def cmd_etat(options, sortie: Sortie) -> int:
         lignes.append(f"  {o['nom'] or o['cle'] or Path(o['fichiers'][0]).name} : "
                       f"{RAISONS_ORPHELINE.get(o['raison'], o['raison'])}"
                       + (f", non effacé : {', '.join(o['restes'])}" if o.get("restes") else ""))
+    from . import temoin_puce
+
+    puce = temoin_puce.etat()
+    lignes.append(f"Puce graphique : {temoin_puce.resume(puce)}")
     sortie.donnees({"moteurs": moteurs, "taches": taches, "orphelines": [] if options.nettoyer else orphelines,
-                    "nettoyees": nettoyees}, "\n".join(lignes))
+                    "nettoyees": nettoyees, "puce": puce}, "\n".join(lignes))
     return OK
 
 
@@ -1412,7 +1438,9 @@ def cmd_reglages(options, sortie: Sortie) -> int:
 
     if options.action == "liste":
         liste = valeurs()
-        sortie.donnees({"reglages": liste, "fichier": str(chemins.FICHIER_CONFIG)},
+        sortie.donnees({"reglages": liste, "fichier": str(chemins.FICHIER_CONFIG),
+                        "fichier_propre": str(config_module.fichier_propre())
+                        if config_module.partage_ancienne_version() else ""},
                        "\n".join(f"{r['cle']:<28} = {json.dumps(r['valeur'], ensure_ascii=False)}"
                                  f"   (défaut {json.dumps(r['defaut'], ensure_ascii=False)})" for r in liste))
         return OK
@@ -1469,6 +1497,8 @@ def cmd_reglages(options, sortie: Sortie) -> int:
             reglage_machine.enregistrer(config, mat, machine)
         else:
             config[cle] = valeur
+            if cle == "diarisation":
+                config["avis_locuteurs"] = False
     if "langue_interface" in changes:
         config["langue_interface"] = langues.definir(config.get("langue_interface"))
     config_module.sauver(config)
@@ -1511,6 +1541,16 @@ def cmd_diagnostic(options, sortie: Sortie) -> int:
     if etat_modele["etat"] != "complet":
         raisons.append(f"modèle {moteur.nom_court(modele)} {etat_modele['etat']} "
                        f"({moteur.taille_annoncee(modele)}) : --telecharger pour l'obtenir")
+    from . import temoin_puce
+
+    puce = temoin_puce.etat()
+    avertissements = []
+    if puce.get("etat") != "libre":
+        avertissements.append(f"puce graphique : {temoin_puce.resume(puce)}")
+    if config.get("diarisation") and not diarisation.disponible():
+        avertissements.append("séparation des voix cochée dans les réglages mais non installée : texte sans voix "
+                              "(installer l'extension, ou « scribouille reglages definir diarisation=false »)")
+    partage = chemins.donnees_partagees_ancienne_version()
     verdict = None
     fichier_verdict = chemins.RACINE / "campagnes" / "verdict.json"
     try:
@@ -1544,8 +1584,11 @@ def cmd_diagnostic(options, sortie: Sortie) -> int:
                       "indisponibilite": diarisation.indisponibilite()},
         "vocabulaire": vocabulaire.resume_glossaire(config.get("langue", "fr")),
         "verdict_campagne": verdict,
+        "puce": puce,
+        "donnees_partagees": str(partage or ""),
         "pret": not raisons,
         "raisons": raisons,
+        "avertissements": avertissements,
     }
     lignes = [f"Scribouille {VERSION} ({resultat['mode']})",
               f"  Programme : {resultat['programme']}", f"  Données   : {resultat['donnees']}",
@@ -1557,6 +1600,10 @@ def cmd_diagnostic(options, sortie: Sortie) -> int:
               f"  Modèle    : {moteur.nom_court(modele)} ({etat_modele['etat']})",
               f"  Une heure d'audio : environ {resultat['pour_une_heure']}",
               f"  Locuteurs : {'disponibles' if resultat['locuteurs']['disponibles'] else 'non installés'}",
+              f"  Puce      : {temoin_puce.resume(puce)}",
+              *([f"  Partage   : données lues aussi par la version installée {partage} : "
+                 "ses réglages ne sont pas modifiés"] if partage else []),
+              *(f"  Attention : {a}" for a in avertissements),
               "  Prêt." if not raisons else "  Pas prêt : " + " ; ".join(raisons)]
     sortie.donnees(resultat, "\n".join(lignes))
     return OK if not raisons else PAS_PRET
@@ -1583,6 +1630,18 @@ def cmd_verifier(options, sortie: Sortie) -> int:
 def cmd_materiel(options, sortie: Sortie) -> int:
     from . import adaptation, materiel
 
+    if options.action == "puce":
+        from . import temoin_puce
+
+        avant = temoin_puce.etat()
+        leve = temoin_puce.lever("ligne de commande") if options.lever else False
+        apres = temoin_puce.etat()
+        texte = f"Puce graphique : {temoin_puce.resume(avant)}"
+        if options.lever:
+            texte += ("\nSuspension levée : la prochaine ouverture réessaie la puce (processus moteur, sous garde)."
+                      if leve else "\nRien à lever.")
+        sortie.donnees({"puce": apres, "avant": avant, "leve": leve}, texte)
+        return OK
     if options.action == "proposer":
         from . import config as config_module
 

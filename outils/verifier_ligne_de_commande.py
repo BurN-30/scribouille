@@ -665,6 +665,25 @@ def essai_aucune_console() -> None:
     fautifs = lancements_sans_drapeau()
     verifier(not fautifs, "chaque lancement de processus du dépôt interdit la console (CREATE_NO_WINDOW)",
              ", ".join(fautifs))
+    # La détection de fond, lancée à chaque ouverture de la fenêtre, ne passe
+    # plus par un programme console (qui a toujours son conhost.exe caché).
+    from app import chemins, materiel
+
+    gele, programme = chemins.EST_GELE, chemins.DOSSIER_PROGRAMME
+    faux = TEMPORAIRE / "programme-gele"
+    faux.mkdir(exist_ok=True)
+    for nom in ("Scribouille.exe", "scribouille.com"):
+        (faux / nom).write_bytes(b"MZ")
+    chemins.EST_GELE, chemins.DOSSIER_PROGRAMME = True, faux
+    try:
+        commande_gelee = materiel._commande_detection()[0]
+    finally:
+        chemins.EST_GELE, chemins.DOSSIER_PROGRAMME = gele, programme
+    commande_sources = materiel._commande_detection()[0]
+    verifier(Path(commande_gelee[0]).name == "Scribouille.exe" and commande_gelee[1:] == ["--detecter-materiel"]
+             and Path(commande_sources[0]).name.lower() in ("pythonw.exe", "python.exe"),
+             "détection du matériel : exécutable fenêtré (gelé) ou pythonw.exe (sources), jamais un programme console",
+             f"{commande_gelee} {commande_sources}")
     source = TEMPORAIRE / "console.ogg"
     source.write_bytes((RACINE / "banc" / "extrait_fr.ogg").read_bytes())
     os.environ["SCRIBOUILLE_MOTEUR_ESSAI"] = json.dumps({"segments": 6, "pause_s": 0.05})
@@ -681,6 +700,208 @@ def essai_aucune_console() -> None:
         os.environ.pop("SCRIBOUILLE_MOTEUR_ESSAI", None)
 
 
+# ---------------------------------------------------------------------------
+# 10. Commandes de lecture : rien n'est écrit, dossier partagé avec une 2.x
+# ---------------------------------------------------------------------------
+
+#: `config.json` tel qu'une WhiScribe 2.3.3 l'écrit (ses clés, dont
+#: `lecture_audio` que la 3.0 ne connaît pas, et la séparation des voix cochée
+#: par défaut), recopié du dépôt à la révision v2.3.3.
+CONFIG_2X = {"preset": "qualite", "langue": "fr", "langue_interface": "fr", "dossier_sortie": "",
+             "diarisation": True, "nb_locuteurs": 0,
+             "formats": {"txt": True, "srt": False, "vtt": False, "horodatage": False},
+             "appliquer_corrections": True, "utiliser_glossaire": True, "compagnon_confiance": True,
+             "corrections_apprises": True, "sauvegarde_progressive": True, "lecture_audio": False,
+             "motif_sortie": "", "dossier_surveille": "", "surveillance": False, "maj_verifier": False,
+             "barre_taches": True, "filtres_salle": False, "mode_avance": False, "modele_avance": "",
+             "beam_size": 0, "condition_on_previous_text": True, "forcer_processeur": False, "theme": "auto",
+             "zoom": 1.0, "journal_ouvert": False}
+
+
+def poste_partage(nom: str) -> tuple[Path, Path, dict]:
+    """
+    Un poste comme celui du travail : WhiScribe 2.3.3 installée (exécutable
+    factice) qui lit `%LOCALAPPDATA%\\WhiScribe`, la 3.0 qui y travaille aussi,
+    le témoin de la puce d'avant (3 octets), une transcription à lire.
+    Renvoie (maison, dossier de données, environnement).
+    """
+    maison = TEMPORAIRE / nom
+    local = maison / "AppData" / "Local"
+    donnees = local / "WhiScribe"
+    (local / "Programs" / "WhiScribe").mkdir(parents=True)
+    (local / "Programs" / "WhiScribe" / "WhiScribe.exe").write_bytes(b"MZ factice")
+    (donnees / "logs").mkdir(parents=True)
+    (donnees / "modeles").mkdir()
+    (maison / "Documents").mkdir()
+    config = dict(CONFIG_2X, dossier_sortie=str(maison / "Documents" / "Transcriptions"))
+    (donnees / "config.json").write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    (donnees / "vocabulaire.txt").write_text("Kubernetes\n", encoding="utf-8")
+    (donnees / "corrections.txt").write_text("cube air nettesse -> Kubernetes\n", encoding="utf-8")
+    (donnees / "openvino-chargement-en-cours.txt").write_text("GPU", encoding="utf-8")
+    (donnees / "logs" / "whiscribe-ancien.log").write_text("journal de la 2.x\n", encoding="utf-8")
+    env = {**os.environ, "SCRIBOUILLE_DONNEES": str(donnees), "LOCALAPPDATA": str(local),
+           "USERPROFILE": str(maison), "HOME": str(maison), "APPDATA": str(maison / "AppData" / "Roaming")}
+    env.pop("SCRIBOUILLE_MOTEUR_ESSAI", None)
+    return maison, donnees, env
+
+
+def empreinte(racine: Path) -> dict[str, tuple]:
+    """Chaque fichier et dossier sous `racine` : taille, date de modification, contenu (SHA-256)."""
+    import hashlib
+
+    vues: dict[str, tuple] = {}
+    for chemin in sorted(racine.rglob("*")):
+        relatif = chemin.relative_to(racine).as_posix()
+        infos = chemin.stat()
+        if chemin.is_dir():
+            vues[relatif + "/"] = ("dossier", infos.st_mtime_ns)
+        else:
+            vues[relatif] = (infos.st_size, infos.st_mtime_ns, hashlib.sha256(chemin.read_bytes()).hexdigest())
+    return vues
+
+
+def differences(avant: dict, apres: dict) -> list[str]:
+    return sorted({*[c for c in avant if avant[c] != apres.get(c)], *[c for c in apres if c not in avant]})
+
+
+def lancer_dans(env: dict, *arguments: str, delai: float = 120.0) -> tuple[int, str, str]:
+    p = subprocess.run([PYTHON, str(RACINE / "transcriber.pyw"), *arguments], capture_output=True, timeout=delai,
+                       cwd=str(TEMPORAIRE), env={**env, "PYTHONIOENCODING": "utf-8"}, creationflags=SANS_FENETRE)
+    return p.returncode, p.stdout.decode("utf-8", "replace"), p.stderr.decode("utf-8", "replace")
+
+
+_DEMARRAGE_FENETRE = r"""
+import runpy, sys, time
+sys.argv = [sys.argv[1]]
+ns = runpy.run_path(sys.argv[0], run_name="essai-demarrage")
+passerelle = ns["Passerelle"]()
+etat = passerelle.etat_initial()
+time.sleep(1.0)  # le préchauffage de fond
+print("pret", etat["vitesse"]["puce"]["etat"], flush=True)
+"""
+
+
+def essai_lecture_sans_ecriture() -> None:
+    titre("10. Commandes de lecture : rien n'est écrit (dossier partagé avec une WhiScribe 2.x)")
+    maison, donnees, env = poste_partage("poste-partage")
+    from app import sorties
+    from app.moteur import Mot, Segment
+
+    lu = maison / "Documents" / "reunion"
+    lu.mkdir()
+    (lu / "reunion.ogg").write_bytes((RACINE / "banc" / "extrait_fr.ogg").read_bytes())
+    produits = sorties.ecrire_tout(lu, lu / "reunion.ogg", [Segment(0.0, 2.0, "Bonjour.", None, [
+        Mot("Bonjour", 0.0, 0.5, 0.9)])], {"duree": 2.0, "modele": "tiny", "langue": "fr"}, {"txt": True},
+        avec_compagnon=True)
+    compagnon = next(p["chemin"] for p in produits if str(p["chemin"]).endswith(".txt"))
+    lectures = [("version",), ("aide",), ("aide", "transcrire"), ("transcrire", "--aide"), ("diagnostic",),
+                ("diagnostic", "--json"), ("verifier",), ("verifier", "--json"), ("--verifier",), ("etat",),
+                ("etat", "--json"), ("lire", str(compagnon), "--json"), ("lire", str(compagnon), "--texte"),
+                ("materiel", "proposer", "--json"), ("materiel", "puce"), ("materiel", "puce", "--json"),
+                ("reglages",), ("reglages", "lire", "diarisation"), ("vocabulaire", "etat"), ("agent", "afficher"),
+                ("espace", "--json")]
+    for commande in lectures:
+        avant = empreinte(maison)
+        code, sortie, erreur = lancer_dans(env, *commande)
+        changes = differences(avant, empreinte(maison))
+        verifier(code in (0, 3) and not changes, f"{' '.join(commande)} : rien d'écrit ni de redaté (code {code})",
+                 f"{changes[:6]} {erreur[-200:]}")
+    from app import chemins
+
+    for commande, attendu in ((["etat", "--nettoyer"], False), (["materiel", "proposer", "--appliquer"], False),
+                              (["materiel", "puce", "--lever"], False), (["reglages", "definir", "theme=clair"], False),
+                              (["vocabulaire", "etat"], True), (["--verifier"], True), (["lire", "x.json"], True)):
+        verifier(chemins.commande_de_lecture(commande) is attendu,
+                 f"{' '.join(commande)} : {'lecture' if attendu else 'écriture permise'}")
+
+    # Le témoin d'avant (3 octets) ne suspend pas la puce ; diagnostic et etat le disent.
+    code, sortie, _ = lancer_dans(env, "diagnostic", "--json")
+    donnees_diag = (_json(sortie) or [{}])[-1].get("donnees", {})
+    verifier(donnees_diag.get("puce", {}).get("etat") == "a_verifier"
+             and any("puce graphique" in a for a in donnees_diag.get("avertissements", []))
+             and any("non installée" in a for a in donnees_diag.get("avertissements", [])),
+             "diagnostic : puce « à vérifier » (témoin sans auteur), voix cochées sans extension, dits",
+             str({k: donnees_diag.get(k) for k in ("puce", "avertissements")})[:300])
+    verifier(donnees_diag.get("donnees_partagees", "").lower().endswith("whiscribe.exe"),
+             "diagnostic : le partage avec la 2.x installée est dit", donnees_diag.get("donnees_partagees", ""))
+    code, sortie, _ = lancer_dans(env, "etat", "--json")
+    verifier(((_json(sortie) or [{}])[-1].get("donnees", {}).get("puce") or {}).get("etat") == "a_verifier",
+             "etat : l'état de la puce y est aussi")
+
+    # Le lancement de la fenêtre (côté Python : passerelle et état initial) :
+    # ni config.json de la 2.x, ni réglages, ni cache du matériel inchangé ne
+    # sont réécrits. Seuls le journal de la session et le profil d'affichage
+    # peuvent apparaître.
+    (donnees / "materiel.json").write_text(json.dumps({"version": 1, "gpus": [], "npus": [], "a_nvidia": False,
+                                                        "cuda_disponible": False, "openvino": {
+                                                            "installe": False, "version": "", "peripheriques": []}},
+                                                       ensure_ascii=False, indent=1), encoding="utf-8")
+    avant = empreinte(maison)
+    p = subprocess.run([PYTHON, "-c", _DEMARRAGE_FENETRE, str(RACINE / "transcriber.pyw")], capture_output=True,
+                       timeout=180, cwd=str(TEMPORAIRE), env=env, creationflags=SANS_FENETRE)
+    changes = [c for c in differences(avant, empreinte(maison))
+               if not c.startswith(("AppData/Local/WhiScribe/logs/", "AppData/Local/WhiScribe/webview"))
+               and c != "AppData/Local/WhiScribe/logs/"]
+    verifier(p.returncode == 0 and b"pret a_verifier" in p.stdout and not changes,
+             "démarrage de la fenêtre sur le dossier partagé : seul le journal s'ajoute",
+             f"{changes[:6]} {p.stderr.decode('utf-8', 'replace')[-300:]}")
+    from app import materiel
+
+    lent = json.loads((donnees / "materiel.json").read_text(encoding="utf-8"))
+    lent.pop("version", None)
+    date_avant = (donnees / "materiel.json").stat().st_mtime_ns
+    contenu_avant = (donnees / "materiel.json").read_bytes()
+    racine_reelle = chemins.RACINE
+    chemins.RACINE = donnees
+    try:
+        materiel.ecrire_cache(lent)
+    finally:
+        chemins.RACINE = racine_reelle
+    verifier((donnees / "materiel.json").stat().st_mtime_ns == date_avant
+             and (donnees / "materiel.json").read_bytes() == contenu_avant,
+             "détection du matériel inchangée : materiel.json ni réécrit ni redaté")
+
+    # Une commande qui écrit, sur le dossier partagé : config.json de la 2.x
+    # intact à l'octet (ni clé ajoutée, ni `lecture_audio` retirée), nos
+    # réglages dans notre fichier, et relus.
+    config_2x = (donnees / "config.json").read_bytes()
+    code, _, erreur = lancer_dans(env, "reglages", "definir", "theme=sombre", "rythme=discret")
+    propre = donnees / "config-scribouille.json"
+    contenu_propre = json.loads(propre.read_text(encoding="utf-8")) if propre.is_file() else {}
+    verifier(code == 0 and (donnees / "config.json").read_bytes() == config_2x
+             and contenu_propre == {"theme": "sombre", "rythme": "discret"},
+             "reglages definir, WhiScribe 2.x installée : config.json intact, nos réglages à part (seuls les changés)",
+             f"{code} {contenu_propre} {erreur[-160:]}")
+    code, sortie, _ = lancer_dans(env, "reglages", "lire", "theme", "--json")
+    verifier((_json(sortie) or [{}])[-1].get("donnees", {}).get("valeur") == "sombre",
+             "et relus par la 3.0")
+    journaux = [f for f in (donnees / "logs").glob("*.log") if f.name != "whiscribe-ancien.log"]
+    texte = "".join(f.read_text(encoding="utf-8", errors="replace") for f in journaux)
+    verifier("Données gardées dans" in texte and "WhiScribe.exe" in texte,
+             "journal de la ligne de commande : « Données gardées dans … » comme celui de la fenêtre",
+             f"{len(journaux)} journaux")
+    source = maison / "Documents" / "point.ogg"
+    source.write_bytes((RACINE / "banc" / "extrait_fr.ogg").read_bytes())
+    avis = []
+    for _ in range(2):
+        code, sortie, erreur = lancer_dans(env, "transcrire", str(source), "--json")
+        avis.append(("non installée" in erreur,
+                     any(x.get("evenement") == "journal" and "non installée" in x.get("texte", "")
+                         for x in _json(sortie))))
+    verifier(avis[0] == (True, True) and avis[1] == (False, True) and (donnees / "config.json").read_bytes() == config_2x,
+             "voix cochées par la 2.x, extension absente : dit une fois, ensuite seulement en JSON (et diagnostic)",
+             str(avis))
+    # La 2.x désinstallée : la sauvegarde suivante reverse nos réglages dans
+    # config.json, garde les clés inconnues, et notre fichier s'en va.
+    (maison / "AppData" / "Local" / "Programs" / "WhiScribe" / "WhiScribe.exe").unlink()
+    code, _, erreur = lancer_dans(env, "reglages", "definir", "theme=clair")
+    fusion = json.loads((donnees / "config.json").read_text(encoding="utf-8"))
+    verifier(code == 0 and not propre.exists() and fusion.get("theme") == "clair" and fusion.get("rythme") == "discret"
+             and "lecture_audio" in fusion,
+             "2.x partie : nos réglages reversés dans config.json, clés de la 2.x gardées, fichier à part retiré",
+             f"{code} {sorted(fusion)[:5]} {erreur[-160:]}")
+
+
 def principal() -> int:
     print(f"Vérification de la ligne de commande\n{'=' * 40}\n(dossier temporaire : {TEMPORAIRE})")
     try:
@@ -693,6 +914,7 @@ def principal() -> int:
         essai_json_partout()
         essai_documentation()
         essai_aucune_console()
+        essai_lecture_sans_ecriture()
     finally:
         import shutil
 

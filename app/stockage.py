@@ -98,7 +98,7 @@ def _taille_donnees() -> tuple[int, int]:
     total = 0
     nombre = 0
     fichiers = [
-        chemins.FICHIER_CONFIG, chemins.FICHIER_VOCABULAIRE,
+        chemins.FICHIER_CONFIG, chemins.RACINE / "config-scribouille.json", chemins.FICHIER_VOCABULAIRE,
         chemins.FICHIER_CORRECTIONS, chemins.FICHIER_GABARIT_IA,
         chemins.FICHIER_JETON_HF, chemins.FICHIER_CHOIX_MODELES,
         chemins.RACINE / "maj-etat.json",

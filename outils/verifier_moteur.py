@@ -371,6 +371,123 @@ def essai_plantage() -> None:
     verifier(not verrou.exists(), "le verrou d'un processus disparu (.en-cours) est retiré au démarrage")
 
 
+def essai_temoin_puce() -> None:
+    """
+    Retour du PC du travail (Core Ultra 5 225U) : une commande tuée 3,8 s
+    après son lancement, pendant le chargement sur la puce, avait laissé le
+    témoin ; la puce restait ensuite suspendue pour toujours, sans plantage.
+    """
+    titre("4 bis. Puce graphique : coupure venue de dehors, plantage réel, blocage, essai simulé")
+    import psutil
+
+    from app import superviseur, temoin_puce
+
+    temoin_puce.lever("essai")
+    source = TEMPORAIRE / "puce.ogg"
+    source.write_bytes(EXTRAIT.read_bytes())
+    # Dix coupures de suite pendant le chargement sur la puce : jamais une suspension.
+    etats, poses = [], 0
+    for rang in range(10):
+        env = dict(os.environ, SCRIBOUILLE_MOTEUR_ESSAI=json.dumps({"puce": True, "chargement_s": 120}))
+        p = subprocess.Popen([PYTHON, str(RACINE / "transcriber.pyw"), "transcrire", str(source), "--json",
+                              "--telecharger", "--sortie", str(TEMPORAIRE / "puce-sorties")],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env, cwd=str(TEMPORAIRE),
+                             creationflags=SANS_FENETRE)
+        if attendre(lambda: temoin_puce.etat().get("etat") == "en_cours", 60):
+            poses += 1
+        _tuer_arbre(p)
+        etats.append(temoin_puce.etat().get("etat"))
+    verifier(poses == 10, "le témoin est posé pendant chaque chargement sur la puce (auteur vivant : « en cours »)",
+             f"{poses}/10")
+    verifier(etats == ["a_verifier"] * 10,
+             "commande tuée pendant le chargement, dix fois de suite : jamais suspendue, « à vérifier »", str(etats))
+    code, lignes, err = cli("etat", "--json")
+    verifier((lignes[-1]["donnees"].get("puce") or {}).get("etat") == "a_verifier" if lignes else False,
+             "etat : la puce « à vérifier » est dite")
+    # La vérification se fait d'elle-même : la file suivante rouvre la puce.
+    f = File("puce-verifiee", {"segments": 4, "pause_s": 0.01, "puce": True})
+    f.demarrer()
+    verifier(f.attendre(60) and f.bilan.get("reussis") == 1 and temoin_puce.etat().get("etat") == "libre"
+             and f.sup.lancements == 1,
+             "ouverture suivante sur la puce réussie : témoin levé seul, sans relance ni repli", str(f.bilan))
+
+    # Arrêt demandé pendant le chargement sur la puce : pas un plantage.
+    f = File("puce-arretee", {"segments": 4, "chargement_s": 120, "puce": True})
+    f.demarrer()
+    verifier(attendre(lambda: f.sup.etat == "chargement" and temoin_puce.etat().get("etat") == "en_cours", 30),
+             "chargement sur la puce en cours")
+    f.file.arreter()
+    f.attendre(10)
+    verifier(temoin_puce.etat().get("etat") == "libre", "« Arrêter » pendant le chargement : témoin levé, rien suspendu",
+             str(temoin_puce.etat()))
+
+    # Moteur tué de dehors seul (gestionnaire des tâches) pendant le chargement :
+    # le fichier repart sur le processeur, la puce n'est pas suspendue.
+    f = File("puce-tuee", {"segments": 4, "chargement_s": 3, "puce": True})
+    f.demarrer()
+    verifier(attendre(lambda: f.sup.etat == "chargement", 30), "chargement sur la puce (moteur à tuer)")
+    pid = f.sup.pid
+    psutil.Process(pid).kill()
+    verifier(f.attendre(60) and f.bilan.get("reussis") == 1, "moteur tué de dehors : le fichier est fait quand même",
+             str(f.bilan))
+    verifier(temoin_puce.etat().get("etat") != "suspendue" and f.sup.puce_ecartee,
+             "et la puce n'est pas suspendue (écartée pour cette session seulement)", str(temoin_puce.etat()))
+    temoin_puce.lever("essai")
+
+    # Plantage réel pendant le chargement (violation d'accès) : suspendue, fichier fait sur le processeur.
+    une_fois = TEMPORAIRE / "plantage-chargement.txt"
+    f = File("puce-plantee", {"segments": 6, "pause_s": 0.01, "puce": True, "plantage_chargement": True,
+                              "code_plantage": -1073741819, "temoin": str(une_fois)})
+    f.demarrer()
+    verifier(f.attendre(60) and f.bilan.get("reussis") == 1 and f.segments() == attendu(6),
+             "plantage de la puce au chargement : fichier rejoué sur le processeur, complet", str(f.bilan))
+    etat = temoin_puce.etat()
+    verifier(etat.get("etat") == "suspendue" and etat.get("code") == 0xC0000005 and etat.get("phase") == "chargement",
+             "et la puce est suspendue, avec le code (0xC0000005) et la phase", str(etat))
+    code, lignes, err = cli("diagnostic", "--json")
+    donnees = lignes[-1].get("donnees", {}) if lignes else {}
+    verifier(donnees.get("puce", {}).get("etat") == "suspendue"
+             and any("suspendue" in a for a in donnees.get("avertissements", [])),
+             "diagnostic : la suspension est dite (état et avertissement)", str(donnees.get("avertissements")))
+    f = File("puce-suspendue", {"segments": 3, "pause_s": 0.01, "puce": True})
+    f.demarrer()
+    verifier(f.attendre(60) and f.bilan.get("reussis") == 1 and temoin_puce.etat().get("etat") == "suspendue",
+             "puce suspendue : la file suivante ne la retente pas")
+    code, lignes, err = cli("materiel", "puce", "--lever", "--json")
+    verifier(code == 0 and lignes and lignes[-1]["donnees"].get("leve") is True
+             and temoin_puce.etat().get("etat") == "libre", "materiel puce --lever : suspension levée", err[-200:])
+
+    # Point d'essai sur le chemin réel (SCRIBOUILLE_ESSAI_PUCE=plantage) : même effet.
+    os.environ["SCRIBOUILLE_ESSAI_PUCE"] = "plantage"
+    try:
+        f = File("puce-essai", {"segments": 5, "pause_s": 0.01, "puce": True})
+        f.demarrer()
+        termine = f.attendre(60)
+    finally:
+        os.environ.pop("SCRIBOUILLE_ESSAI_PUCE", None)
+    textes = " | ".join(f.journal())
+    verifier(termine and f.bilan.get("reussis") == 1 and temoin_puce.etat().get("etat") == "suspendue"
+             and temoin_puce.etat().get("code") == 0xC0000005 and "écartée" in textes,
+             "SCRIBOUILLE_ESSAI_PUCE=plantage : puce suspendue, repli sur le processeur dit, fichier fait",
+             f"{f.bilan} {temoin_puce.etat()} {textes[:200]}")
+    temoin_puce.lever("essai")
+
+    # Ouverture qui ne rend jamais la main : bornée par la garde.
+    borne = superviseur.DELAI_CHARGEMENT_PUCE_S
+    superviseur.DELAI_CHARGEMENT_PUCE_S = 3.0
+    try:
+        f = File("puce-bloquee", {"segments": 4, "pause_s": 0.01, "puce": True, "chargement_puce_s": 600})
+        f.demarrer()
+        termine = f.attendre(60)
+    finally:
+        superviseur.DELAI_CHARGEMENT_PUCE_S = borne
+    etat = temoin_puce.etat()
+    verifier(termine and etat.get("etat") == "suspendue" and etat.get("cause") == "blocage",
+             "chargement sur la puce bloqué au-delà de la borne : moteur arrêté, puce suspendue (blocage)",
+             f"{f.bilan} {etat}")
+    temoin_puce.lever("essai")
+
+
 # ---------------------------------------------------------------------------
 # 5. Aucun orphelin
 # ---------------------------------------------------------------------------
@@ -1047,6 +1164,7 @@ def principal() -> int:
         essai_file_de_trois()
         essai_annulation()
         essai_plantage()
+        essai_temoin_puce()
         essai_orphelins()
         essai_veille_et_blocage()
         essai_ligne_de_commande()

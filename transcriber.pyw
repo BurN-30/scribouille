@@ -191,19 +191,14 @@ if "--mesurer-vocabulaire" in sys.argv[1:]:
     journal.silence_bibliotheques()
     sys.exit(_mesure_vocabulaire.principal_cli(sys.argv[1:]))
 
-journal.demarrer()
-journal.purger()
+if chemins.LECTURE_SEULE:
+    # « --verifier » : un bilan ne laisse rien derrière lui, pas même un journal.
+    journal.sans_fichier()
+else:
+    journal.demarrer()
+    journal.purger()
+    chemins.journaliser_dossier_donnees()
 journal.silence_bibliotheques()
-if chemins.MIGRATION.get("etat") == "partage":
-    journal.info("Données gardées dans %s : la version installée %s le lit encore ; reprise après sa "
-                 "désinstallation ou sa mise à jour", chemins.RACINE, chemins.MIGRATION.get("ancienne"))
-elif chemins.MIGRATION.get("etat") not in (None, "rien"):
-    _m = chemins.MIGRATION
-    journal.info("Données reprises de %s : déplacées %s, doublons rangés à part %s, état %s%s",
-                 chemins.NOM_DOSSIER_ANCIEN, len(_m.get("deplaces") or []), len(_m.get("conflits") or []),
-                 _m.get("etat"), (" : " + "; ".join(_m.get("restes") or [])) if _m.get("restes") else "")
-    if _m.get("erreur"):
-        journal.attention("Reprise des données de %s en échec : %s", chemins.NOM_DOSSIER_ANCIEN, _m["erreur"])
 
 
 # ---------------------------------------------------------------------------
@@ -275,25 +270,22 @@ def verification() -> int:
     except Exception as exc:
         resultat(False, "décodeur audio (FFmpeg par PyAV)", f"{type(exc).__name__}: {exc}")
 
-    # Écriture des dossiers de travail : c'est le point qui casse quand une
-    # version installée essaie encore d'écrire dans son dossier de programme.
-    try:
-        chemins.assurer_dossiers()
-        temoin = chemins.DOSSIER_LOGS / "verification.tmp"
-        temoin.write_text("ok", encoding="utf-8")
-        temoin.unlink(missing_ok=True)
-        resultat(True, "écriture des journaux", str(chemins.DOSSIER_LOGS))
-    except Exception as exc:
-        resultat(False, "écriture des journaux", f"{type(exc).__name__}: {exc}")
-
-    message = chemins.dossier_modeles_inscriptible(chemins.DOSSIER_MODELES)
-    resultat(not message, "écriture du dossier des modèles", message or str(chemins.DOSSIER_MODELES))
+    # Droit d'écrire dans les dossiers de travail : c'est le point qui casse
+    # quand une version installée essaie encore d'écrire dans son dossier de
+    # programme. Vérifié SANS rien écrire : le bilan est une lecture, il
+    # laisse le dossier de données tel quel (réglages d'une WhiScribe 2.x
+    # qui le lit encore compris).
+    for dossier, etiquette in ((chemins.DOSSIER_LOGS, "écriture des journaux"),
+                               (chemins.DOSSIER_MODELES, "écriture du dossier des modèles")):
+        message = chemins.dossier_ecrivable(dossier)
+        resultat(not message, etiquette, message or str(dossier))
 
     try:
         config_verif = __import__("app.config", fromlist=["charger"])
         config_verif.charger()
-        config_verif.sauver(config_verif.charger())
-        resultat(True, "lecture et écriture de la configuration", str(chemins.FICHIER_CONFIG))
+        resultat(True, "lecture de la configuration", str(chemins.FICHIER_CONFIG)
+                 + (f" (réglages de la 3.x dans {config_verif.NOM_FICHIER_PROPRE} : une WhiScribe 2.x lit "
+                    "config.json)" if config_verif.partage_ancienne_version() else ""))
     except Exception as exc:
         resultat(False, "configuration", f"{type(exc).__name__}: {exc}")
 
@@ -304,7 +296,7 @@ def verification() -> int:
 
         mat = materiel_verif.detecter()
         presets_verif.recommandation(mat)
-        resultat(True, "détection du matériel", f"{mat.fils_calcul} fils, {mat.ram_go:.0f} Go")
+        resultat(True, "détection du matériel", materiel_verif.resume_calcul(mat))
     except Exception as exc:
         resultat(False, "détection du matériel", f"{type(exc).__name__}: {exc}")
 
@@ -341,11 +333,14 @@ def verification() -> int:
     except Exception:
         pass
     journal.info("Vérification :\n%s", texte)
-    # Toujours un double du bilan sur disque : sous pythonw.exe, il n'y a pas de console.
-    try:
-        (chemins.DOSSIER_LOGS / "verification.txt").write_text(texte + "\n", encoding="utf-8")
-    except OSError:
-        pass
+    # Sans sortie standard (pythonw.exe, exécutable fenêtré), seul cas où le
+    # bilan s'écrit sur disque : sinon il serait perdu.
+    if sys.stdout is None:
+        try:
+            chemins.DOSSIER_LOGS.mkdir(parents=True, exist_ok=True)
+            (chemins.DOSSIER_LOGS / "verification.txt").write_text(texte + "\n", encoding="utf-8")
+        except OSError:
+            pass
     return 0 if tout_va_bien else 1
 
 
@@ -406,6 +401,33 @@ if _manquants:
 
 import webview  # noqa: E402
 from webview.dom import DOMEventHandler  # noqa: E402
+
+
+def _prechauffer_affichage() -> None:
+    """
+    La partie Windows de pywebview (pythonnet, .NET, WinForms, WebView2 :
+    0,4 s sur un Ryzen 7, davantage sur un Core Ultra 5 225U) et le nom du
+    système que `platform` lit par WMI sont importés ici, en fond, pendant que
+    le reste du programme se charge, au lieu de l'être par `webview.start`,
+    après. Rien d'autre ne change : les mêmes modules, une seule fois (verrou
+    d'import de Python), aucun objet d'interface créé. Un échec n'a pas
+    d'effet : `webview.start` refait l'import et dit l'erreur comme avant.
+    """
+    if sys.platform != "win32" or os.environ.get("PYWEBVIEW_GUI") or "KDE_FULL_SESSION" in os.environ:
+        return
+    try:
+        import platform
+
+        platform.system()
+        import webview.platforms.winforms  # noqa: F401
+    except Exception as exc:  # pragma: no cover - dépend du poste
+        journal.debug("Préchauffage de l'affichage : %s", exc)
+
+
+if __name__ == "__main__":
+    # Seulement pour ouvrir la fenêtre : un essai qui charge ce module n'en a
+    # pas besoin (et ne doit pas finir avec .NET à moitié chargé).
+    threading.Thread(target=_prechauffer_affichage, name="prechauffage-affichage", daemon=True).start()
 
 from app import audio as audio_module  # noqa: E402
 from app import config as config_module  # noqa: E402
@@ -472,6 +494,8 @@ class Passerelle:
 
     def __init__(self):
         self._fenetre = None
+        #: Jalons du démarrage côté Python (`_jalon`), notés avec ceux de la page.
+        self._jalons: dict[str, float] = {}
         #: Premier lancement : pas encore de configuration. La fenêtre propose
         #: alors un réglage pour ce poste (voir `app/adaptation.py`).
         self._premier_lancement = not chemins.FICHIER_CONFIG.exists()
@@ -534,6 +558,7 @@ class Passerelle:
         # fond, pendant que le composant d'affichage s'ouvre, au lieu de
         # retarder la page qui attend cet état pour se dessiner.
         self._fond(self._prechauffer)
+        self._jalon("py_passerelle")
 
     def _prechauffer(self) -> None:
         try:
@@ -653,7 +678,19 @@ class Passerelle:
 
     # -- état initial ------------------------------------------------------
 
+    def _jalon(self, nom: str) -> None:
+        """Jalon du démarrage côté Python, en secondes depuis le lancement (voir `interface_prete`)."""
+        if nom not in self._jalons:
+            self._jalons[nom] = self._depuis_le_lancement()
+
     def etat_initial(self) -> dict:
+        self._jalon("py_etat_debut")
+        try:
+            return self._etat_initial()
+        finally:
+            self._jalon("py_etat_fin")
+
+    def _etat_initial(self) -> dict:
         chemins.assurer_dossiers()
         glossaire = vocabulaire.resume_glossaire(self.config.get("langue", "fr"))
         manque_diarisation = diarisation.indisponibilite()
@@ -721,11 +758,30 @@ class Passerelle:
             return -1.0
 
     def fenetre_affichee(self) -> None:
+        self._jalon("py_affichee")
         journal.info("Démarrage : fenêtre affichée à %.2f s du lancement", self._depuis_le_lancement())
 
-    def interface_prete(self) -> None:
-        """Appelé par l'interface une fois l'état initial dessiné : la fenêtre est utilisable."""
+    def interface_prete(self, jalons: dict | None = None) -> None:
+        """
+        Appelé par l'interface une fois l'état initial dessiné : la fenêtre est
+        utilisable. Les jalons de la page (heures absolues en ms : script lu,
+        document prêt, passerelle prête, état reçu, état dessiné) sont notés
+        en secondes depuis le lancement, avec ceux de Python : sur un poste
+        lent, on voit ce qui sépare la fenêtre affichée de l'interface prête.
+        """
         journal.info("Démarrage : interface prête à %.2f s du lancement", self._depuis_le_lancement())
+        try:
+            import psutil  # type: ignore
+
+            origine = psutil.Process().create_time()
+            vus = {nom: float(v) / 1000.0 - origine for nom, v in (jalons or {}).items()
+                   if isinstance(v, (int, float))}
+            vus.update({nom: v for nom, v in self._jalons.items()})
+            if vus:
+                journal.info("Démarrage, jalons : %s", ", ".join(
+                    f"{nom} {v:.2f}" for nom, v in sorted(vus.items(), key=lambda x: x[1])))
+        except Exception as exc:
+            journal.debug("Jalons du démarrage illisibles : %s", exc)
 
     # -- matériel rafraîchi après l'affichage --------------------------------
 
@@ -1304,6 +1360,9 @@ class Passerelle:
                 self.config[cle].update(valeur)
             else:
                 self.config[cle] = valeur
+            if cle == "diarisation":
+                # Réglage changé : la ligne de commande le redira une fois s'il manque l'extension.
+                self.config["avis_locuteurs"] = False
         # La langue d'interface prend effet tout de suite, y compris pour les
         # textes que Python fabrique : l'interface redemande son état juste après.
         if "langue_interface" in (partiel or {}):
@@ -1493,7 +1552,10 @@ class Passerelle:
             "openvino": ov,
             "reglage": reglage,
             "effet": {k: v for k, v in (self._effet_reglage or {}).items()
-                      if k in ("indisponible", "plantage")},
+                      if k in ("indisponible", "plantage", "ecartee")},
+            # Témoin de la puce graphique (`app/temoin_puce.py`) : libre, en
+            # cours, à vérifier, ou suspendue (avec la date et la cause).
+            "puce": __import__("app.temoin_puce", fromlist=["etat"]).etat(),
             "resume_reglage": self._resume_reglage(reglage),
             "banc_en_cours": self._banc is not None,
             "conseil": conseil,
@@ -1505,6 +1567,22 @@ class Passerelle:
             ],
             "npu": any(True for _ in self.materiel.npus),
         }
+
+    def lever_suspension_puce(self) -> dict:
+        """
+        Bouton « Réessayer la puce graphique » : la suspension posée après un
+        plantage constaté est levée ; la prochaine ouverture se fait dans le
+        processus moteur, sous la garde du superviseur (un nouveau plantage
+        la suspend de nouveau, le fichier repart sur le processeur).
+        """
+        from app import temoin_puce
+
+        if self.file.occupee:
+            return {"ok": False, "message": langues.t("app.banc.file_occupee"), "vitesse": self.etat_vitesse()}
+        temoin_puce.lever("interface")
+        self.moteur.puce_ecartee = False
+        self._effet_reglage = reglage_machine.appliquer_au_materiel(self.config, self.materiel)
+        return {"ok": True, "message": langues.t("app.puce.levee"), "vitesse": self.etat_vitesse()}
 
     def _resume_reglage(self, reglage: dict) -> str:
         if not reglage:
@@ -2647,8 +2725,11 @@ def _installer_depot(passerelle: Passerelle, fenetre) -> None:
 
 
 def _au_demarrage(passerelle: Passerelle, fenetre) -> None:
+    passerelle._jalon("py_page_chargee")
     _installer_depot(passerelle, fenetre)
+    passerelle._jalon("py_depot")
     passerelle.charger_historique()
+    passerelle._jalon("py_historique")
     # Détection lente du matériel, après l'affichage et hors de la fenêtre.
     passerelle.rafraichir_materiel_en_fond()
     # Traces de reprise devenues sans objet : fichier source disparu, ou plus

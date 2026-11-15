@@ -68,12 +68,21 @@ function appelPasserelle(nom, ...args) {
 
 /* ------------------------------------------------------------ Demarrage */
 
+/* Jalons du demarrage (heure absolue, ms) : notes au journal par Python, pour
+   savoir sur un poste lent ce qui separe la fenetre affichee de l'interface prete. */
+const jalons = {};
+function jalon(nom) { jalons[nom] = performance.timeOrigin + performance.now(); }
+jalon('script');
+
 window.addEventListener('pywebviewready', async () => {
   try {
+    jalon('passerelle');
     const donnees = await pywebview.api.etat_initial();
+    jalon('etat');
     initialiser(donnees);
+    jalon('dessine');
     // Moment où la fenêtre devient utilisable, noté au journal (mesure du démarrage).
-    pywebview.api.interface_prete();
+    pywebview.api.interface_prete(jalons);
     const accueil = await appelPasserelle('accueil').catch(() => null);
     if (accueil && accueil.premier_lancement) ouvrirAccueil(donnees.proposition);
   } catch (e) {
@@ -675,9 +684,20 @@ function majVitesse() {
   const ov = v.openvino || {};
   $('#vitesse-reglage').textContent = t('ui.vitesse.actuel', { reglage: v.resume_reglage || '--' });
   const effet = v.effet || {};
-  $('#vitesse-alerte').innerHTML = effet.plantage
-    ? encartAttention(t('ui.vitesse.plantage', { peripherique: effet.plantage }))
-    : (effet.indisponible ? encartAttention(t('ui.vitesse.indisponible')) : '');
+  const puce = v.puce || {};
+  if (effet.plantage) {
+    // Plantage constate : suspendue, avec sa date et un bouton pour reessayer.
+    const quand = puce.pose
+      ? new Date(puce.pose * 1000).toLocaleString(t('format.heure'), { hour12: false }) : '?';
+    $('#vitesse-alerte').innerHTML =
+      encartAttention(t('ui.vitesse.plantage', { peripherique: effet.plantage, quand: quand }))
+      + `<button type="button" class="bouton" id="btn-lever-puce">${ech(t('ui.vitesse.reessayer_puce'))}</button>`;
+    $('#btn-lever-puce').addEventListener('click', leverSuspensionPuce);
+  } else if (puce.etat === 'a_verifier') {
+    $('#vitesse-alerte').innerHTML = encartInfo(t('ui.vitesse.puce_a_verifier'));
+  } else {
+    $('#vitesse-alerte').innerHTML = effet.indisponible ? encartAttention(t('ui.vitesse.indisponible')) : '';
+  }
 
   $('#ov-bloc').style.display = (ov.utile || ov.installee) ? 'block' : 'none';
   const enCours = !!etat.ovEnCours;
@@ -944,6 +964,15 @@ async function reconnaitrePoste() {
     $('#vitesse-alerte').innerHTML = encartAttention(t('ui.ext.echec_lancement'));
   }
   bouton.disabled = false;
+}
+
+/* Leve la suspension de la puce graphique apres un plantage constate : la
+   prochaine ouverture la reessaie, dans le processus moteur, sous garde. */
+async function leverSuspensionPuce() {
+  const r = await pywebview.api.lever_suspension_puce();
+  journaliser(r.ok ? 'ok' : 'attention', r.message);
+  if (r.vitesse) etat.vitesse = r.vitesse;
+  majVitesse();
 }
 
 async function appliquerProposition() {
@@ -2594,6 +2623,7 @@ function remplirVitesses() {
 /* ------------------------------------------------------------ Cablage UI */
 
 document.addEventListener('DOMContentLoaded', () => {
+  jalon('dom');
   // Langue provisoire, le temps que Python reponde : celle du dernier
   // lancement, sinon celle du navigateur integre. Evite une fenetre vide.
   definirLangue(langueProvisoire());

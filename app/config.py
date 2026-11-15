@@ -8,6 +8,7 @@ Configuration de l'application.
 from __future__ import annotations
 
 import json
+import os
 from copy import deepcopy
 
 from . import chemins, journal, langues
@@ -54,6 +55,9 @@ DEFAUTS: dict = {
     # « retires » (fait, à annoncer), « vus » (annoncé), « gardes » (remis ou
     # gardés par l'utilisateur : plus rien n'est proposé).
     "exemples_anciens": "",
+    # Séparation des voix cochée mais non installée : déjà dite une fois par
+    # la ligne de commande (remis à faux quand le réglage change).
+    "avis_locuteurs": False,
     "theme": "auto",                # auto | clair | sombre
     "zoom": 1.0,
     "journal_ouvert": False,
@@ -72,9 +76,45 @@ def _fusionner(base: dict, ajout: dict) -> dict:
     return resultat
 
 
+#: Réglages propres à Scribouille 3.x quand une WhiScribe 2.x installée lit le
+#: même dossier de données (`chemins.donnees_partagees_ancienne_version`) : son
+#: `config.json` n'est alors jamais réécrit (la 2.x retire à sa prochaine
+#: sauvegarde les clés qu'elle ne connaît pas, et la 3.0 retirait les siennes).
+#: On n'y garde que ce qui diffère du `config.json` de la 2.x ; une fois la 2.x
+#: partie, la première sauvegarde le reverse dans `config.json` et l'efface.
+NOM_FICHIER_PROPRE = "config-scribouille.json"
+
+
+def fichier_propre():
+    return chemins.RACINE / NOM_FICHIER_PROPRE
+
+
+def partage_ancienne_version() -> bool:
+    """Une WhiScribe 2.x installée lit aussi `config.json` : on ne le touche pas."""
+    return chemins.donnees_partagees_ancienne_version() is not None
+
+
+def _lire_json(chemin) -> dict:
+    try:
+        texte = chemin.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {}
+    except OSError as exc:
+        journal.attention("%s illisible, valeurs par défaut utilisées : %s", chemin.name, exc)
+        return {}
+    try:
+        donnees = json.loads(texte)
+    except json.JSONDecodeError as exc:
+        journal.attention("%s illisible, valeurs par défaut utilisées : %s", chemin.name, exc)
+        return {}
+    return donnees if isinstance(donnees, dict) else {}
+
+
 def charger(definir_langue: bool = False) -> dict:
     """
-    La configuration du disque, défauts compris.
+    La configuration du disque, défauts compris. Ne réécrit JAMAIS rien :
+    une commande de lecture (`diagnostic`, `verifier`...) laisse le dossier
+    de données tel quel, octet pour octet.
 
     Lire la configuration ne change pas la langue de l'interface du processus :
     seuls les points d'entrée (fenêtre, ligne de commande, moteur, import de
@@ -83,27 +123,17 @@ def charger(definir_langue: bool = False) -> dict:
     fenêtre qui venait d'en changer) cédait à celle du disque, et, sur un
     dossier sans langue enregistrée, à celle du système.
     """
-    donnees: dict = {}
-    if chemins.FICHIER_CONFIG.exists():
-        try:
-            donnees = json.loads(chemins.FICHIER_CONFIG.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            journal.attention("config.json illisible, valeurs par défaut utilisées : %s", exc)
-            donnees = {}
-
-    config = _fusionner(DEFAUTS, donnees)
+    config = _fusionner(_fusionner(DEFAUTS, _lire_json(chemins.FICHIER_CONFIG)), _lire_json(fichier_propre()))
 
     if not config["dossier_sortie"]:
         config["dossier_sortie"] = str(chemins.dossier_sortie_defaut())
 
-    # Langue de l'interface. Au tout premier lancement elle suit la langue du
-    # système, puis elle est écrite dans la configuration et ne bouge plus que
-    # si l'utilisateur la change. Elle est SANS RAPPORT avec « langue », qui
-    # désigne la langue parlée dans les enregistrements.
+    # Langue de l'interface. Tant que l'utilisateur n'en a pas choisi une,
+    # elle suit la langue du système (elle s'enregistre avec la première
+    # sauvegarde des réglages, jamais à la lecture). Elle est SANS RAPPORT
+    # avec « langue », qui désigne la langue parlée dans les enregistrements.
     if not langues.normaliser(config.get("langue_interface")):
         config["langue_interface"] = langues.detecter_systeme()
-        journal.info("Langue d'interface détectée : %s", config["langue_interface"])
-        sauver(config)
     if definir_langue:
         langues.definir(config["langue_interface"])
 
@@ -112,13 +142,32 @@ def charger(definir_langue: bool = False) -> dict:
     return config
 
 
+def _ecrire(chemin, contenu: dict) -> None:
+    temporaire = chemin.with_name(chemin.name + ".tmp")
+    temporaire.write_text(json.dumps(contenu, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    os.replace(temporaire, chemin)
+
+
 def sauver(config: dict) -> None:
+    """
+    Écrit les réglages. Dossier partagé avec une WhiScribe 2.x : dans notre
+    fichier à nous, seulement ce qui diffère de son `config.json`, qui reste
+    tel quel. Sinon dans `config.json`, en gardant les clés qu'on ne connaît
+    pas (celles d'une autre version) au lieu de les effacer.
+    """
     try:
-        chemins.FICHIER_CONFIG.write_text(
-            json.dumps(config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-        )
+        if partage_ancienne_version():
+            base = _fusionner(DEFAUTS, _lire_json(chemins.FICHIER_CONFIG))
+            propre = {cle: valeur for cle, valeur in config.items()
+                      if cle in DEFAUTS and base.get(cle) != valeur}
+            _ecrire(fichier_propre(), propre)
+            return
+        existant = _lire_json(chemins.FICHIER_CONFIG)
+        etrangers = {cle: valeur for cle, valeur in existant.items() if cle not in DEFAUTS}
+        _ecrire(chemins.FICHIER_CONFIG, {**etrangers, **config})
+        fichier_propre().unlink(missing_ok=True)
     except OSError as exc:
-        journal.attention("Sauvegarde de config.json impossible : %s", exc)
+        journal.attention("Sauvegarde de la configuration impossible : %s", exc)
 
 
 def reglages_effectifs(config: dict) -> dict:

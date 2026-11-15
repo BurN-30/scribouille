@@ -63,7 +63,8 @@ VALIDITE_APERCU_S = 15 * 60
 _GROUPES = {
     "reglages": ("config.json", "dossier-modeles.txt", "jeton_hf.txt", "gabarit-ia.txt", "maj-etat.json",
                  "surveillance-vus.json", "materiel.json", "materiel.json.tmp", migration.NOM_JOURNAL,
-                 "openvino-chargement-en-cours.txt", "config.json.tmp"),
+                 "openvino-chargement-en-cours.txt", "openvino-chargement-en-cours.txt.*.tmp", "config.json.tmp",
+                 "config-scribouille.json", "config-scribouille.json.tmp"),
     "vocabulaire": ("vocabulaire.txt", "corrections.txt", "vocabulaire.toml", "vocabulaire.toml.tmp",
                     "*-format1-sauvegarde.txt", "*-exemples-anciens.txt", "vocabulaire-propositions-*.toml",
                     "vocabulaire-propositions-*.txt"),

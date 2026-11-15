@@ -44,7 +44,7 @@ NOM_AMORCAGE = "emplacement-modeles.txt"
 
 #: Fichiers que Scribouille écrit dans son dossier de données.
 FICHIERS = (
-    "config.json", "vocabulaire.txt", "corrections.txt", "jeton_hf.txt", "gabarit-ia.txt",
+    "config.json", "config-scribouille.json", "vocabulaire.txt", "corrections.txt", "jeton_hf.txt", "gabarit-ia.txt",
     NOM_CHOIX_MODELES, "calibration.json", "maj-etat.json", "surveillance-vus.json",
     "vocabulaire.toml", "materiel.json", "openvino-chargement-en-cours.txt",
     # Positions de lecture de la relecture, depuis la 3.0.

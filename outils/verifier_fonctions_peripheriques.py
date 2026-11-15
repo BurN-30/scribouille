@@ -1526,6 +1526,18 @@ def essai_topologie() -> None:
                                     "Intel(R) Core(TM) Ultra 5 225U"))
     verifier(machine.fils_calcul == 10, "225U : un fil par cœur performant ou efficace (10)",
              str(machine.fils_calcul))
+    # Le bilan de `verifier` disait « 10 fils » sur ce poste de 14 fils : il
+    # parle désormais des deux nombres, sans confusion possible.
+    resume = materiel.resume_calcul(machine)
+    verifier(resume.startswith("14 fils logiques, 12 cœurs (2 performants, 8 efficaces, 2 basse consommation)")
+             and "calcul sur processeur : 10 fils au plus" in resume and "basse consommation écartés" in resume,
+             "bilan du matériel (225U) : 14 fils logiques, 12 cœurs, calcul sur 10 fils au plus", resume)
+    from app import rythme as rythme_module
+
+    fils = {nom: rythme_module.bornes(nom, machine).fils for nom in ("vitesse", "equilibre", "discret")}
+    verifier(fils == {"vitesse": 10, "equilibre": 8, "discret": 5},
+             "225U, fils donnés au moteur sur processeur : 10 en vitesse, 8 en équilibré, 5 (cœurs efficaces) "
+             "en discret, jamais les cœurs basse consommation ni le double des cœurs performants", str(fils))
     machine.fils_imposes = 6
     verifier(machine.fils_calcul == 6 and machine.fils_automatiques == 10,
              "un réglage mesuré impose ses fils, le choix automatique reste lisible")
