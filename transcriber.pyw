@@ -526,6 +526,25 @@ class Passerelle:
             sur_nouveaux=self._sur_fichiers_surveilles,
             signaler=self._sur_etat_surveillance,
         )
+        #: Taille du dossier des modèles, mesurée d'avance pour l'état initial.
+        self._taille_modeles: tuple[str, float] | None = None
+        self._taille_lue = False
+        # Ce que l'état initial demande et qui prend du temps (parcours du
+        # dossier des modèles, mode d'alimentation de Windows) : lu ici, en
+        # fond, pendant que le composant d'affichage s'ouvre, au lieu de
+        # retarder la page qui attend cet état pour se dessiner.
+        self._fond(self._prechauffer)
+
+    def _prechauffer(self) -> None:
+        try:
+            dossier = str(chemins.DOSSIER_MODELES)
+            mesure = (dossier, chemins.taille_dossier_go(dossier))
+            if not self._taille_lue:  # l'état initial ne l'a pas déjà mesurée lui-même
+                self._taille_modeles = mesure
+            __import__("app.energie", fromlist=["mode_alimentation"]).mode_alimentation()
+            extensions.variante_materielle()
+        except Exception as exc:  # jamais bloquant : l'état initial lira lui-même
+            journal.debug("Préchauffage du démarrage : %s", exc)
 
     # -- utilitaires -------------------------------------------------------
 
@@ -950,10 +969,17 @@ class Passerelle:
             "dossier": str(dossier),
             "defaut": str(chemins.dossier_modeles_defaut()),
             "personnalise": chemins.FICHIER_CHOIX_MODELES.exists(),
-            "occupe": langues.octets(chemins.taille_dossier_go(dossier) * 1024 ** 3),
+            "occupe": langues.octets(self._taille_dossier_modeles(dossier) * 1024 ** 3),
             "libre": langues.octets(chemins.espace_libre_go(dossier) * 1024 ** 3),
             "presets": etat_presets,
         }
+
+    def _taille_dossier_modeles(self, dossier) -> float:
+        """La mesure faite d'avance au démarrage, une seule fois ; ensuite, mesurée."""
+        mesure, self._taille_modeles, self._taille_lue = self._taille_modeles, None, True
+        if mesure is not None and mesure[0] == str(dossier):
+            return mesure[1]
+        return chemins.taille_dossier_go(dossier)
 
     def choisir_dossier_modeles(self) -> None:
         self._fond(self._dialogue_dossier_modeles)

@@ -159,8 +159,27 @@ MODES_ALIMENTATION = {
 }
 
 
+#: Dernière lecture du mode d'alimentation : (instant, valeur). Le premier
+#: appel charge powrprof.dll (70 ms au démarrage de la fenêtre) ; la fenêtre le
+#: fait en avance, pendant que le composant d'affichage s'ouvre.
+_MODE_LU: tuple[float, str] | None = None
+FRAICHEUR_MODE_S = 30.0
+
+
 def mode_alimentation() -> str:
-    """« efficacite », « equilibre », « performances », « performances_max », vide si illisible."""
+    """« efficacite », « equilibre », « performances », « performances_max », vide si illisible.
+    Lecture gardée `FRAICHEUR_MODE_S` secondes."""
+    global _MODE_LU
+    import time
+
+    if _MODE_LU is not None and time.monotonic() - _MODE_LU[0] < FRAICHEUR_MODE_S:
+        return _MODE_LU[1]
+    valeur = _lire_mode_alimentation()
+    _MODE_LU = (time.monotonic(), valeur)
+    return valeur
+
+
+def _lire_mode_alimentation() -> str:
     if sys.platform != "win32":
         return ""
     try:

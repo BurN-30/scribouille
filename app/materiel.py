@@ -792,8 +792,24 @@ def _assembler(lent: dict) -> Materiel:
         npus=[Accelerateur(**n) for n in lent.get("npus") or []],
         a_nvidia=bool(lent.get("a_nvidia")),
         cuda_disponible=bool(lent.get("cuda_disponible")),
-        systeme=f"{platform.system()} {platform.release()}",
+        systeme=_systeme(),
     )
+
+
+def _systeme() -> str:
+    """
+    « Windows 11 », comme `platform.system()` et `platform.release()`, sans
+    leur requête WMI (40 ms à chaque démarrage de la fenêtre sous Python 3.12,
+    davantage sur un portable) : la version de Windows est déjà dans le processus.
+    """
+    if sys.platform == "win32":
+        try:
+            version = sys.getwindowsversion()
+            if version.major == 10:
+                return f"Windows {'11' if version.build >= 22000 else '10'}"
+        except Exception:
+            pass
+    return f"{platform.system()} {platform.release()}"
 
 
 def detecter(forcer: bool = False) -> Materiel:

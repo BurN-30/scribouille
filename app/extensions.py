@@ -359,17 +359,28 @@ def variante_materielle() -> str:
     On ne peut pas interroger torch pour le savoir : c'est justement ce qu'il
     s'agit d'installer. La présence de « nvidia-smi », livré avec le pilote, est
     le signal fiable, et c'est déjà celui qu'utilise `installer.py`.
+
+    Lue une fois par processus (le pilote ne change pas en route) : la
+    fenêtre la lit d'avance, pendant que le composant d'affichage s'ouvre.
     """
+    global _VARIANTE
+    if _VARIANTE:
+        return _VARIANTE
     if shutil.which("nvidia-smi") is None:
-        return "cpu"
+        _VARIANTE = "cpu"
+        return _VARIANTE
     try:
         sortie = subprocess.run(
             ["nvidia-smi"], capture_output=True, timeout=20,
             creationflags=(subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0),
         )
-        return "cuda" if sortie.returncode == 0 else "cpu"
+        _VARIANTE = "cuda" if sortie.returncode == 0 else "cpu"
     except Exception:
-        return "cpu"
+        _VARIANTE = "cpu"
+    return _VARIANTE
+
+
+_VARIANTE = ""
 
 
 def taille_go(dossier: str | Path | None = None, mesurer: bool = False) -> float:
