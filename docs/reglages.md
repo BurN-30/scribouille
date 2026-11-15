@@ -51,7 +51,7 @@ Sans `mode_avance`, les quatre clés suivantes sont ignorées.
 | Clé | Défaut | Effet |
 |---|---|---|
 | `mode_avance` | `false` | Active les clés ci-dessous. |
-| `modele_avance` | vide | Modèle imposé (nom faster-whisper, dépôt Hugging Face ou dossier). Vide : celui du preset. |
+| `modele_avance` | vide | Modèle imposé (nom faster-whisper, dépôt Hugging Face ou dossier). Vide : celui du preset. Proposé pour le français, jamais par défaut : `bofenghuang/whisper-large-v3-distil-fr-v0.2` (1,5 Go, poids CTranslate2 de l'auteur, licence MIT), 32,2 % d'erreur contre 33,3 % pour turbo sur la campagne de novembre 2026, écart dans le bruit de la mesure ; pas de version OpenVINO publiée, il calcule donc sur le processeur, même quand la puce graphique est réglée. |
 | `beam_size` | `0` | Largeur du faisceau ; `0` : celle du preset. |
 | `condition_on_previous_text` | `true` | Le modèle tient compte du texte précédent. |
 | `forcer_processeur` | `false` | CTranslate2 sur processeur, quel que soit le réglage du poste. |

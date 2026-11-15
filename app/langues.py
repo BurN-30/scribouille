@@ -126,6 +126,7 @@ _FR: dict[str, str] = {
     "modele.qualite.bonne": "Bonne",
     "modele.qualite.tres_bonne": "Très bonne",
     "modele.qualite.excellente": "Excellente",
+    "modele.qualite.francais": "Français seulement, à essayer : gain non démontré, sur le processeur",
     "reco.proposee": "Réglage conseillé pour ce poste : {resume}, environ {duree} pour une heure d'audio. Il s'applique d'un clic (Réglages, Poste, « Reconnaître ce poste »).",
     "reco.en_place": (
         "Le réglage en service est celui conseillé pour ce poste : {resume}, environ "
@@ -302,6 +303,9 @@ _FR: dict[str, str] = {
     "ov.modele_absent.titre": "Modèle sans version OpenVINO",
     "ov.modele_absent.msg": "Le modèle {modele} n'existe pas au format d'OpenVINO. Choisissez un modèle du catalogue, ou revenez au moteur habituel (Réglages, Moteur et modèles).",
     "ov.chargement": "Chargement du modèle {modele} sur {peripherique} (OpenVINO)...",
+    "ov.sans_equivalent": (
+        "{modele} n'existe pas au format d'OpenVINO : calcul sur le processeur, avec le moteur habituel."
+    ),
     "ov.repli": (
         "OpenVINO n'a pas pu travailler sur {peripherique} : la transcription continue "
         "avec le moteur habituel, sur le processeur. Le détail est dans le journal."
@@ -1567,6 +1571,7 @@ _EN: dict[str, str] = {
     "modele.qualite.bonne": "Good",
     "modele.qualite.tres_bonne": "Very good",
     "modele.qualite.excellente": "Excellent",
+    "modele.qualite.francais": "French only, to try: no proven gain, runs on the processor",
     "reco.proposee": "Recommended setting for this computer: {resume}, about {duree} per hour of audio. One click applies it (Settings, This computer, \"Recognise this computer\").",
     "reco.en_place": (
         "The setting in use is the one recommended for this computer: {resume}, about "
@@ -1736,6 +1741,7 @@ _EN: dict[str, str] = {
     "ov.modele_absent.titre": "Model without an OpenVINO version",
     "ov.modele_absent.msg": "Model {modele} does not exist in OpenVINO format. Choose a model from the catalogue, or go back to the usual engine (Settings, Engine and models).",
     "ov.chargement": "Loading model {modele} on {peripherique} (OpenVINO)...",
+    "ov.sans_equivalent": "{modele} has no OpenVINO version: computed on the CPU, with the usual engine.",
     "ov.repli": (
         "OpenVINO could not run on {peripherique}: transcription carries on with the "
         "usual engine, on the CPU. Details are in the log."

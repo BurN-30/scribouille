@@ -163,6 +163,21 @@ FICHIERS_OPENVINO = (
 MOTIFS_OPENVINO = ("*.json", "*.xml", "*.bin", "*.txt")
 
 
+#: Dépôts dont les poids CTranslate2 sont rangés dans un sous-dossier, à une
+#: révision figée (celle mesurée par la campagne) : seul ce sous-dossier est
+#: téléchargé, et c'est lui que faster-whisper ouvre.
+SOUS_DOSSIERS: dict[str, tuple[str, str]] = {
+    # Distillation française de large-v3 (bofenghuang, MIT), poids CTranslate2
+    # fournis par l'auteur : 1,5 Go.
+    "bofenghuang/whisper-large-v3-distil-fr-v0.2": ("ctranslate2", "a9e66d6b03c203f1c2730963bba9e96a80b26175"),
+}
+
+
+def sous_dossier(modele: str) -> tuple[str, str]:
+    """(sous-dossier des poids, révision) d'un dépôt, ou (« », « »)."""
+    return SOUS_DOSSIERS.get(identifiant_depot(str(modele or "")), ("", ""))
+
+
 def est_modele_openvino(modele: str) -> bool:
     """Le modèle désigne-t-il un dépôt ou un dossier au format d'OpenVINO ?"""
     texte = str(modele or "")
@@ -252,14 +267,16 @@ def _analyser_snapshot(snapshot: Path, openvino: bool = False) -> tuple[str, str
     return "complet", ""
 
 
-def _analyser_cache(dossier: Path, openvino: bool = False) -> tuple[str, str, Path | None, bool]:
+def _analyser_cache(dossier: Path, openvino: bool = False,
+                    sous: str = "") -> tuple[str, str, Path | None, bool]:
     """
     (état, motif, instantané complet, réception en cours) pour un dossier de cache.
 
     L'instantané n'est renvoyé que s'il est utilisable : c'est lui qu'on passera
     à faster-whisper pour lui éviter tout appel réseau. « Réception en cours »
     signale des fichiers « .incomplete », donc un téléchargement à REPRENDRE et
-    surtout pas un dossier à effacer.
+    surtout pas un dossier à effacer. `sous` : les poids sont dans ce
+    sous-dossier de l'instantané (`SOUS_DOSSIERS`), c'est lui qui est renvoyé.
     """
     en_cours = _fichiers_en_cours(dossier)
     if en_cours:
@@ -275,9 +292,10 @@ def _analyser_cache(dossier: Path, openvino: bool = False) -> tuple[str, str, Pa
 
     motifs: list[str] = []
     for snapshot in candidats:
-        etat, motif = _analyser_snapshot(snapshot, openvino)
+        cible = snapshot / sous if sous else snapshot
+        etat, motif = _analyser_snapshot(cible, openvino)
         if etat == "complet":
-            return "complet", "", snapshot, False
+            return "complet", "", cible, False
         motifs.append(motif)
     return "incomplet", " ; ".join(motifs), None, False
 
@@ -340,7 +358,7 @@ def etat_modele(modele: str, racine: str | Path | None = None) -> dict:
 
     dossier = dossier_cache_modele(modele, racine)
     if dossier.is_dir():
-        etat, motif, snapshot, en_cours = _analyser_cache(dossier, openvino)
+        etat, motif, snapshot, en_cours = _analyser_cache(dossier, openvino, sous_dossier(modele)[0])
         return {
             "etat": etat,
             "dossier": str(dossier),
@@ -354,7 +372,7 @@ def etat_modele(modele: str, racine: str | Path | None = None) -> dict:
     # à l'absence, on laisse faster-whisper résoudre le cache à sa façon. Un
     # modèle bien présent ne doit jamais être annoncé comme à télécharger, un
     # poste hors ligne s'en trouverait bloqué pour rien.
-    resolu = _snapshot_resolu(modele) if racine is None and not openvino else None
+    resolu = _snapshot_resolu(modele) if racine is None and not openvino and not sous_dossier(modele)[0] else None
     if resolu is not None and resolu.is_dir():
         etat, motif = _analyser_snapshot(resolu)
         return {
@@ -546,12 +564,16 @@ def _telecharger(modele: str) -> str:
     depot = identifiant_depot(modele)
     chemins.confiner_cache_huggingface()
     journal.info("Téléchargement du modèle %s depuis le dépôt %s", nom_court(modele), depot)
+    motifs = list(MOTIFS_OPENVINO if est_modele_openvino(modele) else MOTIFS_FICHIERS)
+    sous, revision = sous_dossier(modele)
+    if sous:
+        motifs = [f"{sous}/{m}" for m in motifs]
     with journal.SortieMuette("téléchargement du modèle"):
         return snapshot_download(
             depot,
             cache_dir=str(chemins.DOSSIER_MODELES),
-            allow_patterns=list(MOTIFS_OPENVINO if est_modele_openvino(modele)
-                                else MOTIFS_FICHIERS),
+            allow_patterns=motifs,
+            revision=revision or None,
             local_files_only=False,
         )
 

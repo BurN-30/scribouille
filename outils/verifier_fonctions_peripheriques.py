@@ -744,6 +744,29 @@ def essai_modele_incomplet(base: Path) -> None:
     verifier(etat["etat"] == "absent", "un modèle jamais téléchargé reste « absent »",
              str(etat))
 
+    # Distillation française : poids CTranslate2 dans le sous-dossier
+    # « ctranslate2 » du dépôt, choix explicite du mode avancé, jamais un preset.
+    from app import presets as presets_fr
+
+    francais = "bofenghuang/whisper-large-v3-distil-fr-v0.2"
+    depot_fr = _fabriquer_modele(racine, francais, None, config=False)
+    instantane = next((depot_fr / "snapshots").iterdir())
+    (instantane / "config.json").write_text("{}", encoding="utf-8")
+    (instantane / "ctranslate2").mkdir()
+    verifier(moteur.etat_modele(francais, racine)["etat"] == "incomplet",
+             "distil français : des fichiers à la racine du dépôt ne suffisent pas, les poids sont dans ctranslate2/")
+    (instantane / "ctranslate2" / "config.json").write_text("{}", encoding="utf-8")
+    (instantane / "ctranslate2" / moteur.NOM_POIDS).write_bytes(b"0" * (moteur.TAILLE_MINIMALE_POIDS + 1))
+    etat = moteur.etat_modele(francais, racine)
+    verifier(etat["etat"] == "complet" and Path(etat["snapshot"]).name == "ctranslate2",
+             "distil français complet : faster-whisper ouvre le sous-dossier ctranslate2", str(etat))
+    verifier(francais in [m["cle"] for m in presets_fr.MODELES_AVANCES]
+             and francais not in [p["modele"] for p in presets_fr.PRESETS.values()]
+             and not presets_fr.depot_openvino(francais)
+             and moteur.sous_dossier(francais)[1].startswith("a9e66d6b"),
+             "proposé en mode avancé seulement, révision figée, sans équivalent OpenVINO")
+    __import__("shutil").rmtree(depot_fr)
+
     # -- suppression, et rien d'autre --------------------------------------
     verifier(moteur.supprimer_modele(DEPOT_ABIME, racine), "le modèle incomplet est supprimé")
     verifier(not abime.exists(), "son dossier a bien disparu")
@@ -2492,8 +2515,19 @@ def essai_filet_openvino() -> None:
         filet = mo.MoteurAvecRepli(mat, "GPU")
         filet._ov, filet._ct2, filet._actif = ov, ct2, ov
         lignes: list[tuple[str, str]] = []
-        filet.charger("turbo", lambda niveau, texte: lignes.append((niveau, texte)))
+        filet.charger(presets.MODELE_TURBO, lambda niveau, texte: lignes.append((niveau, texte)))
         return filet, lignes
+
+    # Modèle sans version OpenVINO (distillation française) : le moteur
+    # habituel d'emblée, dit, sans compter de panne d'OpenVINO.
+    ov_seul, ct2_seul = FauxMoteur("ov"), FauxMoteur("ct2")
+    filet_fr = mo.MoteurAvecRepli(mat, "GPU")
+    filet_fr._ov, filet_fr._ct2, filet_fr._actif = ov_seul, ct2_seul, ov_seul
+    lignes_fr: list[tuple[str, str]] = []
+    filet_fr.charger("bofenghuang/whisper-large-v3-distil-fr-v0.2", lambda n, t: lignes_fr.append((n, t)))
+    verifier(filet_fr._actif is ct2_seul and not filet_fr.incidents
+             and any("OpenVINO" in t for _n, t in lignes_fr),
+             "modèle sans version OpenVINO : moteur habituel d'emblée, dit, aucune panne notée", str(lignes_fr))
 
     def jouer(filet):
         sauves: list = []

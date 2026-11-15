@@ -871,6 +871,15 @@ class MoteurAvecRepli:
     def charger(self, modele: str, signaler: Callable[[str, str], None] | None = None) -> None:
         self._modele = modele
         self._signaler = signaler
+        if self._actif is not self._ct2 and not (presets.depot_openvino(modele)
+                                                  or moteur.est_modele_openvino(modele)):
+            # Modèle choisi sans version OpenVINO publiée (distillation
+            # française du mode avancé) : le moteur habituel, d'emblée, et
+            # c'est dit ; ce n'est pas une panne d'OpenVINO.
+            journal.info("Pas de version OpenVINO de %s : moteur habituel sur le processeur", modele)
+            if signaler:
+                signaler("attention", langues.t("ov.sans_equivalent", modele=moteur.nom_court(modele)))
+            self._actif = self._ct2
         if self._actif is self._ct2:
             self._ct2.charger(modele, signaler)
             return

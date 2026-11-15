@@ -89,6 +89,12 @@ MODELES_AVANCES: list[dict] = [
      "qualite_cle": "modele.qualite.excellente"},
     {"cle": MODELE_TURBO, "nom": "large-v3-turbo", "octets": int(1.6 * 1024 ** 3),
      "facteur_cpu": 0.35, "qualite_cle": "modele.qualite.tres_bonne"},
+    # Distillation française de large-v3 (bofenghuang, MIT) : choix explicite,
+    # jamais par défaut. Campagne de novembre 2026 : 32,2 % d'erreur contre
+    # 33,3 % pour turbo, écart dans le bruit de la mesure (gain non démontré).
+    # Pas de version OpenVINO publiée : calcul sur le processeur, moteur habituel.
+    {"cle": "bofenghuang/whisper-large-v3-distil-fr-v0.2", "nom": "large-v3 distil français",
+     "octets": 1_512_927_906, "facteur_cpu": 0.35, "qualite_cle": "modele.qualite.francais"},
 ]
 
 # Modèles au format d'OpenVINO (moteur Intel, en option) : dépôt converti en
