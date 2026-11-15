@@ -78,7 +78,7 @@ REGLAGES: dict[str, str] = {
     "beam_size": "Largeur du faisceau (mode avancé) ; 0 : celle du preset.",
     "condition_on_previous_text": "Le modèle tient compte du texte précédent (mode avancé).",
     "forcer_processeur": "CTranslate2 sur processeur, quoi que dise le réglage du poste (mode avancé).",
-    "rythme": "vitesse, equilibre ou discret : part du poste laissée à l'utilisateur.",
+    "rythme": "vitesse, equilibre ou discret : part du poste laissée à l'utilisateur (vide : selon le moteur).",
     "rythme_auto": "Passer seul en vitesse maximale quand le poste est inoccupé.",
     "moteur": "Réglage du poste : auto, ctranslate2 ou openvino (pseudo-clé de reglage_machine).",
     "peripherique": "Périphérique d'OpenVINO : CPU, GPU ou NPU (pseudo-clé de reglage_machine).",
@@ -812,7 +812,8 @@ def _config_de_commande(options, materiel_poste) -> dict:
         raise Echec("arguments", f"--locuteurs : auto, non ou un nombre (pas « {locuteurs} »)", ARGUMENTS)
     if getattr(options, "rythme", None):
         if options.rythme == "auto":
-            choisi = rythme_module.normaliser(config.get("rythme"))
+            # Le rythme du poste occupé : celui choisi, sinon équilibré.
+            choisi = config.get("rythme") if config.get("rythme") in rythme_module.RYTHMES else "equilibre"
             config["rythme"] = choisi if choisi != "vitesse" else "equilibre"
             config["rythme_auto"] = True
         else:
@@ -943,10 +944,16 @@ def _executer_file(sortie: Sortie, elements: list, config: dict, telecharger: bo
         progression=progression, termine=termine, journal_ui=journal_ui,
         file_terminee=lambda d: (bilan.update(d), fini.set()),
         reprise=lambda i, c: resultats[i].update({"reprise": c}))
+    # Rythme et durée tels que le moteur les prendra : réglage du poste posé
+    # sur une copie du matériel (le moteur le pose pour de bon de son côté).
+    from . import reglage_machine, rythme as rythme_module
+
+    essai = copy.copy(mat)
+    reglage_machine.appliquer_au_materiel(config, essai)
+    rythme_retenu = rythme_module.retenu(config, essai)
     sortie.evenement("debut", fichiers=[e.chemin for e in elements], version=VERSION,
-                     preset=config.get("preset"), rythme=config.get("rythme"),
-                     pour_une_heure=presets.pour_une_heure(config.get("preset", "qualite"), mat,
-                                                           config.get("rythme") or "vitesse"))
+                     preset=config.get("preset"), rythme=rythme_retenu,
+                     pour_une_heure=presets.pour_une_heure(config.get("preset", "qualite"), essai, rythme_retenu))
     interrompu = False
     file.demarrer(config, rappels)
     try:
@@ -1367,7 +1374,7 @@ def _convertir(cle: str, texte: str, defaut):
 def _valider(cle: str, valeur) -> None:
     from . import presets, rythme
 
-    fermes = {"preset": tuple(presets.PRESETS), "rythme": rythme.RYTHMES,
+    fermes = {"preset": tuple(presets.PRESETS), "rythme": ("", *rythme.RYTHMES),
               "langue_interface": ("", *langues.LANGUES), "theme": ("auto", "clair", "sombre"),
               "langue": (*LANGUES_PAROLE, "auto")}
     if cle in fermes and valeur not in fermes[cle]:
@@ -1477,7 +1484,7 @@ def cmd_diagnostic(options, sortie: Sortie) -> int:
     import importlib.util
 
     from . import config as config_module, diarisation, materiel, moteur, moteur_openvino, presets, reglage_machine
-    from . import vocabulaire
+    from . import rythme as rythme_module, vocabulaire
 
     if options.materiel:
         materiel.rafraichir()
@@ -1522,9 +1529,11 @@ def cmd_diagnostic(options, sortie: Sortie) -> int:
         },
         "reglage": {"preset": config.get("preset"), "moteur": mat.moteur,
                     "peripherique": mat.peripherique_openvino or mat.peripherique,
-                    "modele": modele, "rythme": config.get("rythme"), "rythme_auto": bool(config.get("rythme_auto")),
+                    "modele": modele, "rythme": rythme_module.retenu(config, mat),
+                    "rythme_reglage": config.get("rythme") or "", "rythme_auto": bool(config.get("rythme_auto")),
                     "indisponible": bool(effet.get("indisponible")), "plantage": effet.get("plantage") or ""},
-        "pour_une_heure": presets.pour_une_heure(config.get("preset", "qualite"), mat, config.get("rythme") or "vitesse"),
+        "pour_une_heure": presets.pour_une_heure(config.get("preset", "qualite"), mat,
+                                                 rythme_module.retenu(config, mat)),
         "modeles": modeles,
         "locuteurs": {"demandes": bool(config.get("diarisation")), "disponibles": diarisation.disponible(),
                       "indisponibilite": diarisation.indisponibilite()},
@@ -1538,7 +1547,8 @@ def cmd_diagnostic(options, sortie: Sortie) -> int:
               f"  Modèles   : {resultat['modeles_dossier']}",
               f"  Matériel  : {mat.resume()}",
               f"  Réglage   : {config.get('preset')}, moteur {mat.moteur} ({resultat['reglage']['peripherique']}), "
-              f"rythme {config.get('rythme')}{' auto' if config.get('rythme_auto') else ''}",
+              f"rythme {rythme_module.retenu(config, mat)}"
+              f"{'' if config.get('rythme') else ' (selon le moteur)'}{' auto' if config.get('rythme_auto') else ''}",
               f"  Modèle    : {moteur.nom_court(modele)} ({etat_modele['etat']})",
               f"  Une heure d'audio : environ {resultat['pour_une_heure']}",
               f"  Locuteurs : {'disponibles' if resultat['locuteurs']['disponibles'] else 'non installés'}",

@@ -28,7 +28,7 @@ import copy
 from dataclasses import dataclass, field
 from typing import Callable
 
-from . import journal, langues, presets
+from . import journal, langues, presets, rythme
 from .materiel import Materiel
 
 #: Version minimale du pilote graphique Intel sous Windows pour le greffon GPU
@@ -36,8 +36,18 @@ from .materiel import Materiel
 #: Graphics (GPU) with OpenVINO », docs.openvino.ai, version 2026).
 PILOTE_INTEL_MIN = (30, 0, 100, 9955)
 
-#: Rythme que la proposition pose, avec l'adaptation automatique.
+#: Rythme que la proposition pose sur le processeur, avec l'adaptation
+#: automatique. Quand la puce graphique calcule, la vitesse maximale, sans
+#: adaptation : une heure en 5 min 06 sur un Core Ultra 5 225U avec 92 % du
+#: processeur libre, les rythmes plus lents n'y gagnent presque rien (voir
+#: `rythme.defaut_pour`).
 RYTHME_PROPOSE = "equilibre"
+
+
+def rythme_propose(choix: dict) -> tuple[str, bool]:
+    """Rythme et adaptation automatique proposés pour ce moteur."""
+    sur_puce = choix.get("moteur") == "openvino" and str(choix.get("peripherique") or "CPU").upper() != "CPU"
+    return ("vitesse", False) if sur_puce else (RYTHME_PROPOSE, True)
 
 
 @dataclass
@@ -219,7 +229,8 @@ def proposer(mat: Materiel, p: Profil, verdict: dict | None = None, conseil: dic
     essai.peripherique_openvino = choix["peripherique"] if choix["moteur"] == "openvino" else ""
     # Le même calcul que partout ailleurs, rythme proposé compris : une fois
     # appliquée, la proposition annonce ce que diront les cartes des presets.
-    une_heure = presets.pour_une_heure(choix["preset"], essai, RYTHME_PROPOSE)
+    rythme_choix, auto_choix = rythme_propose(choix)
+    une_heure = presets.pour_une_heure(choix["preset"], essai, rythme_choix)
 
     if choix["moteur"] == "openvino":
         from . import moteur_openvino
@@ -228,7 +239,7 @@ def proposer(mat: Materiel, p: Profil, verdict: dict | None = None, conseil: dic
             choix["peripherique"] or "CPU"))
     else:
         moteur_lisible = langues.t("adapt.moteur_cuda" if p.cuda else "adapt.moteur_ct2")
-    raison = _raison(choix, mat, essai)
+    raison = _raison(choix, mat, essai, rythme_choix)
     phrase = langues.t("adapt.phrase", preset=presets.nom_preset(choix["preset"]),
                        moteur=moteur_lisible, duree=une_heure, raison=raison)
     if telechargement:
@@ -237,11 +248,11 @@ def proposer(mat: Materiel, p: Profil, verdict: dict | None = None, conseil: dic
             "une_heure": une_heure, "phrase": phrase, "notes": notes,
             "resume": langues.t("adapt.resume", preset=presets.nom_preset(choix["preset"]),
                                 moteur=moteur_lisible),
-            "rythme": RYTHME_PROPOSE, "rythme_auto": True,
+            "rythme": rythme_choix, "rythme_auto": auto_choix,
             "action": "installer_openvino" if installer_ov else ""}
 
 
-def _raison(choix: dict, mat: Materiel, essai: Materiel) -> str:
+def _raison(choix: dict, mat: Materiel, essai: Materiel, rythme_choix: str = RYTHME_PROPOSE) -> str:
     """
     Pourquoi ce réglage, en une proposition. Quand le moteur Intel est proposé,
     la comparaison de vitesse vient des durées annoncées SUR CE POSTE (celles
@@ -256,8 +267,8 @@ def _raison(choix: dict, mat: Materiel, essai: Materiel) -> str:
     # Sur la puce, la référence est la qualité maximale sur le processeur ; sur
     # le processeur, le même preset avec le moteur habituel.
     preset_habituel = "qualite" if choix["regle"] == "puce_intel" else choix["preset"]
-    secondes_ov = presets.estimer_annonce(3600, choix["preset"], essai, RYTHME_PROPOSE)
-    secondes_habituel = presets.estimer_annonce(3600, preset_habituel, habituel, RYTHME_PROPOSE)
+    secondes_ov = presets.estimer_annonce(3600, choix["preset"], essai, rythme_choix)
+    secondes_habituel = presets.estimer_annonce(3600, preset_habituel, habituel, rythme_choix)
     plus_rapide = 0 < secondes_ov < 0.9 * secondes_habituel
     cle = f"adapt.raison.{choix['regle']}" + ("" if plus_rapide else "_juste")
     return langues.t(cle, habituel=presets.formater_duree(secondes_habituel),
@@ -274,7 +285,7 @@ def deja_en_place(proposition: dict, config: dict, mat: Materiel) -> bool:
     return (moteur_actuel == proposition["moteur"]
             and peripherique == str(proposition.get("peripherique") or "").upper()
             and config.get("preset") == proposition["preset"]
-            and config.get("rythme", "vitesse") == proposition["rythme"]
+            and rythme.retenu(config, mat) == proposition["rythme"]
             and bool(config.get("rythme_auto")) == bool(proposition["rythme_auto"]))
 
 

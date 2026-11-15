@@ -159,13 +159,13 @@ On Intel integrated graphics, OpenVINO only decodes greedily (beam 1): this is a
 
 On first start, and each time you click **Recognise this computer** (**Settings, This computer**), the application looks at the computer (processor and core families, memory, Intel graphics chip seen or not by OpenVINO, NVIDIA card, NPU, battery or mains, Windows power mode) and proposes a setting, explained in one sentence, with the expected duration for an hour of meeting. If a campaign or a benchmark was run on the computer, its result comes before the table; if it no longer fits (graphics chip missing, broken driver, OpenVINO removed), the proposal says so and starts again from the hardware. Nothing changes without **Apply**, nothing is downloaded or installed on its own: a missing model is announced with its size and only downloaded when a transcription starts; OpenVINO keeps its own install button. From the command line: `scribouille.com --reconnaitre`, then `--reconnaitre --appliquer`.
 
-The table, read from top to bottom: NVIDIA card, Highest quality on the card; Intel graphics chip seen by OpenVINO, Fast on the chip (an hour in about 7 minutes on a Core Ultra 5, as accurate as Highest quality on the processor according to the campaign on the test laptop); Intel chip present but unusable, Fast with OpenVINO on the processor; under 10 GB of memory, Fast; processor only, OpenVINO if installed, otherwise Fast on a modest processor (under 12 threads or U series) and Highest quality on a desktop processor. The proposed pace is **Balanced, adapting automatically**.
+The table, read from top to bottom: NVIDIA card, Highest quality on the card; Intel graphics chip seen by OpenVINO, Fast on the chip (an hour in about 7 minutes on a Core Ultra 5, as accurate as Highest quality on the processor according to the campaign on the test laptop); Intel chip present but unusable, Fast with OpenVINO on the processor; under 10 GB of memory, Fast; processor only, OpenVINO if installed, otherwise Fast on a modest processor (under 12 threads or U series) and Highest quality on a desktop processor. The proposed pace is **Maximum speed** when the graphics chip does the work (it leaves the processor free: one hour in 5 min 06 with 92 % of the processor free on a Core Ultra 5 225U, slower paces gain almost nothing there), **Balanced, adapting automatically** on the processor.
 
 ### Working during a transcription
 
 The **While transcribing** section of the settings bounds what the transcription takes from the computer:
 
-| | Maximum speed (default) | Balanced | Low impact |
+| | Maximum speed (default on the graphics chip or card) | Balanced (default on the processor) | Low impact |
 |---|---|---|---|
 | Compute threads | all those of the computer's setting | about three quarters, two logical threads left free | half, placed on the efficient cores of a hybrid processor |
 | Passage batches | those of the preset | 4 at most | one passage at a time (less memory) |

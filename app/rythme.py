@@ -6,11 +6,15 @@ Trois positions, réglées par l'utilisateur dans le panneau des réglages :
   « vitesse »    Vitesse maximale. Le comportement d'avant la 3.0, à l'octet
                  près : tous les fils du réglage automatique ou du banc, lots du
                  preset, priorité normale, bridage d'énergie de Windows levé
-                 (HighQoS, voir `app/energie.py`). C'est la valeur par défaut :
-                 un poste déjà installé ne voit aucun changement.
+                 (HighQoS, voir `app/energie.py`). Par défaut quand la puce
+                 graphique (OpenVINO) ou une carte NVIDIA fait le calcul : une
+                 heure d'audio en 5 min 06 sur la puce d'un Core Ultra 5 225U,
+                 92 % du processeur restant libre, et les rythmes plus lents n'y
+                 gagnent presque rien.
   « equilibre »  Équilibré. Environ trois quarts des fils, deux processeurs
                  logiques au moins laissés libres, lots de 4 au plus, priorité
                  « inférieure à la normale », Windows décide de la fréquence.
+                 Par défaut sur le processeur seul.
   « discret »    Discret. La moitié des fils, rangés sur les cœurs efficaces des
                  processeurs hybrides, un passage à la fois (moins de mémoire),
                  priorité basse, « mode efficacité » de Windows (EcoQoS), lectures
@@ -97,6 +101,27 @@ MARGE_MEMOIRE_GO = 1.5
 
 def normaliser(rythme: str | None) -> str:
     return rythme if rythme in RYTHMES else DEFAUT
+
+
+def calcul_sur_puce(mat: Materiel, config: dict | None = None) -> bool:
+    """La puce graphique (OpenVINO GPU ou NPU) ou une carte NVIDIA fait-elle le calcul ?"""
+    config = config or {}
+    if config.get("mode_avance") and config.get("forcer_processeur"):
+        return False
+    if getattr(mat, "moteur", "") == "openvino":
+        return str(getattr(mat, "peripherique_openvino", "") or "CPU").upper() != "CPU"
+    return bool(getattr(mat, "cuda_disponible", False))
+
+
+def defaut_pour(mat: Materiel, config: dict | None = None) -> str:
+    """Rythme tant que l'utilisateur n'en a choisi aucun : voir l'en-tête du module."""
+    return "vitesse" if calcul_sur_puce(mat, config) else "equilibre"
+
+
+def retenu(config: dict | None, mat: Materiel) -> str:
+    """Le rythme en service : celui choisi, ou, réglage vide, celui du moteur."""
+    choisi = (config or {}).get("rythme")
+    return choisi if choisi in RYTHMES else defaut_pour(mat, config)
 
 
 # ---------------------------------------------------------------------------

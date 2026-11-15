@@ -637,7 +637,7 @@ class Passerelle:
         # Une seule décision pour tout l'écran : la proposition du poste pilote
         # la pastille « conseillé ici », la fiche du matériel et l'encart, et
         # toutes les durées tiennent compte du rythme choisi, une seule fois.
-        rythme_choisi = rythme.normaliser(self.config.get("rythme"))
+        rythme_choisi = rythme.retenu(self.config, self.materiel)
         proposition = self._proposition_du_poste()
 
         return {
@@ -707,7 +707,7 @@ class Passerelle:
 
     def _etat_materiel(self) -> dict:
         """Ce qui, à l'écran, dépend du matériel : renvoyé quand il change."""
-        rythme_choisi = rythme.normaliser(self.config.get("rythme"))
+        rythme_choisi = rythme.retenu(self.config, self.materiel)
         proposition = self._proposition_du_poste()
         return {
             "materiel": self.materiel.en_dict(),
@@ -774,7 +774,7 @@ class Passerelle:
 
     def etat_rythme(self) -> dict:
         """Rythme choisi, adaptation, et durée pour une heure dans chaque rythme."""
-        choisi = rythme.normaliser(self.config.get("rythme"))
+        choisi = rythme.retenu(self.config, self.materiel)
         preset_choisi = self.config.get("preset", "qualite")
         courant = __import__("app.energie", fromlist=["alimentation"]).alimentation()
         return {
@@ -1872,7 +1872,7 @@ class Passerelle:
         # Même calcul que le décompte de départ de la file (`app/traitement.py`),
         # taille des lots comprise : la ligne et le décompte disent la même durée.
         return presets.formater_duree(presets.estimer_annonce(
-            duree_secs, cle_preset, self.materiel, self.config.get("rythme"),
+            duree_secs, cle_preset, self.materiel, rythme.retenu(self.config, self.materiel),
             diarisation.effective(diarisation_active), modele_avance or "", beam=beam,
             lot=presets.taille_lot(cle_preset, self.materiel)))
 

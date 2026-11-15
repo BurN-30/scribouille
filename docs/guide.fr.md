@@ -159,13 +159,13 @@ Sur la puce graphique Intel, OpenVINO ne décode qu'en glouton (faisceau 1) : c'
 
 Au premier lancement, et à chaque clic sur **Reconnaître ce poste** (**Réglages, Poste**), l'application regarde le poste (processeur et familles de cœurs, mémoire, puce graphique Intel vue ou non par OpenVINO, carte NVIDIA, NPU, batterie ou secteur, mode d'alimentation de Windows) et propose un réglage, expliqué en une phrase, avec la durée attendue pour une heure de réunion. Si une campagne ou un banc d'essai a été mené sur le poste, son résultat passe devant la table ; s'il ne tient plus (puce graphique absente, pilote en panne, OpenVINO retiré), la proposition le dit et repart du matériel. Rien ne change sans **Appliquer**, rien n'est téléchargé ni installé d'office : un modèle manquant est annoncé avec sa taille et ne descend qu'au lancement d'une transcription ; OpenVINO reste à installer par son propre bouton. En ligne de commande : `scribouille.com --reconnaitre`, puis `--reconnaitre --appliquer`.
 
-La table, lue de haut en bas : carte NVIDIA, Qualité maximale sur la carte ; puce graphique Intel vue par OpenVINO, Rapide sur la puce (une heure en 7 minutes environ sur un Core Ultra 5, aussi juste que Qualité maximale sur le processeur d'après la campagne du PC de test) ; puce Intel présente mais inutilisable, Rapide avec OpenVINO sur le processeur ; moins de 10 Go de mémoire, Rapide ; processeur seul, OpenVINO s'il est installé, sinon Rapide sur un processeur modeste (moins de 12 fils ou série U) et Qualité maximale sur un processeur de bureau. Le rythme proposé est **Équilibré, qui s'adapte tout seul**.
+La table, lue de haut en bas : carte NVIDIA, Qualité maximale sur la carte ; puce graphique Intel vue par OpenVINO, Rapide sur la puce (une heure en 7 minutes environ sur un Core Ultra 5, aussi juste que Qualité maximale sur le processeur d'après la campagne du PC de test) ; puce Intel présente mais inutilisable, Rapide avec OpenVINO sur le processeur ; moins de 10 Go de mémoire, Rapide ; processeur seul, OpenVINO s'il est installé, sinon Rapide sur un processeur modeste (moins de 12 fils ou série U) et Qualité maximale sur un processeur de bureau. Le rythme proposé est **Vitesse maximale** quand la puce graphique calcule (elle laisse le processeur libre : une heure en 5 min 06 avec 92 % du processeur libre sur un Core Ultra 5 225U, les rythmes plus lents n'y gagnent presque rien), **Équilibré, qui s'adapte tout seul** sur le processeur.
 
 ### Travailler pendant une transcription
 
 La section **Pendant la transcription** des réglages borne ce que la transcription prend au poste :
 
-| | Vitesse maximale (défaut) | Équilibré | Discret |
+| | Vitesse maximale (défaut sur la puce ou une carte graphique) | Équilibré (défaut sur le processeur) | Discret |
 |---|---|---|---|
 | Fils de calcul | tous ceux du réglage du poste | environ les trois quarts, deux fils logiques laissés libres | la moitié, rangés sur les cœurs efficaces d'un processeur hybride |
 | Lots de passages | ceux du preset | 4 au plus | un passage à la fois (moins de mémoire) |

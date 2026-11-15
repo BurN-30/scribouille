@@ -2725,8 +2725,8 @@ def essai_adaptation(base: Path) -> None:
     absent = lambda depot: "absent"  # noqa: E731
     p = adaptation.proposer(mat, travail, None, None, present)
     verifier(p["source"] == "table" and p["moteur"] == "openvino" and p["peripherique"] == "GPU"
-             and not p["telechargement"] and p["rythme"] == "equilibre" and p["rythme_auto"],
-             "proposition : table, puce Intel, rythme équilibré qui s'adapte", str(p))
+             and not p["telechargement"] and p["rythme"] == "vitesse" and not p["rythme_auto"],
+             "proposition : table, puce Intel, vitesse maximale (la puce laisse le processeur libre)", str(p))
     # La durée est celle annoncée sur ce poste, et aucune autre durée fixe ne
     # vient la contredire (l'ancienne raison disait « 7 minutes » à côté).
     verifier(p["une_heure"] in p["phrase"] and "Rapide" in p["phrase"] and "7 minutes" not in p["phrase"],
@@ -2744,6 +2744,8 @@ def essai_adaptation(base: Path) -> None:
     verifier(p["source"] == "table" and p["peripherique"] == "CPU"
              and any("ne tient plus" in n for n in p["notes"]),
              "puce disparue : la campagne est écartée, et la proposition le dit", str(p["notes"]))
+    verifier(p["rythme"] == "equilibre" and p["rythme_auto"],
+             "sur le processeur : rythme équilibré qui s'adapte", str(p))
     p = adaptation.proposer(mat, P(**{**travail.__dict__, "openvino_installe": False, "openvino_puce": False}),
                             None, {"moteur": "openvino", "peripherique": "GPU"}, present)
     verifier(p["action"] == "installer_openvino" and any("90 Mo" in n for n in p["notes"])
@@ -2765,7 +2767,7 @@ def essai_adaptation(base: Path) -> None:
         p = adaptation.proposer(mat, travail, None, None, present)
         verifier(not adaptation.deja_en_place(p, config, mat), "avant application : rien n'a changé")
         adaptation.appliquer(config, mat, p)
-        verifier(config["preset"] == "rapide" and config["rythme"] == "equilibre" and config["rythme_auto"]
+        verifier(config["preset"] == "rapide" and config["rythme"] == "vitesse" and not config["rythme_auto"]
                  and mat.cle_calcul == "openvino-gpu"
                  and reglage_machine.lire(config, mat).get("source") == "table",
                  "appliquer : preset, rythme et moteur écrits, signés pour ce poste")
@@ -2818,7 +2820,25 @@ def essai_rythmes() -> None:
     mono = materiel.Materiel(coeurs_physiques=1, coeurs_logiques=1)
     verifier(all(rythme.bornes(n, mono).fils == 1 for n in rythme.RYTHMES), "jamais moins d'un fil")
     verifier(rythme.normaliser("inconnu") == "vitesse" and rythme.bornes("", bureau).rythme == "vitesse",
-             "valeur inconnue : vitesse maximale, le défaut")
+             "valeur inconnue passée aux bornes : vitesse maximale")
+    # Rythme par défaut selon le moteur (réglage vide) : vitesse maximale quand
+    # la puce ou une carte graphique calcule, équilibré sur le processeur seul.
+    sur_puce = materiel.Materiel(coeurs_physiques=8, coeurs_logiques=16, moteur="openvino",
+                                 peripherique_openvino="GPU")
+    ov_cpu = materiel.Materiel(coeurs_physiques=8, coeurs_logiques=16, moteur="openvino",
+                               peripherique_openvino="CPU")
+    cuda = materiel.Materiel(coeurs_physiques=8, coeurs_logiques=16, cuda_disponible=True)
+    verifier([rythme.retenu({"rythme": ""}, m) for m in (sur_puce, ov_cpu, bureau, cuda)]
+             == ["vitesse", "equilibre", "equilibre", "vitesse"]
+             and rythme.retenu({}, sur_puce) == "vitesse"
+             and rythme.retenu({"rythme": "", "mode_avance": True, "forcer_processeur": True}, cuda) == "equilibre",
+             "réglage vide : vitesse sur la puce ou une carte NVIDIA, équilibré sur le processeur")
+    verifier(rythme.retenu({"rythme": "discret"}, sur_puce) == "discret"
+             and rythme.retenu({"rythme": "vitesse"}, bureau) == "vitesse",
+             "un rythme choisi l'emporte toujours sur celui du moteur")
+    from app import config as config_rythme
+
+    verifier(config_rythme.DEFAUTS["rythme"] == "", "défaut des réglages : vide, selon le moteur")
     auto = rythme.bornes_chargement("discret", True, poste)
     verifier(auto.fils == 10 and auto.lot_max is None and auto.ov_puce.get("GPU_QUEUE_PRIORITY") == "LOW"
              and "GPU_QUEUE_THROTTLE" not in auto.ov_puce,

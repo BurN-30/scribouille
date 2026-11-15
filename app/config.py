@@ -43,7 +43,10 @@ DEFAUTS: dict = {
     "condition_on_previous_text": True,
     "forcer_processeur": False,
     "reglage_machine": {},          # réglage mesuré par le banc d'essai, voir app/reglage_machine.py
-    "rythme": "vitesse",            # vitesse | equilibre | discret, voir app/rythme.py
+    # vitesse | equilibre | discret ; vide : selon le moteur (vitesse maximale
+    # quand la puce ou la carte graphique calcule, équilibré sur le processeur),
+    # voir `rythme.retenu`.
+    "rythme": "",
     "rythme_auto": False,           # s'adapter tout seul à l'usage du poste
     "proposition_ecartee": "",      # signature du poste dont la proposition a été écartée
     "theme": "auto",                # auto | clair | sombre

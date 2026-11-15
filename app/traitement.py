@@ -429,7 +429,8 @@ class FileTraitement:
         # Rythme « je travaille en même temps » (voir app/rythme.py). En vitesse
         # maximale sans adaptation, la file se comporte exactement comme avant.
         # Il s'applique au processus qui calcule : le moteur, jamais la fenêtre.
-        choisi = rythme.normaliser(config.get("rythme"))
+        # Réglage vide : celui du moteur retenu juste au-dessus.
+        choisi = rythme.retenu(config, self.materiel)
         regulateur = rythme.Regulateur(
             self.materiel, choisi, bool(config.get("rythme_auto")),
             sur_bascule=lambda nouveau, raison: journal.info(

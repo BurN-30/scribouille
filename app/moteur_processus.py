@@ -215,13 +215,25 @@ class Moteur:
 
         self.config = dict(config or {})
         langues.definir(self.config.get("langue_interface") or langues.detecter_systeme())
-        # Rythme équilibré ou discret : les fils de CTranslate2 attendent sans
-        # tourner à vide. OpenMP lit la variable une seule fois, au premier
-        # calcul : le moteur est un processus neuf pour chaque file.
-        if rythme.normaliser(self.config.get("rythme")) != "vitesse":
-            os.environ.setdefault("OMP_WAIT_POLICY", "PASSIVE")
         moteur.TELECHARGEMENT_PERMIS = bool(options.get("telecharger", True))
         mat, _provisoire = materiel.detecter_au_demarrage()
+        # Rythme équilibré ou discret : les fils de CTranslate2 attendent sans
+        # tourner à vide. OpenMP lit la variable une seule fois, au premier
+        # calcul : le moteur est un processus neuf pour chaque file. Réglage
+        # vide : le rythme du moteur retenu (sur une copie du matériel, que
+        # `ouvrir_file` règle ensuite pour de bon).
+        if self.config.get("rythme") in rythme.RYTHMES:
+            choisi = self.config["rythme"]
+        else:
+            import copy
+
+            from . import reglage_machine
+
+            essai = copy.copy(mat)
+            reglage_machine.appliquer_au_materiel(self.config, essai)
+            choisi = rythme.retenu(self.config, essai)
+        if choisi != "vitesse":
+            os.environ.setdefault("OMP_WAIT_POLICY", "PASSIVE")
         self.file = traitement.FileTraitement(mat)
         self.contexte = self.file.ouvrir_file(self.config)
         self.contexte["instance"] = InstanceSurveillee(self.contexte["instance"], self.canal)

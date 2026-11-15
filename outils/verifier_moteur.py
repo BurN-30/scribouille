@@ -772,7 +772,7 @@ def essai_ligne_de_commande() -> None:
     verifier(code == 2, "valeur hors liste : refusée, code 2")
     code, lignes, _ = cli("reglages", "defaut", "rythme", "--json")
     _code, lignes2, _ = cli("reglages", "lire", "rythme", "--json")
-    verifier(code == 0 and lignes2[-1]["donnees"]["valeur"] == "vitesse", "reglages defaut")
+    verifier(code == 0 and lignes2[-1]["donnees"]["valeur"] == "", "reglages defaut (rythme vide : selon le moteur)")
     code, lignes, _ = cli("reglages", "--json")
     cles = {r["cle"] for r in lignes[-1]["donnees"]["reglages"]}
     verifier({"preset", "rythme", "moteur", "dossier_modeles", "formats"} <= cles, "reglages : liste complète")
