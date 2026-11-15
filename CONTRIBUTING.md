@@ -77,7 +77,7 @@ variables are identical between the two languages, and that no em dash slipped i
 
 ## Style
 
-- French in the code: module names, comments and log messages. The logs in `logs/` are
+- French in the code: module names, comments and log messages. The logs in `logs/scribouille/` are
   written in French on purpose, they are a maintainer tool.
 - Short modules, one concern each, as in the existing `app/` layout.
 - No new heavy dependency without discussing it in an issue first. The whole point of the

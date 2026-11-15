@@ -199,6 +199,54 @@ Après l'essai sur le PC du travail (Core Ultra 5 225U, WhiScribe 2.3.3 encore i
   (ou `erreur`, `blocage`) simule l'échec de la puce au moment de l'ouvrir ;
   sans la variable, rien ne change.
 
+Après le second essai sur le PC du travail
+
+- **Journaux de la 2.x effacés à l'ouverture** : la fenêtre ne gardait que les
+  30 derniers fichiers de `logs\`, ceux d'une WhiScribe 2.x qui partage le
+  dossier compris (11 journaux du 12/11 effacés au premier lancement). Les
+  journaux de la 3.x vont désormais dans `logs\scribouille\`, le seul dossier
+  qu'elle purge, et doucement : rien de moins d'un mois, toujours les 50
+  derniers. Revue de tous les effacements : tant qu'une 2.x installée lit le
+  même dossier, ses reprises ne sont plus ni proposées ni prises pour des
+  orphelines (les états de la 3.x sont marqués, et leurs clés ne peuvent plus
+  tomber sur celles de la 2.x), ce qu'elle écrit aussi (réglages, glossaire,
+  jeton, modèles, extensions, caches) sort des postes de `espace` et
+  `effacer` (montré à part, jamais effacé), et le retrait des extensions est
+  refusé. Rapport d'endurance : la ligne « journal du processus tombé
+  introuvable » venait de là.
+- **Modèle annoncé sur la puce** : `etat` donnait le modèle du catalogue
+  (`deepdml/faster-whisper-large-v3-turbo-ct2`) pour une transcription sur
+  OpenVINO ; il donne le modèle chargé (`OpenVINO/whisper-large-v3-turbo-int8-ov`),
+  le calcul (`openvino-gpu`) et le modèle demandé. Les mesures de durée sont
+  rangées sous le modèle OpenVINO ; celles rangées sous l'ancienne clé restent
+  lues, puis reprises sous la nouvelle.
+- **Une coupure ne laisse plus d'« orpheline »** : le verrou d'une
+  transcription reprenable n'est plus compté à part (`verrou_mort`).
+- **Puce suspendue qui resservait** : le superviseur notait le plantage sur
+  « OPENVINO-GPU » (le nom du calcul), que le réglage « GPU » ne reconnaissait
+  pas ; la puce restait dite suspendue mais servait encore. Les noms sont
+  ramenés à « GPU » (témoins déjà écrits compris). `--moteur openvino
+  --peripherique GPU` nommés dans la commande valent demande de réessai, sous
+  garde, et c'est dit sur la sortie, en JSON et au journal ; le réglage
+  automatique, lui, ne la retente pas.
+- **Syntaxe d'avant la 3.0 dans les textes** : `materiel proposer` finissait
+  par « scribouille.com --reconnaitre --appliquer » ; de même le rapport de
+  campagne, les usages de `mesurer`, les guides. Tout donne la commande
+  d'aujourd'hui (les anciennes formes marchent toujours).
+- **Rythme proposé** : « qui s'adapte tout seul » était annoncé, et appliqué
+  sans adaptation, sur la puce graphique ; la phrase dit maintenant « fixe »
+  là, « qui s'adapte tout seul » sur le processeur (fenêtre comprise).
+- **Séparation des voix cochée, non installée** : dite une fois pour de bon,
+  plus aucun avis ensuite (ni en JSON) ; `diagnostic` le garde, et
+  l'événement `debut` porte `locuteurs`.
+- **« Données gardées dans … »** : dans `diagnostic` et `verifier`, là où on
+  le cherche (et `donnees_raison` en JSON).
+- **Une seule ligne « Chargement du modèle »** quand l'ouverture sur la puce
+  échoue : le second essai ne la redit pas, et celle du repli dit qu'on
+  repart sur le processeur.
+- **Épreuve d'endurance** : le diagnostic de l'échec du 12/11 (deux passages
+  en plus, et la lecture des journaux) est retiré.
+
 ---
 
 ## 2.4.0

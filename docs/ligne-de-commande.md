@@ -18,6 +18,7 @@ scribouille COMMANDE [options] [--json]
 - `transcrire` ne modifie jamais les réglages : ses options valent pour la commande seule.
 - **Les commandes de lecture n'écrivent rien**, nulle part : ni réglages, ni journal, ni témoin, ni reprise de l'ancien dossier. Ce sont `version`, `aide` (et toute demande d'aide), `diagnostic`, `verifier` (et `--verifier`), `lire`, `espace`, `etat` sans `--nettoyer`, `agent afficher`, `reglages liste|lire`, `vocabulaire etat`, `materiel proposer` sans `--appliquer`, `materiel puce` sans `--lever`. `diagnostic --materiel` et `materiel detecter` relancent la détection : `materiel.json` n'est réécrit que s'il a changé. `effacer --apercu` n'efface rien.
 - **WhiScribe 2.x encore installée**, qui lit le même dossier (`%LOCALAPPDATA%\WhiScribe`) : son `config.json` n'est jamais modifié, ni clé ajoutée ni clé retirée. Les réglages de la 3.x vont dans `config-scribouille.json`, à côté, et seulement ceux qui diffèrent ; une fois la 2.x partie, la première sauvegarde les reverse dans `config.json` (en gardant ses clés) et retire ce fichier.
+- **Jamais d'effacement de ce qui n'est pas à Scribouille 3.x.** Ses journaux vont dans `logs\scribouille\` (une 2.x ne regarde pas les sous-dossiers de `logs\`) ; seuls ceux-là sont purgés, et doucement : rien de moins d'un mois, toujours les 50 derniers. Dans `reprises\`, une 2.x installée garde ses fichiers : la 3.x ne lit, ne propose et n'efface que les siens (états marqués). Ce que la 2.x écrit aussi (réglages, glossaire, jeton, modèles, extensions, caches) n'est dans aucun poste de `espace` et `effacer` : montré à part (`partages`), jamais effacé. Une fois la 2.x désinstallée, tout redevient à la 3.x.
 - Chemins absolus dans les sorties JSON ; aucun texte transcrit dans les journaux.
 - Ctrl+C ou Ctrl+Pause : arrêt propre, code 5, le travail fait reste sur le disque, `reprendre` le poursuit. Fermeture de la session SSH ou arrêt de la tâche : le moteur s'arrête avec la commande, le travail fait reste aussi sur le disque.
 
@@ -58,7 +59,9 @@ scribouille transcrire FICHIER|DOSSIER... [options]
 | `--telecharger` | | Permet de télécharger un modèle absent. |
 | `--ecraser` | | Refait un fichier déjà transcrit (ses anciennes sorties sont remplacées). |
 
-Une option demandée qu'on ne peut pas honorer n'est jamais ignorée : elle rend son code (2 ou 3) avant tout calcul. La même demande venue des réglages (voix cochées, réglage OpenVINO du poste) est dite (`journal`, niveau `attention`, et sur la sortie d'erreur), puis contournée.
+Une option demandée qu'on ne peut pas honorer n'est jamais ignorée : elle rend son code (2 ou 3) avant tout calcul. La même demande venue des réglages (réglage OpenVINO du poste) est dite (`journal`, niveau `attention`, et sur la sortie d'erreur), puis contournée. La séparation des voix cochée dans les réglages mais non installée (souvent héritée d'une 2.x, où elle était cochée par défaut) est dite une seule fois pour de bon ; ensuite, seulement `diagnostic` (`avertissements`) et, en JSON, le champ `locuteurs` de l'événement `debut`.
+
+Puce graphique suspendue après un plantage (`materiel puce`) : `--moteur openvino --peripherique GPU`, nommés dans la commande, valent demande de réessai. L'ouverture repart sur la puce, dans le processus moteur et sous la garde du superviseur ; la commande le dit (`journal`, `attention`, et sur la sortie d'erreur) comme le journal ; un nouveau plantage la suspend de nouveau et le fichier repart sur le processeur. Sans `--peripherique`, la suspension tient.
 
 Un fichier est « déjà transcrit » quand le dossier de sortie contient un compagnon `.json` qui le nomme : il est sauté (`fichier_ignore`), code 4 si rien d'autre n'a échoué.
 
@@ -76,11 +79,11 @@ Sans argument, la plus récente que personne ne transcrit en ce moment. La repri
 scribouille etat [--nettoyer]
 ```
 
-Transcriptions reprenables, avec position, pourcentage et clé : `interrompue`, ou `en_cours` (avec `pid`) quand un autre processus la transcrit en ce moment ; processus moteurs actifs (PID, mémoire). Une transcription coupée avant son premier segment (pendant la lecture de l'audio ou le chargement du modèle) est reprenable aussi : `depuis_debut` vaut `true`, `reprendre` la refait du début avec la demande de départ. Un échec (audio illisible, mémoire, deux plantages du moteur) avant le premier segment ne laisse rien à reprendre.
+Transcriptions reprenables, avec position, pourcentage, clé, `modele` (celui qui calcule vraiment : sur la puce, le modèle OpenVINO), `calcul` (`openvino-gpu`, `cpu`...) et `modele_demande` (celui du catalogue, d'après lequel `reprendre` rechoisit son réglage) : `interrompue`, ou `en_cours` (avec `pid`) quand un autre processus la transcrit en ce moment ; processus moteurs actifs (PID, mémoire). Une transcription coupée avant son premier segment (pendant la lecture de l'audio ou le chargement du modèle) est reprenable aussi : `depuis_debut` vaut `true`, `reprendre` la refait du début avec la demande de départ. Un échec (audio illisible, mémoire, deux plantages du moteur) avant le premier segment ne laisse rien à reprendre.
 
 `puce` : l'état du témoin de la puce graphique, comme `materiel puce`.
 
-`orphelines` : ce qui ne peut plus être repris, avec sa raison (`source_absente`, `etat_illisible`, `segments_sans_etat`, `trop_vieille` au-delà de 30 jours, `verrou_mort`, `provisoire`). Rien n'est effacé sans `--nettoyer` ; la fenêtre les efface à son ouverture et note chacune au journal.
+`orphelines` : ce qui ne peut plus être repris, avec sa raison (`source_absente`, `etat_illisible`, `segments_sans_etat`, `trop_vieille` au-delà de 30 jours, `verrou_mort`, `provisoire`). Le verrou laissé par une coupure va avec sa transcription reprenable : il n'est pas une orpheline (`reprendre` le reprend puis le retire). Rien n'est effacé sans `--nettoyer` ; la fenêtre les efface à son ouverture et note chacune au journal. Seuls les fichiers de la 3.x sont regardés (voir Garanties).
 
 ### lire
 
@@ -113,11 +116,11 @@ Chaque réglage, sa valeur par défaut et son effet : [reglages.md](reglages.md)
 
 ### diagnostic
 
-`scribouille diagnostic [--materiel]` : version, mode (installée, portable, sources), dossiers, matériel, moteurs (CTranslate2, OpenVINO et ses périphériques), réglage effectif, modèles du catalogue et leur état, locuteurs, vocabulaire, verdict de campagne, durée prévue pour une heure, `puce` (témoin de la puce graphique, voir `materiel puce`), `donnees_partagees` (l'exécutable d'une WhiScribe 2.x qui lit le même dossier, sinon vide), `pret` et `raisons`, `avertissements` (ce qui ne bloque pas mais change le résultat : puce suspendue ou à vérifier, séparation des voix cochée mais non installée). Code 3 si pas prêt. `--materiel` relance d'abord la détection lente (cartes, NPU, OpenVINO).
+`scribouille diagnostic [--materiel]` : version, mode (installée, portable, sources), dossiers, matériel, moteurs (CTranslate2, OpenVINO et ses périphériques), réglage effectif, modèles du catalogue et leur état, locuteurs, vocabulaire, verdict de campagne, durée prévue pour une heure, `puce` (témoin de la puce graphique, voir `materiel puce`), `donnees_partagees` (l'exécutable d'une WhiScribe 2.x qui lit le même dossier, sinon vide), `donnees_raison` (où sont les données et pourquoi : « Données gardées dans … : la version installée … le lit encore », la phrase du journal, aussi dans la sortie texte), `pret` et `raisons`, `avertissements` (ce qui ne bloque pas mais change le résultat : puce suspendue ou à vérifier, séparation des voix cochée mais non installée). Code 3 si pas prêt. `--materiel` relance d'abord la détection lente (cartes, NPU, OpenVINO).
 
 ### espace
 
-`scribouille espace` : ce que Scribouille occupe, poste par poste : programme, chaque modèle, moteur Intel, locuteurs, caches (OpenVINO, pip), profil d'affichage, journaux, reprises, mesures, vocabulaire, réglages, sauvegardes, reste de l'ancien dossier `WhiScribe`, raccourcis et clé de la version installée. `liberable` : se libère sans rien perdre (caches, journaux, modèles que le réglage n'utilise pas, retéléchargés au besoin). Les transcriptions sont comptées à part (`transcriptions_octets`), jamais dans le total. `non_reconnus` : ce qui est dans nos dossiers sans être à nous, jamais touché.
+`scribouille espace` : ce que Scribouille occupe, poste par poste : programme, chaque modèle, moteur Intel, locuteurs, caches (OpenVINO, pip), profil d'affichage, journaux, reprises, mesures, vocabulaire, réglages, sauvegardes, reste de l'ancien dossier `WhiScribe`, raccourcis et clé de la version installée. `liberable` : se libère sans rien perdre (caches, journaux, modèles que le réglage n'utilise pas, retéléchargés au besoin). Les transcriptions sont comptées à part (`transcriptions_octets`), jamais dans le total. `non_reconnus` : ce qui est dans nos dossiers sans être à nous, jamais touché. `partages` (avec `partage_avec`) : ce qu'une WhiScribe 2.x installée, qui lit le même dossier, écrit aussi ; jamais libéré ni effacé tant qu'elle est là.
 
 ### effacer
 
@@ -161,7 +164,7 @@ scribouille vocabulaire retirer-exemples | remettre-exemples
 | `campagne` | `--appliquer`, `--corpus`, `--debut`, `--duree`, `--limite-extraits`, `--peripherique`, `--proprietes-ov`, `--recommencer`, `--reglages`, `--reunion`, `--sans-temoin`, `--telecharger` |
 | `banc` | `--appliquer`, `--npu`, `--telecharger` |
 | `rythmes` | `--moteur`, `--peripherique`, `--repetitions`, `--rythmes`, `--sans-enregistrer`, `--sans-temoin-passif`, `--variantes-ov` |
-| `endurance` | `--corpus`, `--memoire-libre`, `--passages`, `--peripherique`, `--pression`, `--recommencer`, `--reglage`, `--sans-diagnostic` |
+| `endurance` | `--corpus`, `--memoire-libre`, `--passages`, `--peripherique`, `--pression`, `--recommencer`, `--reglage` |
 | `comparer FICHIER` | `--debut`, `--duree`, `--faisceau-ctranslate2`, `--faisceau-openvino`, `--glossaire`, `--ouvrir`, `--peripherique`, `--preset`, `--reference`, `--sans-corrections`, `--sans-glossaire`, `--sortie` |
 | `vocabulaire` | `--corpus`, `--corpus-paquet`, `--peripherique`, `--recommencer`, `--reference`, `--reglage`, `--reunion`, `--vocabulaire` |
 
@@ -176,7 +179,7 @@ scribouille vocabulaire retirer-exemples | remettre-exemples
 | `libre` | Pas de témoin. | Oui. |
 | `en_cours` | Une ouverture se fait en ce moment dans un autre processus (`pid`, vivant). | Oui. |
 | `a_verifier` | Une ouverture n'a pas abouti sans plantage prouvé : processus tué, console fermée, poste éteint (`origine` : `coupure`, `extinction`), témoin d'une version antérieure (`ancien_format`), ou plantage d'avant une mise à jour de Scribouille, d'OpenVINO ou du pilote graphique (`mise_a_jour`). | Oui : la prochaine ouverture tranche, dans le processus moteur, sous la garde du superviseur. |
-| `suspendue` | Le moteur est mort sur la puce avec un code de plantage (`code`, par exemple `0xC0000005`), ou son ouverture a dépassé 10 min (`cause` : `blocage`). | Non : CTranslate2 sur le processeur ; la puce imposée à `transcrire` rend le code 3. |
+| `suspendue` | Le moteur est mort sur la puce avec un code de plantage (`code`, par exemple `0xC0000005`), ou son ouverture a dépassé 10 min (`cause` : `blocage`). | Non, d'office : CTranslate2 sur le processeur. La puce nommée dans la commande `transcrire` elle-même vaut demande de réessai, sous garde, et c'est dit (voir `transcrire`). |
 
 Un arrêt venu de dehors (Ctrl+C, console fermée, `0xC000013A`, arrêt par un autre programme) n'est jamais pris pour un plantage. `--lever` lève la suspension : la prochaine ouverture réessaie la puce, protégée (un nouveau plantage la suspend de nouveau et le fichier repart sur le processeur). La fenêtre a le même bouton (Réglages, Poste, « Réessayer la puce graphique »).
 
@@ -188,7 +191,7 @@ Un arrêt venu de dehors (Ctrl+C, console fermée, `0xC000013A`, arrêt par un a
 
 ### verifier
 
-`scribouille verifier` : bilan de l'installation (imports, décodeur, droit d'écrire dans les dossiers, vérifié sans rien écrire) ; code 3 si quelque chose manque. La ligne du matériel distingue les fils logiques du poste et les fils de calcul (sur un Core Ultra 5 225U : 14 fils logiques, 12 cœurs, calcul sur 10 fils au plus, un par cœur performant ou efficace).
+`scribouille verifier` : bilan de l'installation (imports, décodeur, droit d'écrire dans les dossiers, vérifié sans rien écrire) ; code 3 si quelque chose manque. Le dossier de données est dit avec sa raison quand il n'est pas le dossier habituel (« Données gardées dans … » : partagé avec une 2.x). La ligne du matériel distingue les fils logiques du poste et les fils de calcul (sur un Core Ultra 5 225U : 14 fils logiques, 12 cœurs, calcul sur 10 fils au plus, un par cœur performant ou efficace).
 
 ### aide, version
 
@@ -232,7 +235,7 @@ Schéma `scribouille.cli/1`. Une enveloppe par réponse :
 
 | Événement | Champs |
 |---|---|
-| `debut` | `fichiers`, `version`, `preset`, `rythme`, `pour_une_heure` |
+| `debut` | `fichiers`, `version`, `preset`, `rythme`, `pour_une_heure`, `locuteurs` (`demandes`, `disponibles`) |
 | `etat` | `id`, `etat` (decodage, transcription, locuteurs, ecriture, termine, annule, erreur), `message` |
 | `progres` | `id`, `fichier`, `pct`, `phase`, `ecoule_s`, `reste_s` (une ligne par seconde au plus) |
 | `journal` | `niveau` (info, ok, attention, erreur), `texte` : replis, reprises, plantages du moteur |
@@ -295,7 +298,7 @@ Plantage du moteur simulé à chaque essai (moteur factice des vérifications, d
 > scribouille etat
 Moteurs actifs : 0
 Transcriptions reprenables : 1
-  p.wav : 60 % (26 s sur 43 s), interrompue, clé 1273ad8298811040
+  p.wav : 60 % (26 s sur 43 s), interrompue, modèle deepdml/faster-whisper-large-v3-turbo-ct2 (cpu), clé 1273ad8298811040
 
 > scribouille reprendre
 Reprise de p.wav à 26 s sur 43 s.
