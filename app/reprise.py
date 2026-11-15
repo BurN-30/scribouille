@@ -15,9 +15,13 @@ l'utilisateur, jamais dans le dossier de sortie :
 
   - `<clé>.jsonl` : un segment par ligne, JSON compact, ajouté en fin de fichier.
     C'est le texte partiel, avec ses horodatages et la confiance des mots.
-  - `<clé>.json`  : l'état, réécrit après chaque segment. Il tient en quelques
-    centaines d'octets et porte la position atteinte dans l'audio ainsi que le
-    TEMPS DÉJÀ ÉCOULÉ, pour que le compteur reparte là où il s'était arrêté.
+  - `<clé>.etat`  : l'état (JSON), réécrit après chaque segment. Il tient en
+    quelques centaines d'octets et porte la position atteinte dans l'audio
+    ainsi que le TEMPS DÉJÀ ÉCOULÉ, pour que le compteur reparte là où il
+    s'était arrêté. Jusqu'au 15/11 il s'appelait `<clé>.json` : ces états-là
+    sont toujours lus, et renommés à la première reprise. Le nouveau nom ne
+    finit pas par `.json` : une WhiScribe 2.3.3 qui partage le dossier ne les
+    voit donc pas (elle ne liste ni ne purge que `*.json`).
 
 La clé identifie le couple fichier source / modèle : reprendre une transcription
 avec un autre modèle n'aurait aucun sens, et deux fichiers homonymes rangés dans
@@ -28,22 +32,34 @@ lecture de l'audio et le chargement du modèle : une transcription coupée avant
 son premier segment reste reprenable, elle repart alors du début avec toute la
 demande de départ.
 
+Lecture tolérante : les segments sont relus ligne par ligne ; une ligne
+abîmée (octet invalide, coupure au milieu d'une écriture) est écartée et
+notée au journal, les autres sont gardées. Avant d'ajouter à la suite, une
+dernière ligne incomplète est retirée (ou complétée si elle est entière). Une
+erreur de lecture du disque ne tronque jamais rien : la reprise échoue, dit
+pourquoi, et reste en place.
+
 À la reprise, seule la fin du signal est repassée au décodeur, à partir du
 dernier segment enregistré. Les fichiers sont effacés dès qu'une transcription
-se termine normalement. Ce qui ne peut plus être repris (source disparue, état
-illisible, segments sans état, plus de trente jours) est « orphelin » :
+se termine normalement. Ce qui ne peut plus être repris est « orphelin » :
 `orphelines()` le liste avec sa raison, `scribouille etat` le montre,
-`scribouille etat --nettoyer` l'efface, et la fenêtre le purge à son démarrage
-en journalisant chaque fichier retiré.
+`scribouille etat --nettoyer` l'efface, et la fenêtre en purge une partie à
+son démarrage (`purger`), en journalisant chaque fichier retiré. La purge
+n'efface jamais sur une absence qui peut être passagère : source sur un
+lecteur injoignable, état momentanément illisible ; une source absente
+(dossier joignable, fichier introuvable) n'est effacée qu'après
+`DELAI_ABSENCE_JOURS` jours de constats ; des segments valides sans état
+lisible restent jusqu'à la rétention.
 
 Dossier partagé avec une WhiScribe 2.x installée (même `reprises\\`, même
 format) : seuls les fichiers de Scribouille 3.x sont lus, proposés ou
 effacés. Un état est à nous s'il porte `auteur` (`AUTEUR`), ou la demande de
 départ que seule la 3.x enregistre ; ses segments vont avec lui. Les verrous
-(`.en-cours`) et les écritures provisoires (`.json.scribouille-tmp`) n'ont
-pas d'équivalent en 2.x. La clé d'une transcription de la 3.x ne peut pas
-non plus tomber sur celle d'une 2.x (`cle`). Le reste n'est jamais touché ;
-une fois la 2.x désinstallée, tout le dossier redevient le nôtre.
+(`.en-cours`), les états `.etat`, les écritures provisoires
+(`.json.scribouille-tmp`) et les constats d'absence (`.absente`) n'ont pas
+d'équivalent en 2.x. La clé d'une transcription de la 3.x ne peut pas non
+plus tomber sur celle d'une 2.x (`cle`). Le reste n'est jamais touché ; une
+fois la 2.x désinstallée, tout le dossier redevient le nôtre.
 """
 
 from __future__ import annotations
@@ -60,6 +76,10 @@ from .moteur import Mot, Segment
 
 #: Au-delà, une reprise ne présente plus d'intérêt et l'audio a souvent bougé.
 RETENTION_JOURS = 30
+
+#: Source introuvable (dossier joignable, fichier absent) : effacée par la
+#: purge du démarrage seulement après autant de jours de constats.
+DELAI_ABSENCE_JOURS = 7
 
 #: Ce que la demande de départ prévoyait et qu'une reprise rétablit : formats,
 #: langue, vocabulaire, voix et leurs noms, rythme, modèle, moteur. Le dossier
@@ -82,6 +102,15 @@ CLES_PAR_FICHIER = ("formats", "compagnon_confiance", "langue", "utiliser_glossa
 AUTEUR = "scribouille-3"
 #: Écriture provisoire d'un état (renommée aussitôt écrite).
 SUFFIXE_PROVISOIRE = ".json.scribouille-tmp"
+#: État d'une reprise de la 3.x. Avant le 15/11 : `.json` (`SUFFIXE_ETAT_ANCIEN`).
+SUFFIXE_ETAT = ".etat"
+SUFFIXE_ETAT_ANCIEN = ".json"
+#: Premier constat d'une source introuvable (date ISO), pour `DELAI_ABSENCE_JOURS`.
+SUFFIXE_ABSENCE = ".absente"
+
+
+class RepriseIllisible(OSError):
+    """Les segments d'une reprise ne se lisent pas pour l'instant (disque, accès) : rien n'est touché."""
 
 
 def partage() -> bool:
@@ -127,11 +156,145 @@ def cle(source: str | Path, modele: str) -> str:
 
 
 def _fichier_etat(identifiant: str) -> Path:
-    return dossier() / f"{identifiant}.json"
+    return dossier() / f"{identifiant}{SUFFIXE_ETAT}"
+
+
+def _fichier_etat_ancien(identifiant: str) -> Path:
+    return dossier() / f"{identifiant}{SUFFIXE_ETAT_ANCIEN}"
 
 
 def _fichier_segments(identifiant: str) -> Path:
     return dossier() / f"{identifiant}.jsonl"
+
+
+def _fichier_absence(identifiant: str) -> Path:
+    return dossier() / f"{identifiant}{SUFFIXE_ABSENCE}"
+
+
+def _etats_presents() -> dict[str, Path]:
+    """Identifiant -> fichier d'état (le nouveau nom passe avant l'ancien)."""
+    trouves: dict[str, Path] = {}
+    racine = chemins.RACINE / "reprises"
+    if not racine.is_dir():
+        return trouves
+    for suffixe in (SUFFIXE_ETAT_ANCIEN, SUFFIXE_ETAT):
+        for fichier in sorted(racine.glob("*" + suffixe)):
+            if fichier.name.endswith(suffixe) and fichier.is_file():
+                trouves[fichier.name[: -len(suffixe)]] = fichier
+    return trouves
+
+
+# ---------------------------------------------------------------------------
+# Lecture tolérante des segments
+# ---------------------------------------------------------------------------
+
+def _segment_de(brut) -> Segment | None:
+    if not isinstance(brut, dict) or not brut.get("t"):
+        return None
+    try:
+        return Segment(
+            debut=float(brut.get("d", 0) or 0),
+            fin=float(brut.get("f", 0) or 0),
+            texte=str(brut.get("t", "")),
+            mots=[
+                Mot(texte=str(m.get("t", "")), debut=float(m.get("d", 0) or 0),
+                    fin=float(m.get("f", 0) or 0), probabilite=float(m.get("p", 0) or 0))
+                for m in (brut.get("m") or []) if isinstance(m, dict) and m.get("t")
+            ],
+        )
+    except (TypeError, ValueError):
+        return None
+
+
+def _ligne(octets: bytes) -> tuple[Segment | None, bool]:
+    """(segment, vide) : une ligne du fichier, décodée strictement ; (None, False) si elle est abîmée."""
+    propre = octets.strip(b" \t\r\n\x00")
+    if not propre:
+        return None, True
+    try:
+        return _segment_de(json.loads(propre.decode("utf-8"))), False
+    except (UnicodeDecodeError, ValueError):
+        return None, False
+
+
+def lire_segments(identifiant: str, strict: bool = True) -> list[Segment]:
+    """
+    Relit les segments déjà transcrits, ligne par ligne. Une ligne abîmée (octet
+    invalide, écriture coupée net, zéros laissés par une coupure de courant)
+    est écartée et notée au journal ; toutes les autres sont gardées.
+
+    Fichier absent : liste vide. Fichier qui ne se lit pas pour l'instant
+    (verrou d'un antivirus, disque débranché) : `RepriseIllisible` avec
+    `strict`, liste vide sinon. Jamais rien d'écrit.
+    """
+    fichier = _fichier_segments(identifiant)
+    try:
+        contenu = fichier.read_bytes()
+    except FileNotFoundError:
+        return []
+    except OSError as exc:
+        if strict:
+            raise RepriseIllisible(f"segments de la reprise {identifiant} illisibles : {exc}") from exc
+        return []
+    segments: list[Segment] = []
+    ecartees = 0
+    for brute in contenu.split(b"\n"):
+        segment, vide = _ligne(brute)
+        if segment is not None:
+            segments.append(segment)
+        elif not vide:
+            ecartees += 1
+    if ecartees:
+        journal.attention("Reprise %s : %s ligne(s) abîmée(s) écartée(s), %s segment(s) gardé(s)",
+                          identifiant, ecartees, len(segments))
+    return segments
+
+
+def compter_segments(identifiant: str) -> int:
+    """Segments valides gardés pour cette reprise (0 si rien, ou illisible pour l'instant)."""
+    return len(lire_segments(identifiant, strict=False))
+
+
+def _preparer_ajout(fichier: Path) -> bool:
+    """
+    Avant d'écrire à la suite : une dernière ligne sans fin de ligne est
+    retirée si elle est incomplète (coupure au milieu d'une écriture), ou
+    complétée si elle est entière. Renvoie vrai s'il faut commencer par un
+    saut de ligne (ligne entière à compléter, ou fin du fichier illisible :
+    rien n'est tronqué sur une erreur de lecture).
+    """
+    try:
+        taille = fichier.stat().st_size
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+    if taille == 0:
+        return False
+    fenetre = min(taille, 4 * 1024 * 1024)
+    try:
+        with fichier.open("rb") as flux:
+            flux.seek(taille - fenetre)
+            queue = flux.read(fenetre)
+    except OSError:
+        return True
+    if queue.endswith(b"\n"):
+        return False
+    dernier = queue.rfind(b"\n")
+    if dernier < 0 and fenetre < taille:
+        return True  # ligne démesurée : on n'y touche pas
+    reste = queue[dernier + 1:]
+    segment, vide = _ligne(reste)
+    if segment is not None or vide:
+        return True
+    try:
+        with fichier.open("r+b") as flux:
+            flux.truncate(taille - len(reste))
+    except OSError:
+        return True
+    journal.attention("Reprise %s : dernière ligne incomplète (%s octets) retirée avant de continuer",
+                      fichier.stem, len(reste))
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -156,6 +319,7 @@ class Session:
         self._calcul: dict = {}
         self._ecoule = 0.0
         self._flux = None
+        self._ancien_retire = False
         #: Appelée une fois si l'écriture échoue (disque plein, clé retirée) :
         #: l'interface le dit, au lieu de laisser croire que tout est protégé.
         self.alerte = None
@@ -166,10 +330,10 @@ class Session:
                position: float = 0.0, nb_segments: int = 0, ecoule: float = 0.0,
                sortie: str = "", demande: dict | None = None, nouvelle: bool = False) -> None:
         """
-        `nouvelle` : rien n'est repris, le fichier des segments repart vide.
-        Sans cela, une nouvelle transcription d'un fichier qui avait laissé une
-        reprise ajoutait ses segments après les anciens, et une seconde coupure
-        donnait un texte en double à la reprise.
+        `nouvelle` : rien n'est repris, le fichier des segments repart vide
+        (nouvelle transcription, ou « recommencer » demandé explicitement).
+        Sans cela, les segments s'ajoutent à la suite, après remise en ordre
+        d'une dernière ligne coupée (`_preparer_ajout`).
         """
         if not self.active:
             return
@@ -191,8 +355,13 @@ class Session:
         if demande:
             self._infos["demande"] = demande
         self._infos.update(self._calcul)
+        fichier = _fichier_segments(self.identifiant)
+        saut = False if nouvelle else _preparer_ajout(fichier)
         try:
-            self._flux = _fichier_segments(self.identifiant).open("w" if nouvelle else "a", encoding="utf-8")
+            self._flux = fichier.open("w" if nouvelle else "a", encoding="utf-8")
+            if saut:
+                self._flux.write("\n")
+                self._flux.flush()
         except OSError as exc:
             journal.attention("Sauvegarde progressive désactivée pour ce fichier : %s", exc)
             self.active = False
@@ -226,7 +395,8 @@ class Session:
         self.fermer()
         if not self.identifiant:
             return
-        for fichier in (_fichier_segments(self.identifiant), _fichier_etat(self.identifiant)):
+        for fichier in (_fichier_segments(self.identifiant), _fichier_etat(self.identifiant),
+                        _fichier_etat_ancien(self.identifiant), _fichier_absence(self.identifiant)):
             try:
                 fichier.unlink(missing_ok=True)
             except OSError:
@@ -279,12 +449,19 @@ class Session:
         # pendant l'écriture laisse l'ancien état, jamais un état à moitié écrit
         # qui rendrait la reprise impossible.
         cible = _fichier_etat(self.identifiant)
-        provisoire = cible.with_name(cible.stem + SUFFIXE_PROVISOIRE)
+        provisoire = cible.with_name(self.identifiant + SUFFIXE_PROVISOIRE)
         try:
             provisoire.write_text(json.dumps(etat, ensure_ascii=False), encoding="utf-8")
             os.replace(provisoire, cible)
         except OSError:
-            pass
+            return
+        if not self._ancien_retire:
+            # État d'avant le 15/11 (`<clé>.json`) : remplacé par le nouveau.
+            self._ancien_retire = True
+            try:
+                _fichier_etat_ancien(self.identifiant).unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def session_inactive() -> Session:
@@ -295,51 +472,28 @@ def session_inactive() -> Session:
 # Relecture
 # ---------------------------------------------------------------------------
 
-def lire_etat(identifiant: str) -> dict | None:
-    try:
-        etat = json.loads(_fichier_etat(identifiant).read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return None
-    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
-        return None
-    return etat if isinstance(etat, dict) else None
-
-
-def lire_segments(identifiant: str) -> list[Segment]:
+def lire_etat_detail(identifiant: str) -> tuple[dict | None, str]:
     """
-    Relit les segments déjà transcrits.
-
-    Une dernière ligne tronquée par une coupure brutale est simplement ignorée :
-    c'est exactement le cas que ce format une-ligne-un-segment doit encaisser.
+    (état, statut) ; statut : « ok », « absent », « acces » (ne se lit pas
+    pour l'instant : verrou, disque) ou « abime » (contenu illisible).
     """
-    fichier = _fichier_segments(identifiant)
-    segments: list[Segment] = []
-    try:
-        contenu = fichier.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return segments
-
-    for ligne in contenu.splitlines():
-        ligne = ligne.strip()
-        if not ligne:
-            continue
+    for fichier in (_fichier_etat(identifiant), _fichier_etat_ancien(identifiant)):
         try:
-            brut = json.loads(ligne)
-        except json.JSONDecodeError:
+            texte = fichier.read_bytes()
+        except FileNotFoundError:
             continue
-        if not isinstance(brut, dict) or not brut.get("t"):
-            continue
-        segments.append(Segment(
-            debut=float(brut.get("d", 0) or 0),
-            fin=float(brut.get("f", 0) or 0),
-            texte=str(brut.get("t", "")),
-            mots=[
-                Mot(texte=str(m.get("t", "")), debut=float(m.get("d", 0) or 0),
-                    fin=float(m.get("f", 0) or 0), probabilite=float(m.get("p", 0) or 0))
-                for m in (brut.get("m") or []) if isinstance(m, dict) and m.get("t")
-            ],
-        ))
-    return segments
+        except OSError:
+            return None, "acces"
+        try:
+            etat = json.loads(texte.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError):
+            return None, "abime"
+        return (etat, "ok") if isinstance(etat, dict) else (None, "abime")
+    return None, "absent"
+
+
+def lire_etat(identifiant: str) -> dict | None:
+    return lire_etat_detail(identifiant)[0]
 
 
 def modele_reel(etat: dict) -> str:
@@ -375,8 +529,7 @@ def lister() -> list[dict]:
     if not (chemins.RACINE / "reprises").is_dir():
         return resultat
     commun = partage()
-    for fichier in sorted(dossier().glob("*.json")):
-        identifiant = fichier.stem
+    for identifiant in sorted(_etats_presents()):
         etat = lire_etat(identifiant)
         if not etat or not etat_a_nous(etat, commun):
             continue
@@ -404,6 +557,52 @@ def lister() -> list[dict]:
     return resultat
 
 
+def _cle_chemin(chemin: str | Path) -> str:
+    try:
+        return str(Path(chemin).resolve()).lower()
+    except OSError:
+        return str(chemin).lower()
+
+
+def reprises_par_fichier(avec_segments: bool = True) -> dict[str, dict]:
+    """
+    Chemin résolu (minuscules) -> reprise la plus récente de ce fichier
+    (`lister`), quel que soit son modèle ; seulement celles qui ont gardé au
+    moins un segment avec `avec_segments`. Sert à ne jamais repartir de zéro
+    sans le demander (fichier redéposé, `transcrire` relancé).
+    """
+    retenues: dict[str, dict] = {}
+    for r in sorted(lister(), key=lambda r: str(r.get("date") or "")):
+        if avec_segments and not (r["nb_segments"] > 0 or compter_segments(r["cle"]) > 0):
+            continue
+        retenues[_cle_chemin(r["chemin"])] = r
+    return retenues
+
+
+def reprise_du_fichier(source: str | Path, avec_segments: bool = True) -> dict | None:
+    """La reprise la plus récente de ce fichier (voir `reprises_par_fichier`), ou None."""
+    return reprises_par_fichier(avec_segments).get(_cle_chemin(source))
+
+
+def a_garder(identifiant: str) -> bool:
+    """
+    Cette clé porte-t-elle une reprise à ne pas écraser : un état à nous qui
+    annonce des segments, ou des segments valides ? Dans le doute (illisible
+    pour l'instant), oui.
+    """
+    etat, statut = lire_etat_detail(identifiant)
+    if statut == "acces":
+        return True
+    if etat is not None and not etat_a_nous(etat):
+        return False
+    if etat is not None and int(etat.get("nb_segments") or 0) > 0:
+        return True
+    try:
+        return len(lire_segments(identifiant)) > 0
+    except RepriseIllisible:
+        return True
+
+
 def _verrous_des_reprenables() -> set[str]:
     """Noms des verrous qui appartiennent à une transcription reprenable."""
     from . import instance
@@ -427,21 +626,38 @@ def fichiers_a_nous() -> list[Path]:
     racine = dossier()
     if not partage():
         return sorted(f for f in racine.iterdir())
-    trouves: list[Path] = sorted(racine.glob("*.en-cours")) + sorted(racine.glob("*" + SUFFIXE_PROVISOIRE))
-    for fichier in sorted(racine.glob("*.json")):
-        if etat_a_nous(lire_etat(fichier.stem), True):
+    trouves: list[Path] = (sorted(racine.glob("*.en-cours")) + sorted(racine.glob("*.en-cours.*.tmp"))
+                           + sorted(racine.glob("*" + SUFFIXE_PROVISOIRE))
+                           + sorted(racine.glob("*" + SUFFIXE_ABSENCE)))
+    for identifiant, fichier in sorted(_etats_presents().items()):
+        if fichier.suffix == SUFFIXE_ETAT or etat_a_nous(lire_etat(identifiant), True):
             trouves.append(fichier)
-            if _fichier_segments(fichier.stem).exists():
-                trouves.append(_fichier_segments(fichier.stem))
+            if _fichier_segments(identifiant).exists():
+                trouves.append(_fichier_segments(identifiant))
     return trouves
+
+
+def _absente_depuis(identifiant: str) -> float | None:
+    try:
+        return datetime.fromisoformat(_fichier_absence(identifiant).read_text(encoding="ascii").strip()).timestamp()
+    except (OSError, ValueError):
+        return None
 
 
 def orphelines(jours: int = RETENTION_JOURS) -> list[dict]:
     """
     Ce qui, dans `reprises/`, ne peut plus être repris, avec la raison :
-    `source_absente` (fichier déplacé ou effacé), `etat_illisible`,
-    `segments_sans_etat`, `trop_vieille` (plus de `jours` jours), `verrou_mort`
-    (verrou d'un processus disparu), `provisoire` (écriture coupée net).
+    `source_absente` (dossier joignable, fichier déplacé ou effacé),
+    `source_injoignable` (lecteur ou dossier qui ne répond pas : peut-être
+    passager), `etat_illisible`, `segments_sans_etat`, `trop_vieille` (plus
+    de `jours` jours), `verrou_mort` (verrou d'un processus disparu),
+    `provisoire` (écriture coupée net). Ne lit que : rien n'est écrit.
+
+    Chaque entrée dit si `etat --nettoyer` l'efface (`effacable`) et si la
+    purge du démarrage peut le faire seule (`purgeable`) : jamais sur une
+    absence qui peut être passagère, ni quand des segments valides restent
+    (sauf au-delà de la rétention), une source absente seulement après
+    `DELAI_ABSENCE_JOURS` jours de constats (`absente_depuis`).
 
     Le verrou mort d'une transcription encore reprenable n'en est pas une : il
     va avec elle (la reprise le reprend, puis le retire). Dossier partagé
@@ -454,25 +670,34 @@ def orphelines(jours: int = RETENTION_JOURS) -> list[dict]:
     if not (chemins.RACINE / "reprises").is_dir():
         return []
     commun = partage()
-    limite = time.time() - jours * 86400
+    maintenant = time.time()
+    limite = maintenant - jours * 86400
     trouvees: list[dict] = []
 
-    def noter(fichiers: list[Path], raison: str, nom: str = "", cle_: str = "") -> None:
+    def noter(fichiers: list[Path], raison: str, nom: str = "", cle_: str = "", effacable: bool = True,
+              purgeable: bool = True, **autres) -> None:
         presents = [f for f in fichiers if f.exists()]
         if presents:
-            trouvees.append({"cle": cle_, "nom": nom, "raison": raison,
-                             "fichiers": [str(f) for f in presents],
-                             "octets": sum(f.stat().st_size for f in presents)})
+            octets = 0
+            for f in presents:
+                try:
+                    octets += f.stat().st_size
+                except OSError:
+                    pass
+            trouvees.append({"cle": cle_, "nom": nom, "raison": raison, "fichiers": [str(f) for f in presents],
+                             "octets": octets, "effacable": effacable, "purgeable": purgeable, **autres})
+
+    def date_de(f: Path) -> float:
+        try:
+            return f.stat().st_mtime
+        except OSError:
+            return maintenant
 
     reprenables = _verrous_des_reprenables()
     for verrou in sorted(dossier().glob("*.en-cours")):
         if verrou.name.lower() in reprenables:
             continue
-        try:
-            pid = int(verrou.read_text(encoding="ascii").strip() or 0)
-        except (OSError, ValueError):
-            pid = 0
-        if not instance._vivant(pid):
+        if not instance.verrou_tenu(verrou):
             noter([verrou], "verrou_mort")
 
     def recent(f: Path) -> bool:
@@ -482,43 +707,57 @@ def orphelines(jours: int = RETENTION_JOURS) -> list[dict]:
         except OSError:
             return True
 
-    provisoires = sorted(dossier().glob("*" + SUFFIXE_PROVISOIRE))
+    provisoires = sorted(dossier().glob("*" + SUFFIXE_PROVISOIRE)) + sorted(dossier().glob("*.en-cours.*.tmp"))
     if not commun:
         provisoires += sorted(dossier().glob("*.json.tmp"))
     for provisoire in provisoires:
         if not recent(provisoire):
             noter([provisoire], "provisoire")
-    etats = {f.stem for f in dossier().glob("*.json")}
+    etats = _etats_presents()
     if not commun:
         for segments in sorted(dossier().glob("*.jsonl")):
             if segments.stem not in etats and not recent(segments):
-                noter([segments], "segments_sans_etat", cle_=segments.stem)
-    for fichier in sorted(dossier().glob("*.json")):
-        identifiant = fichier.stem
-        paire = [fichier, _fichier_segments(identifiant)]
-        etat = lire_etat(identifiant)
-        if not etat_a_nous(etat, commun):
+                valides = compter_segments(segments.stem)
+                noter([segments], "segments_sans_etat", cle_=segments.stem, segments=valides,
+                      purgeable=valides == 0 or date_de(segments) < limite)
+    for identifiant, fichier in sorted(etats.items()):
+        paire = [fichier, _fichier_segments(identifiant), _fichier_absence(identifiant)]
+        etat, statut = lire_etat_detail(identifiant)
+        if statut == "acces":
+            continue  # ne se lit pas pour l'instant : rien n'en est dit ni effacé
+        if not etat_a_nous(etat, commun) and not (fichier.suffix == SUFFIXE_ETAT and etat is None):
             continue
-        if not etat:
-            noter(paire, "etat_illisible", cle_=identifiant)
+        if etat is None:
+            valides = compter_segments(identifiant)
+            noter(paire, "etat_illisible", cle_=identifiant, segments=valides,
+                  purgeable=valides == 0 or date_de(fichier) < limite)
             continue
         nom = str(etat.get("nom") or Path(str(etat.get("source", ""))).name)
-        if not Path(etat.get("source", "")).is_file():
-            noter(paire, "source_absente", nom, identifiant)
+        vieille = date_de(fichier) < limite
+        presence = chemins.constat_presence(etat.get("source", ""))
+        if presence == "absent":
+            depuis = _absente_depuis(identifiant)
+            noter(paire, "source_absente", nom, identifiant, absente_depuis=depuis,
+                  purgeable=vieille or (depuis is not None and maintenant - depuis >= DELAI_ABSENCE_JOURS * 86400))
             continue
-        try:
-            vieille = fichier.stat().st_mtime < limite
-        except OSError:
-            vieille = False
+        if presence == "injoignable":
+            noter(paire, "source_injoignable", nom, identifiant, effacable=False, purgeable=vieille)
+            continue
         if vieille:
             noter(paire, "trop_vieille", nom, identifiant)
     return trouvees
 
 
-def nettoyer(trouvees: list[dict] | None = None) -> list[dict]:
-    """Efface les orphelines (celles données, ou toutes) ; renvoie ce qui l'a été."""
+def nettoyer(trouvees: list[dict] | None = None, purge: bool = False) -> list[dict]:
+    """
+    Efface les orphelines (celles données, ou toutes) qui peuvent l'être :
+    `effacable` (demande explicite), ou `purgeable` avec `purge`. Renvoie ce
+    qui l'a été.
+    """
     faites = []
     for orpheline in (orphelines() if trouvees is None else trouvees):
+        if not orpheline.get("purgeable" if purge else "effacable", True):
+            continue
         reste = []
         for nom in orpheline["fichiers"]:
             try:
@@ -529,19 +768,55 @@ def nettoyer(trouvees: list[dict] | None = None) -> list[dict]:
     return faites
 
 
+def _noter_absences(trouvees: list[dict]) -> None:
+    """Premier constat d'une source introuvable : daté (le délai part de là). Retour de la source : oublié."""
+    absentes = {o["cle"] for o in trouvees if o.get("raison") == "source_absente" and o.get("cle")}
+    for identifiant in absentes:
+        marque = _fichier_absence(identifiant)
+        if not marque.exists():
+            try:
+                marque.write_text(datetime.now().isoformat(timespec="seconds"), encoding="ascii")
+                journal.info("Reprise %s : source introuvable, gardée %s jours avant d'être effacée",
+                             identifiant, DELAI_ABSENCE_JOURS)
+            except OSError:
+                pass
+    etats = _etats_presents()
+    for marque in dossier().glob("*" + SUFFIXE_ABSENCE):
+        identifiant = marque.name[: -len(SUFFIXE_ABSENCE)]
+        if identifiant in absentes:
+            continue
+        etat = lire_etat(identifiant) if identifiant in etats else None
+        if identifiant not in etats or (etat and chemins.constat_presence(etat.get("source", "")) == "present"):
+            try:
+                marque.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
 def purger(jours: int = RETENTION_JOURS) -> int:
-    """Au démarrage de la fenêtre : efface les orphelines, chacune notée au
-    journal avec sa raison (rien ne disparaît sans trace)."""
-    faites = nettoyer(orphelines(jours))
+    """
+    Au démarrage de la fenêtre : efface les orphelines que rien ne peut
+    rendre utiles (`purgeable`), chacune notée au journal avec sa raison
+    (rien ne disparaît sans trace). Une source introuvable est datée au
+    premier constat et gardée `DELAI_ABSENCE_JOURS` jours.
+    """
+    trouvees = orphelines(jours)
+    faites = nettoyer(trouvees, purge=True)
     for f in faites:
         journal.info("Reprise orpheline effacée (%s) : %s %s", f["raison"], f["nom"] or f["cle"] or "",
                      ", ".join(Path(x).name for x in f["fichiers"]))
+    effacees = {f["cle"] for f in faites if f.get("cle") and not f.get("restes")}
+    try:
+        _noter_absences([o for o in trouvees if o.get("cle") not in effacees])
+    except OSError:
+        pass
     return len(faites)
 
 
 def oublier(identifiant: str) -> None:
     """Abandon d'une reprise : seulement une des nôtres (jamais celle d'une 2.x qui partage le dossier)."""
-    if _fichier_etat(identifiant).exists() and not etat_a_nous(lire_etat(identifiant)):
+    if _fichier_etat_ancien(identifiant).exists() and not _fichier_etat(identifiant).exists() \
+            and not etat_a_nous(lire_etat(identifiant)):
         journal.attention("Reprise %s laissée : elle n'est pas de Scribouille 3.x", identifiant)
         return
     Session(identifiant, active=True).effacer()

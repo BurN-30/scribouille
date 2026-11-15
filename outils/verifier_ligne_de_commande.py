@@ -36,6 +36,10 @@ os.environ["SCRIBOUILLE_DONNEES"] = str(TEMPORAIRE / "donnees")
 os.environ["USERPROFILE"] = os.environ["HOME"] = str(TEMPORAIRE / "maison")
 os.environ["LOCALAPPDATA"] = str(TEMPORAIRE / "localappdata")
 os.environ["APPDATA"] = str(TEMPORAIRE / "appdata")
+# Aucune clé de désinstallation : une WhiScribe 2.x réellement installée sur
+# le poste ne change rien aux essais (simulation lue seulement quand
+# LOCALAPPDATA est détourné, comme ici ; voir `chemins.etat_version_2x`).
+os.environ["SCRIBOUILLE_ESSAI_REGISTRE"] = "[]"
 if str(RACINE) not in sys.path:
     sys.path.insert(0, str(RACINE))
 
@@ -1073,7 +1077,7 @@ def essai_dossier_partage_intact() -> None:
                          env={**lente, "PYTHONIOENCODING": "utf-8"}, creationflags=SANS_FENETRE)
 
     def deux_segments() -> bool:
-        for f in (donnees / "reprises").glob("*.json"):
+        for f in (donnees / "reprises").glob("*.etat"):
             try:
                 etat = json.loads(f.read_text(encoding="utf-8"))
             except (OSError, ValueError):
@@ -1134,6 +1138,68 @@ def essai_dossier_partage_intact() -> None:
              "materiel proposer : la commande pour appliquer est dans la syntaxe actuelle", sortie[-200:])
 
 
+_REDEPOT_FENETRE = r"""
+import json, os, runpy, sys
+from pathlib import Path
+sys.argv = [sys.argv[1]]
+ns = runpy.run_path(sys.argv[0], run_name="essai-demarrage")
+from app import config as config_module, reprise as r
+from app.moteur import Segment
+source = Path(os.environ["ESSAI_SOURCE"])
+p = ns["Passerelle"]()
+modele = config_module.reglages_effectifs(p.config)["modele"]
+cle = r.cle(source, modele)
+s = r.Session(cle, active=True)
+s.ouvrir(source, modele, 60.0, nouvelle=True)
+s.ajouter(Segment(debut=0.0, fin=1.0, texte="Gardé", mots=[]), 1.0)
+s.fermer()
+appels = []
+p._js = appels.append
+p.file.mesurer_durees = lambda rappel: None   # pas de moteur à lancer ici
+p._enregistrer_fichiers([str(source)])
+el = p.file.elements[0]
+avant = {"reprise": el.reprise, "propose": any(a.startswith("onReprisesTrouvees(") and cle in a for a in appels),
+         "segments": len(r.lire_segments(cle))}
+retour = getattr(p, "recommencer", lambda i: {"ok": False})(el.identifiant)
+apres = {"ok": retour.get("ok"), "reprise": el.reprise, "recommencer": getattr(el, "recommencer", None),
+         "garde": r.a_garder(cle)}
+print("RESULTAT " + json.dumps([avant, apres, cle]), flush=True)
+"""
+
+
+def essai_redepot_fenetre() -> None:
+    """Revue du 15/11 (S2) : redéposer un fichier interrompu ne l'efface plus, la fenêtre propose de recommencer."""
+    titre("12. Fenêtre : fichier redéposé qui a une reprise")
+    maison = TEMPORAIRE / "redepot"
+    donnees = maison / "donnees"
+    for d in (donnees, maison / "Documents", maison / "AppData" / "Local", maison / "AppData" / "Roaming"):
+        d.mkdir(parents=True, exist_ok=True)
+    source = maison / "Documents" / "reunion longue.ogg"
+    source.write_bytes((RACINE / "banc" / "extrait_fr.ogg").read_bytes())
+    (donnees / "config.json").write_text(json.dumps({"dossier_sortie": str(maison / "sorties"),
+                                                     "langue_interface": "fr"}), encoding="utf-8")
+    env = {**os.environ, "SCRIBOUILLE_DONNEES": str(donnees), "LOCALAPPDATA": str(maison / "AppData" / "Local"),
+           "USERPROFILE": str(maison), "HOME": str(maison), "APPDATA": str(maison / "AppData" / "Roaming"),
+           "ESSAI_SOURCE": str(source), "PYTHONIOENCODING": "utf-8"}
+    env.pop("SCRIBOUILLE_MOTEUR_ESSAI", None)
+    p = subprocess.run([PYTHON, "-c", _REDEPOT_FENETRE, str(RACINE / "transcriber.pyw")], capture_output=True,
+                       timeout=180, cwd=str(TEMPORAIRE), env=env, creationflags=SANS_FENETRE)
+    sortie = p.stdout.decode("utf-8", "replace")
+    ligne = next((x for x in sortie.splitlines() if x.startswith("RESULTAT ")), "")
+    avant, apres, cle = json.loads(ligne[len("RESULTAT "):]) if ligne else ({}, {}, "")
+    verifier(avant.get("reprise") == cle and avant.get("propose") and avant.get("segments") == 1,
+             "redéposé : la reprise est rattachée (rien d'effacé), la fenêtre propose de recommencer",
+             f"{avant} {p.stderr.decode('utf-8', 'replace')[-300:]}")
+    verifier(apres.get("ok") and apres.get("reprise") == "" and apres.get("recommencer") is True
+             and apres.get("garde") is False,
+             "« Recommencer du début » : la reprise est abandonnée, à la demande seulement", str(apres))
+    page = (RACINE / "web" / "app.js").read_text(encoding="utf-8")
+    html = (RACINE / "web" / "index.html").read_text(encoding="utf-8")
+    verifier("window.onReprisesTrouvees" in page and "pywebview.api.recommencer(" in page
+             and 'id="modale-reprise-trouvee"' in html and 'id="btn-recommencer-reprise"' in html,
+             "la modale « Transcription interrompue » est branchée (Reprendre, Recommencer du début)")
+
+
 def principal() -> int:
     print(f"Vérification de la ligne de commande\n{'=' * 40}\n(dossier temporaire : {TEMPORAIRE})")
     try:
@@ -1148,6 +1214,7 @@ def principal() -> int:
         essai_aucune_console()
         essai_lecture_sans_ecriture()
         essai_dossier_partage_intact()
+        essai_redepot_fenetre()
     finally:
         import shutil
 

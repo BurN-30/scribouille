@@ -19,6 +19,8 @@ JSON (toutes les clés sont facultatives) :
                       OpenVINO), point d'essai SCRIBOUILLE_ESSAI_PUCE compris
     chargement_puce_s  durée de chargement en plus, sur la puce seulement (un
                       rejeu sur le processeur n'attend pas)
+    telechargement_s  pause avant l'ouverture (et avant le témoin de la puce),
+                      comme le téléchargement du modèle : hors de la garde
     plantage_chargement  le processus s'arrête net pendant le chargement, avec
                       le code `code_plantage` (3 par défaut ; un seul plantage
                       si `temoin` est donné)
@@ -58,6 +60,11 @@ class MoteurFactice:
         if self.charge == modele:
             return
         marque = None
+        telechargement = float(self.options.get("telechargement_s") or 0)
+        if telechargement > 0:
+            # Comme `assurer_modele_telecharge` avant l'ouverture : la garde
+            # de la puce ne doit pas le compter.
+            time.sleep(telechargement)
         if self.sur_puce:
             # Comme `MoteurOpenVINO.charger` : témoin posé pendant l'ouverture,
             # point d'essai `SCRIBOUILLE_ESSAI_PUCE` compris.

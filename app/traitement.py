@@ -49,6 +49,10 @@ class Element:
     #: Dossier de sortie propre à ce fichier (ligne de commande : « à côté
     #: de la source ») ; vide : celui des réglages.
     sortie: str = ""
+    #: « Recommencer du début » demandé explicitement : une reprise de ce
+    #: fichier (même modèle) est abandonnée. Sans cela, une reprise trouvée
+    #: est toujours poursuivie, jamais effacée en silence.
+    recommencer: bool = False
 
     def en_dict(self) -> dict:
         return {
@@ -213,7 +217,26 @@ class FileTraitement:
     def _remettre_en_attente(self, element: Element, cle_reprise: str = "") -> dict:
         element.etat = "attente"
         element.reprise = cle_reprise
+        element.recommencer = False
         return element.en_dict()
+
+    def recommencer(self, identifiant: str) -> dict | None:
+        """
+        « Recommencer du début » sur un fichier en attente auquel une reprise
+        a été rattachée : la reprise est abandonnée à la demande (c'est noté),
+        la transcription repart de zéro. Refusé s'il a déjà commencé.
+        """
+        with self._verrou:
+            for element in self.elements:
+                if element.identifiant == identifiant and element.etat == "attente":
+                    if element.reprise:
+                        journal.info("Reprise %s abandonnée à la demande : %s recommencé du début",
+                                     element.reprise, element.nom)
+                        reprise_module.oublier(element.reprise)
+                    element.reprise = ""
+                    element.recommencer = True
+                    return element.en_dict()
+        return None
 
     def ajouter(self, chemins_fichiers: list[str]) -> list[dict]:
         """
@@ -486,6 +509,16 @@ class FileTraitement:
         instance = contexte["instance"]
         if element.sortie:
             config = {**config, "dossier_sortie": element.sortie}
+        if not element.reprise and not element.recommencer and config.get("sauvegarde_progressive", True):
+            # Une reprise de ce fichier avec ce modèle a gardé du travail : elle
+            # est poursuivie, jamais effacée en silence par une nouvelle
+            # transcription (fichier redéposé, relancé, ligne de commande).
+            # Seul « recommencer », demandé explicitement, repart de zéro.
+            trouvee = reprise_module.cle(element.chemin, contexte["reglages"]["modele"])
+            if reprise_module.a_garder(trouvee):
+                element.reprise = trouvee
+                journal.info("Reprise %s trouvée pour %s : poursuivie", trouvee, element.nom)
+                rappels.journal_ui("info", langues.t("trait.reprise_trouvee", nom=element.nom))
         if element.reprise:
             # Une reprise retrouve ce que la demande de départ prévoyait
             # (formats, langue, vocabulaire, voix), pas les réglages du moment.
@@ -527,8 +560,9 @@ class FileTraitement:
             elif self._session.active and self._session.nb_segments == 0:
                 self._session.effacer()
             elif element.reprise and not self._session.active:
-                # Reprise du début qui échoue avant d'avoir rouvert sa sauvegarde.
-                if not int((reprise_module.lire_etat(element.reprise) or {}).get("nb_segments") or 0):
+                # Reprise du début qui échoue avant d'avoir rouvert sa
+                # sauvegarde : effacée seulement si elle n'a rien gardé.
+                if not reprise_module.a_garder(element.reprise):
                     reprise_module.oublier(element.reprise)
             incident = journal.formater_incident(exc, element.nom)
             rappels.etat(element.identifiant, "erreur", incident["titre"])
@@ -584,6 +618,11 @@ class FileTraitement:
         # Sa clé est revue plus bas si la mémoire impose un autre modèle.
         precoce = None
         if config.get("sauvegarde_progressive", True) and not element.reprise:
+            # Repart d'un fichier de segments vide : rien à garder sous cette
+            # clé (`traiter_element` a rattaché toute reprise utile), ou
+            # « recommencer » demandé explicitement.
+            if element.recommencer and reprise_module.a_garder(reprise_module.cle(source, reglages["modele"])):
+                journal.info("Reprise de %s abandonnée à la demande (recommencer)", element.nom)
             precoce = self._session = reprise_module.Session(
                 reprise_module.cle(source, reglages["modele"]), active=True)
             precoce.noter_calcul(self.materiel.cle_calcul,
@@ -644,6 +683,13 @@ class FileTraitement:
                     f"rythme.memoire_{raison}", libre=langues.nombre(libre, 1),
                     modele=moteur.nom_court(modele)))
                 reglages["modele"], reglages["lot"] = modele, lot
+                if modele != (precoce and precoce._infos.get("modele")) and not element.recommencer \
+                        and config.get("sauvegarde_progressive", True):
+                    # Modèle plus léger imposé par la mémoire : une reprise de
+                    # ce fichier avec ce modèle-là est poursuivie, pas écrasée.
+                    autre = reprise_module.cle(source, modele)
+                    if reprise_module.a_garder(autre):
+                        element.reprise = autre
 
         # 1 bis. Sauvegarde progressive et reprise éventuelle.
         #
@@ -663,7 +709,14 @@ class FileTraitement:
 
         if element.reprise:
             etat_reprise = reprise_module.lire_etat(element.reprise) or {}
-            deja_transcrits = reprise_module.lire_segments(element.reprise)
+            try:
+                deja_transcrits = reprise_module.lire_segments(element.reprise)
+            except reprise_module.RepriseIllisible as exc:
+                # Disque ou antivirus qui bloque pour l'instant : la reprise reste
+                # telle quelle, rien n'est réécrit ; à relancer plus tard.
+                journal.attention("%s", exc)
+                raise ErreurLisible(langues.t("trait.reprise_illisible.titre"),
+                                    langues.t("trait.reprise_illisible.msg", nom=element.nom)) from exc
             if deja_transcrits:
                 decalage = deja_transcrits[-1].fin
                 ecoule_anterieur = float(etat_reprise.get("ecoule", 0) or 0)
@@ -690,7 +743,12 @@ class FileTraitement:
                 source, reglages["modele"], duree_audio,
                 position=decalage, nb_segments=len(deja_transcrits),
                 ecoule=ecoule_anterieur, sortie=str(config.get("dossier_sortie") or ""),
-                demande=reprise_module.demande_de(config), nouvelle=not deja_transcrits,
+                demande=reprise_module.demande_de(config),
+                # Une reprise ajoute toujours à la suite (même sans segment
+                # relu : rien n'est tronqué) ; seul un départ neuf repart vide :
+                # rien à garder sous cette clé (toute reprise utile a été
+                # rattachée plus haut), ou « recommencer » demandé.
+                nouvelle=not element.reprise,
             )
             if session.active:
                 getattr(rappels, "reprise", lambda i, c: None)(element.identifiant, identifiant)

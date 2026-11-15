@@ -88,6 +88,10 @@ from pathlib import Path
 RACINE = Path(__file__).resolve().parent.parent
 if str(RACINE) not in sys.path:
     sys.path.insert(0, str(RACINE))
+# Aucune clé de désinstallation simulée (lue seulement quand un essai
+# détourne LOCALAPPDATA) : une WhiScribe 2.x réellement installée sur le
+# poste ne change rien aux essais (voir `chemins.etat_version_2x`).
+os.environ.setdefault("SCRIBOUILLE_ESSAI_REGISTRE", "[]")
 
 from app import (  # noqa: E402
     calibration, chemins, compagnon, langues, maj, materiel, nommage, presets,
@@ -2892,6 +2896,19 @@ def essai_endurance(base: Path) -> None:
         rapport = resultat["rapport"]
         verifier("3221225477" in rapport and str(Path.home()) not in rapport and str(base) not in rapport,
                  "le rapport donne le code de sortie du processus tombé, sans chemin")
+        # --recommencer : passages et paramètres repartent de zéro, les
+        # rapports déjà écrits restent (chacun date une épreuve).
+        dossiers = [d for d in en.DOSSIER.iterdir() if d.is_dir()]
+        ancien = dossiers[0] / "rapport-endurance-20260101-0000.txt"
+        ancien.write_text("rapport d'une épreuve passée\n", encoding="utf-8")
+        avant = sorted(p.name for p in dossiers[0].glob("rapport-endurance-*.txt"))
+        lancements.clear()
+        resultat = en.executer(passages=6, pression=True, recommencer=True)
+        apres = sorted(p.name for p in dossiers[0].glob("rapport-endurance-*.txt"))
+        verifier(lancements and lancements[0] == ["p01", "p02", "p03", "p04", "p05", "p06"]
+                 and ancien.is_file() and set(avant) <= set(apres) and resultat["complet"],
+                 "--recommencer : tous les passages refaits, les anciens rapports gardés",
+                 f"{lancements} {avant} {apres}")
     finally:
         (en._lancer, en.DOSSIER, corpus.preparer, moteur.etat_modele, cp._peripherique_ov,
          cp.dernier_verdict) = reels

@@ -48,6 +48,7 @@ calcul, et la mesure dirait n'importe quoi.
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -184,12 +185,20 @@ def charger(signature: str = "") -> dict:
 
 
 def _ecrire(donnees: dict) -> None:
+    # Écrit à côté (nom propre à ce processus) puis renommé : une coupure ne
+    # laisse jamais un fichier tronqué, et deux processus ne se mélangent pas.
+    cible = fichier()
+    provisoire = cible.with_name(f"{cible.name}.{os.getpid()}.tmp")
     try:
         chemins.RACINE.mkdir(parents=True, exist_ok=True)
-        fichier().write_text(
-            json.dumps(donnees, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        provisoire.write_text(json.dumps(donnees, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        os.replace(provisoire, cible)
     except OSError as exc:
         journal.attention("Mesures de durée non enregistrées : %s", exc)
+        try:
+            provisoire.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def oublier() -> None:

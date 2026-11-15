@@ -2304,6 +2304,38 @@ window.onFichiersAjoutes = function (items) {
   if (etat.enCours) items.forEach((it) => { if (!etat.passage.includes(it.id)) etat.passage.push(it.id); });
 };
 
+/* Fichiers deposes qui avaient une transcription interrompue : la reprise est
+   deja rattachee (rien ne se perd si l'on ferme), la modale propose de
+   recommencer du debut a la place. */
+window.onReprisesTrouvees = function (trouvees) {
+  if (!trouvees || !trouvees.length) return;
+  etat.reprisesTrouvees = trouvees;
+  const une = trouvees.length === 1 ? trouvees[0] : null;
+  $('#texte-reprise-trouvee').textContent = une
+    ? t('ui.reprise_trouvee.texte', { nom: une.nom, position: une.position_texte, duree: une.duree_texte, pct: une.pct })
+    : t('ui.reprise_trouvee.texte_n');
+  $('#liste-reprise-trouvee').innerHTML = une ? '' : trouvees.map((r) => `<li>${ech(t('ui.reprise_trouvee.ligne', {
+    nom: r.nom, position: r.position_texte, duree: r.duree_texte, pct: r.pct }))}</li>`).join('');
+  ouvrirModale('#modale-reprise-trouvee');
+};
+
+async function recommencerTrouvees() {
+  const trouvees = etat.reprisesTrouvees || [];
+  etat.reprisesTrouvees = [];
+  fermerModale($('#modale-reprise-trouvee'));
+  for (const r of trouvees) {
+    const retour = await pywebview.api.recommencer(r.id);
+    if (!retour || !retour.ok) {
+      const message = (retour && retour.message) || '';
+      if (message) { journaliser('attention', message); setEtat(message, 'attention'); }
+      continue;
+    }
+    remettreEnAttente(retour.element);
+    etat.reprises = retour.reprises || etat.reprises;
+  }
+  dessinerReprises();
+}
+
 window.onDuree = async function (id, secondes, texte) {
   const it = etat.fichiers.get(id);
   if (!it) return;
@@ -2828,6 +2860,7 @@ document.addEventListener('DOMContentLoaded', () => {
     pywebview.api.choisir_import();
   });
   $('#btn-confirmer-import').addEventListener('click', confirmerImport);
+  $('#btn-recommencer-reprise').addEventListener('click', recommencerTrouvees);
 
   $('#opt-avance').addEventListener('change', (e) => {
     $('#bloc-avance').style.display = e.target.checked ? 'block' : 'none';

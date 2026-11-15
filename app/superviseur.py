@@ -315,11 +315,17 @@ class Superviseur:
             return
         if genre == "moteur":
             etat = str(message.get("etat") or "")
+            if etat == "ouverture":
+                # Ouverture réelle sur la puce, modèle déjà sur le disque : la
+                # garde part d'ici, jamais du téléchargement (lent derrière un
+                # proxy, il ne prouve rien contre la puce).
+                self._debut_chargement = time.monotonic()
+                self.sur_puce = bool(message.get("sur_puce", True))
+                self.peripherique = str(message.get("peripherique") or self.peripherique)
+                return
             if etat == "chargement":
                 self.chargements += 1
-                self._debut_chargement = time.monotonic()
-            else:
-                self._debut_chargement = None
+            self._debut_chargement = None
             self.modele = str(message.get("modele") or "") if etat != "libere" else ""
             self.peripherique = str(message.get("peripherique") or "")
             self.sur_puce = bool(message.get("sur_puce"))
@@ -470,7 +476,8 @@ class Superviseur:
                     "id": element.identifiant, "chemin": element.chemin, "nom": element.nom,
                     "taille": element.taille, "duree": element.duree, "reprise": element.reprise,
                     "duree_annoncee": element.duree_annoncee,
-                    "sortie": getattr(element, "sortie", "")})
+                    "sortie": getattr(element, "sortie", ""),
+                    "recommencer": bool(getattr(element, "recommencer", False))})
                 reponse = self._attendre(numero)
             except _MoteurMort as mort:
                 if mort.voulu or (interrompu is not None and interrompu()):

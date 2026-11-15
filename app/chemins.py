@@ -81,26 +81,190 @@ def _dossier_programme() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
-def ancienne_version_installee() -> Path | None:
-    """
-    L'exécutable d'une version 2.x installée (WhiScribe), encore là, ou None.
+#: Identifiant Inno de l'installation (packaging/setup.iss, AppId). Il n'a
+#: jamais changé depuis la 2.x : la même clé de désinstallation porte la 2.x
+#: ou la 3.x, selon `DisplayVersion`.
+APP_ID = "{4E1B7C86-8F2A-4B5D-9C31-6D0A4F7E2B93}"
+CLE_DESINSTALLATION = rf"Software\Microsoft\Windows\CurrentVersion\Uninstall\{APP_ID}_is1"
 
-    Inno range l'installation par identifiant : la 3.0 installée par-dessus
-    se pose dans le même dossier, « Programs\\WhiScribe », avec
-    « Scribouille.exe ». Seul « WhiScribe.exe » sans « Scribouille.exe » à côté
-    est donc une ancienne version qui lit encore `%LOCALAPPDATA%\\WhiScribe`.
+#: Vérifications seulement : clés de désinstallation simulées (JSON), à la
+#: place du vrai registre, voir `_cles_desinstallation`. Prise en compte
+#: seulement quand LOCALAPPDATA est détourné vers un dossier d'essai : une
+#: variable posée par erreur ne peut jamais lever la protection d'une vraie
+#: 2.x sur le vrai dossier de données.
+VARIABLE_ESSAI_REGISTRE = "SCRIBOUILLE_ESSAI_REGISTRE"
+
+
+def _localappdata_reel() -> str:
     """
-    base = os.environ.get("LOCALAPPDATA")
-    if not base:
-        return None
-    dossier = Path(base) / "Programs" / NOM_DOSSIER_ANCIEN
-    exe = dossier / f"{NOM_DOSSIER_ANCIEN}.exe"
+    Le vrai %LOCALAPPDATA% de la session, sans rien tirer de l'environnement
+    du processus (qu'un essai détourne, `USERPROFILE` compris) : la valeur que
+    l'Explorateur tient dans le registre (`Shell Folders`), sinon le dossier
+    du profil donné par le jeton de la session, plus `AppData\\Local`.
+    Vide si rien ne se lit (la simulation du registre n'est alors jamais lue).
+    """
+    if sys.platform != "win32":
+        return ""
     try:
-        if exe.is_file() and not (dossier / f"{NOM_DOSSIER_UTILISATEUR}.exe").is_file():
-            return exe
+        import winreg
+
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                            r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders") as cle:
+            valeur = str(winreg.QueryValueEx(cle, "Local AppData")[0] or "")
+        if valeur and "%" not in valeur:
+            return valeur
     except OSError:
         pass
-    return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        advapi32 = ctypes.WinDLL("advapi32")
+        userenv = ctypes.WinDLL("userenv")
+        kernel32 = ctypes.WinDLL("kernel32")
+        jeton = wintypes.HANDLE()
+        kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+        if not advapi32.OpenProcessToken(kernel32.GetCurrentProcess(), 0x0008, ctypes.byref(jeton)):
+            return ""
+        try:
+            taille = wintypes.DWORD(1024)
+            tampon = ctypes.create_unicode_buffer(1024)
+            if not userenv.GetUserProfileDirectoryW(jeton, tampon, ctypes.byref(taille)):
+                return ""
+            return str(Path(tampon.value) / "AppData" / "Local") if tampon.value else ""
+        finally:
+            kernel32.CloseHandle(jeton)
+    except Exception:
+        return ""
+
+
+def _essai_registre_permis() -> bool:
+    """LOCALAPPDATA détourné vers un dossier d'essai (vérifications) : la simulation du registre est lue."""
+    base = os.environ.get("LOCALAPPDATA", "")
+    reel = _localappdata_reel()
+    if not base or not reel:
+        return False
+    return os.path.normcase(os.path.abspath(base)).rstrip("\\/") != os.path.normcase(os.path.abspath(reel)).rstrip("\\/")
+
+
+def _cles_desinstallation() -> list[dict]:
+    """
+    Les clés de désinstallation Inno de Scribouille (HKCU et HKLM, vues 64 et
+    32 bits), en lecture seule. Chaque élément : {ruche, version, dossier}, ou
+    {ruche, erreur} si la lecture a échoué (autre chose qu'une clé absente).
+    """
+    essai = os.environ.get(VARIABLE_ESSAI_REGISTRE, "").strip()
+    if essai and _essai_registre_permis():
+        import json
+
+        if essai.lower() == "erreur":
+            return [{"ruche": "essai", "erreur": "lecture simulée en échec"}]
+        try:
+            donnees = json.loads(essai)
+        except ValueError:
+            return [{"ruche": "essai", "erreur": "simulation illisible"}]
+        return [dict(c) for c in (donnees if isinstance(donnees, list) else [donnees]) if isinstance(c, dict)]
+    if sys.platform != "win32":
+        return []
+    try:
+        import winreg
+    except ImportError:
+        return []
+    trouvees: list[dict] = []
+    vues = []
+    for ruche, nom in ((winreg.HKEY_CURRENT_USER, "HKCU"), (winreg.HKEY_LOCAL_MACHINE, "HKLM")):
+        for vue in (winreg.KEY_WOW64_64KEY, winreg.KEY_WOW64_32KEY):
+            vues.append((ruche, nom, vue))
+    vus: set[tuple[str, str]] = set()
+    for ruche, nom, vue in vues:
+        try:
+            cle = winreg.OpenKey(ruche, CLE_DESINSTALLATION, 0, winreg.KEY_READ | vue)
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            trouvees.append({"ruche": nom, "erreur": f"{type(exc).__name__}: {exc}"[:200]})
+            continue
+        with cle:
+            valeurs = {}
+            for valeur in ("DisplayVersion", "InstallLocation", "Inno Setup: App Path"):
+                try:
+                    valeurs[valeur] = str(winreg.QueryValueEx(cle, valeur)[0] or "")
+                except FileNotFoundError:
+                    valeurs[valeur] = ""
+                except OSError as exc:
+                    valeurs[valeur] = ""
+                    valeurs.setdefault("erreur", f"{valeur} : {exc}"[:200])
+        dossier = valeurs.get("InstallLocation") or valeurs.get("Inno Setup: App Path") or ""
+        empreinte = (valeurs.get("DisplayVersion", ""), dossier.lower().rstrip("\\/"))
+        if empreinte in vus:
+            continue  # même clé vue sous deux vues (HKCU n'est pas redirigée)
+        vus.add(empreinte)
+        entree = {"ruche": nom, "version": valeurs.get("DisplayVersion", ""), "dossier": dossier}
+        if valeurs.get("erreur"):
+            entree["erreur"] = valeurs["erreur"]
+        trouvees.append(entree)
+    return trouvees
+
+
+def _majeure(version: str) -> int | None:
+    try:
+        return int(str(version or "").strip().split(".", 1)[0])
+    except ValueError:
+        return None
+
+
+def etat_version_2x() -> dict:
+    """
+    Une WhiScribe 2.x est-elle installée sur ce poste ? Deux indices, l'un
+    suffit : la clé de désinstallation Inno (HKCU ou HKLM) dont la version
+    est une 2.x, où qu'elle ait été installée ; « WhiScribe.exe » sans
+    « Scribouille.exe » à côté dans `Programs\\WhiScribe`. Une 3.x installée
+    par-dessus réécrit la même clé (même identifiant) avec sa version.
+
+    Une lecture du registre en échec, ou une clé dont la version ne se lit
+    pas, vaut présence (`sure` faux) : dans le doute, rien n'est déplacé ni
+    effacé. Rend {presente, sure, exe, par, version, detail}.
+    """
+    for entree in _cles_desinstallation():
+        if entree.get("erreur") and not entree.get("version"):
+            return {"presente": True, "sure": False, "exe": None, "par": "registre_illisible",
+                    "version": "", "detail": f"{entree.get('ruche')} : {entree.get('erreur')}"}
+        majeure = _majeure(entree.get("version", ""))
+        if majeure is None:
+            return {"presente": True, "sure": False, "exe": None, "par": "registre_version_illisible",
+                    "version": str(entree.get("version") or ""), "detail": str(entree.get("ruche") or "")}
+        if majeure < 3:
+            dossier = str(entree.get("dossier") or "")
+            exe = Path(dossier) / f"{NOM_DOSSIER_ANCIEN}.exe" if dossier else None
+            return {"presente": True, "sure": True, "exe": exe, "par": "registre",
+                    "version": str(entree.get("version")), "detail": str(entree.get("ruche") or "")}
+    base = os.environ.get("LOCALAPPDATA")
+    if base:
+        dossier = Path(base) / "Programs" / NOM_DOSSIER_ANCIEN
+        exe = dossier / f"{NOM_DOSSIER_ANCIEN}.exe"
+        try:
+            if exe.is_file() and not (dossier / f"{NOM_DOSSIER_UTILISATEUR}.exe").is_file():
+                return {"presente": True, "sure": True, "exe": exe, "par": "dossier", "version": "",
+                        "detail": str(dossier)}
+        except OSError as exc:
+            return {"presente": True, "sure": False, "exe": exe, "par": "dossier_illisible", "version": "",
+                    "detail": str(exc)[:200]}
+    return {"presente": False, "sure": True, "exe": None, "par": "", "version": "", "detail": ""}
+
+
+def ancienne_version_installee() -> Path | None:
+    """
+    L'exécutable d'une version 2.x installée (WhiScribe), encore là, ou None
+    (voir `etat_version_2x`). Détection incertaine : l'emplacement habituel,
+    même s'il n'y est pas, pour que tout se comporte comme si elle était là.
+    """
+    etat = etat_version_2x()
+    if not etat["presente"]:
+        return None
+    if etat.get("exe"):
+        return Path(etat["exe"])
+    base = os.environ.get("LOCALAPPDATA") or str(Path.home())
+    return Path(base) / "Programs" / NOM_DOSSIER_ANCIEN / f"{NOM_DOSSIER_ANCIEN}.exe"
 
 
 #: Commandes de lecture : elles n'écrivent RIEN, ni réglages, ni journal, ni
@@ -148,20 +312,33 @@ def commande_de_lecture(arguments: list[str] | None = None) -> bool:
 LECTURE_SEULE = commande_de_lecture()
 
 
+def _nouveau_deja_en_service(nouveau: Path) -> bool:
+    """Le dossier à notre nom a-t-il déjà nos données (réglages, ou une reprise de l'ancien commencée) ?"""
+    try:
+        return (nouveau / "config.json").exists() or (nouveau / "migration-whiscribe.json").exists()
+    except OSError:
+        return True
+
+
 def _garder_ancien_dossier(ancien: Path, nouveau: Path) -> bool:
     """
     Une version 2.x installée lit encore l'ancien dossier : le déplacer la
     priverait de ses réglages et de ses modèles (plusieurs gigaoctets à
-    retélécharger). Tant qu'elle est là, et que rien n'a encore été repris, la
-    3.0 travaille dans l'ancien dossier, partagé ; la reprise se fera au premier
-    lancement qui suivra sa désinstallation ou sa mise à jour.
+    retélécharger). Tant qu'elle est là, la 3.x travaille dans l'ancien
+    dossier, partagé, sauf si le dossier à notre nom sert déjà (une 3.0
+    antérieure l'a créé) : elle y reste, et l'ancien n'est plus touché.
+    Rien n'est déplacé tant qu'une 2.x est (ou semble) installée
+    (`etat_version_2x`) ; la reprise se fera au premier lancement qui suivra
+    sa désinstallation ou sa mise à jour.
     """
-    try:
-        return (ancienne_version_installee() is not None and (ancien / "config.json").is_file()
-                and not (nouveau / "config.json").exists()
-                and not (nouveau / "migration-whiscribe.json").exists())
-    except OSError:
+    if ancienne_version_installee() is None:
         return False
+    if _nouveau_deja_en_service(nouveau):
+        return False
+    try:
+        return ancien.is_dir()
+    except OSError:
+        return True
 
 
 def _dossier_donnees() -> Path:
@@ -175,7 +352,9 @@ def _dossier_donnees() -> Path:
     # tel quel, sans reprise de l'ancien dossier.
     impose = os.environ.get("SCRIBOUILLE_DONNEES", "").strip()
     if impose:
-        return Path(impose).expanduser()
+        # Rendu absolu : le moteur et les travailleurs, lancés depuis le
+        # dossier du programme, doivent désigner le même dossier.
+        return Path(os.path.abspath(Path(impose).expanduser()))
     if not EST_GELE:
         return Path(__file__).resolve().parent.parent
     base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
@@ -183,9 +362,18 @@ def _dossier_donnees() -> Path:
         return Path.home() / f".{NOM_DOSSIER_UTILISATEUR.lower()}"
     nouveau = Path(base) / NOM_DOSSIER_UTILISATEUR
     ancien = Path(base) / NOM_DOSSIER_ANCIEN
-    if "--revenir-whiscribe" not in sys.argv and _garder_ancien_dossier(ancien, nouveau):
-        MIGRATION.update({"etat": "partage", "ancienne": str(ancienne_version_installee())})
-        return ancien
+    if "--revenir-whiscribe" not in sys.argv:
+        installee = etat_version_2x()
+        if installee["presente"]:
+            # Une 2.x installée (ou une détection incertaine) : jamais de
+            # reprise de l'ancien dossier, jamais de déplacement.
+            MIGRATION.update({"ancienne": str(ancienne_version_installee()), "detection": installee["par"],
+                              "sure": installee["sure"]})
+            if _garder_ancien_dossier(ancien, nouveau):
+                MIGRATION["etat"] = "partage"
+                return ancien
+            MIGRATION["etat"] = "bloquee"
+            return nouveau
     if LECTURE_SEULE:
         # Une commande de lecture ne déplace rien : l'ancien dossier, pas
         # encore repris, est lu sur place ; la reprise se fera à la
@@ -245,6 +433,10 @@ def phrase_dossier_donnees() -> str:
     if etat == "partage" or partagee is not None:
         return (f"Données gardées dans {RACINE} : la version installée {MIGRATION.get('ancienne') or partagee} "
                 "le lit encore ; reprise après sa désinstallation ou sa mise à jour")
+    if etat == "bloquee":
+        doute = "" if MIGRATION.get("sure", True) else " (détection incertaine, tenue pour présente)"
+        return (f"Données dans {RACINE} ; {NOM_DOSSIER_ANCIEN} laissé tel quel à la version installée "
+                f"{MIGRATION.get('ancienne')}{doute} : rien n'y est repris ni effacé tant qu'elle est là")
     if etat == "differee":
         return f"Données lues sur place dans {RACINE} : reprise à la prochaine commande qui écrit"
     if etat not in (None, "rien"):
@@ -265,7 +457,7 @@ def journaliser_dossier_donnees() -> None:
     from . import journal
 
     etat = MIGRATION.get("etat")
-    if etat in ("partage", "differee") or donnees_partagees_ancienne_version() is not None:
+    if etat in ("partage", "differee", "bloquee") or donnees_partagees_ancienne_version() is not None:
         journal.info("%s", phrase_dossier_donnees())
     elif etat not in (None, "rien"):
         journal.info("Données reprises de %s : déplacées %s, doublons rangés à part %s, état %s%s",
@@ -441,6 +633,33 @@ def dossier_ecrivable(chemin: str | Path) -> str:
         return langues.t("chemin.dossier_non_ecrivable")
     k32.CloseHandle(poignee)
     return ""
+
+
+def constat_presence(chemin: str | Path) -> str:
+    """
+    « present », « absent » (le dossier qui le contient répond, le fichier
+    n'y est pas) ou « injoignable » (lecteur déconnecté, clé débranchée,
+    dossier parent disparu, accès refusé, erreur passagère). Seul « absent »
+    autorise à tenir un fichier pour disparu ; « injoignable » peut être
+    passager et ne justifie jamais un effacement.
+    """
+    texte = str(chemin or "").strip()
+    if not texte:
+        return "injoignable"
+    cible = Path(texte)
+    try:
+        os.stat(cible)
+        return "present"
+    except FileNotFoundError:
+        pass
+    except OSError:
+        return "injoignable"
+    try:
+        import stat as stat_module
+
+        return "absent" if stat_module.S_ISDIR(os.stat(cible.parent).st_mode) else "injoignable"
+    except OSError:
+        return "injoignable"
 
 
 def espace_libre_go(chemin: str | Path) -> float:

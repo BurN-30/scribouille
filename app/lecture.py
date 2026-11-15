@@ -1126,17 +1126,54 @@ def _signature(photo: dict) -> dict:
             for s, c in photo.items()}
 
 
+#: Transcription introuvable (dossier joignable, fichier absent) : son
+#: historique (et l'original du texte) n'est retiré qu'après autant de jours.
+DELAI_ABSENCE_JOURS = 7
+NOM_ABSENCE = "absente-depuis.txt"
+
+
 def _elaguer_historique() -> None:
-    """Retire les historiques des transcriptions qui n'existent plus."""
+    """
+    Retire les historiques des transcriptions qui n'existent plus. Jamais sur
+    une absence qui peut être passagère : transcription sur une clé
+    débranchée, un lecteur réseau pas encore reconnecté, un dossier qui ne
+    répond pas (`chemins.constat_presence`) ; une transcription bien absente
+    (son dossier répond) est datée au premier constat, son historique retiré
+    seulement `DELAI_ABSENCE_JOURS` jours plus tard.
+    """
     import shutil
 
     try:
         dossiers = list(DOSSIER_HISTORIQUE.iterdir())
     except OSError:
         return
+    maintenant = datetime.now()
     for dossier in dossiers:
         chemin = _index_historique(dossier).get("chemin")
-        if chemin and not Path(chemin).exists():
+        if not chemin:
+            continue
+        constat = chemins.constat_presence(chemin)
+        marque = dossier / NOM_ABSENCE
+        if constat != "absent":
+            if constat == "present":
+                try:
+                    marque.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            continue
+        try:
+            depuis = datetime.fromisoformat(marque.read_text(encoding="ascii").strip())
+        except FileNotFoundError:
+            try:
+                marque.write_text(maintenant.isoformat(timespec="seconds"), encoding="ascii")
+            except OSError:
+                pass
+            continue
+        except (OSError, ValueError):
+            continue
+        if (maintenant - depuis).total_seconds() >= DELAI_ABSENCE_JOURS * 86400:
+            journal.info("Historique de relecture retiré : %s introuvable depuis %s", chemin,
+                         depuis.isoformat(timespec="seconds"))
             shutil.rmtree(dossier, ignore_errors=True)
 
 

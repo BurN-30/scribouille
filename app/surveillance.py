@@ -20,7 +20,10 @@ Trois choix d'implémentation, tous dictés par la sobriété :
   - **La mémoire des fichiers déjà pris est persistante.** Sans elle, tout
     serait retranscrit à chaque démarrage. La clé retenue est le triplet
     chemin, taille, date de modification : un enregistrement refait sous le
-    même nom est bien un fichier nouveau, et il repart en transcription.
+    même nom est bien un fichier nouveau, et il repart en transcription. Un
+    fichier n'y entre qu'une fois sa transcription finie (réussie ou en
+    échec) : ceux qui attendaient en file lors d'une coupure repartent au
+    démarrage suivant. Elle est écrite à côté puis renommée.
 
 Un dossier supprimé, débranché ou devenu illisible ne casse rien : la
 surveillance passe en défaut, le dit une fois dans l'interface, et repart toute
@@ -30,6 +33,7 @@ seule si le dossier réapparaît.
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 from pathlib import Path
@@ -76,13 +80,20 @@ def ecrire_memoire(memoire: dict) -> None:
     if len(memoire) > MEMOIRE_MAX:
         anciennes = sorted(memoire.items(), key=lambda couple: couple[1])
         memoire = dict(anciennes[-MEMOIRE_MAX:])
+    # Écrite à côté (nom propre à ce processus) puis renommée : tronquée par
+    # une coupure, elle remettait tout le dossier surveillé en file.
+    cible = fichier_memoire()
+    provisoire = cible.with_name(f"{cible.name}.{os.getpid()}.tmp")
     try:
         chemins.RACINE.mkdir(parents=True, exist_ok=True)
-        fichier_memoire().write_text(
-            json.dumps(memoire, ensure_ascii=False), encoding="utf-8"
-        )
+        provisoire.write_text(json.dumps(memoire, ensure_ascii=False), encoding="utf-8")
+        os.replace(provisoire, cible)
     except OSError as exc:
         journal.attention("Mémoire du dossier surveillé non enregistrée : %s", exc)
+        try:
+            provisoire.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -182,6 +193,9 @@ class Surveillant:
         self._probleme_signale = ""
         self._tailles: dict[str, int] = {}
         self._memoire = charger_memoire()
+        #: Empreinte -> chemin (minuscules) des fichiers livrés à la file
+        #: pendant cette session, en attendant leur transcription.
+        self._livres: dict[str, str] = {}
 
     # -- pilotage ----------------------------------------------------------
 
@@ -294,12 +308,35 @@ class Surveillant:
         if not passage["nouveaux"]:
             return
 
-        maintenant = time.time()
+        # Livrés à la file, pas encore « vus » : ils ne le deviennent (sur le
+        # disque) qu'une fois leur transcription finie (`marquer_vu`). Une
+        # coupure pendant qu'ils attendaient les remet en file au démarrage
+        # suivant ; d'ici là, cette session ne les relivre pas.
+        nouveaux = [c for c in passage["nouveaux"] if empreinte(Path(c)) not in self._livres]
+        if not nouveaux:
+            return
         with self._verrou:
-            for chemin in passage["nouveaux"]:
-                self._memoire[empreinte(Path(chemin))] = maintenant
+            for chemin in nouveaux:
+                self._livres[empreinte(Path(chemin))] = str(chemin).lower()
+
+        journal.info("Dossier surveillé : %s nouveau(x) fichier(s)", len(nouveaux))
+        self._sur_nouveaux(nouveaux)
+
+    def livre(self, chemin: str) -> bool:
+        """Ce fichier a-t-il été livré à la file par le dossier surveillé, pendant cette session ?"""
+        cle = str(chemin or "").lower()
+        with self._verrou:
+            return cle in self._livres.values()
+
+    def marquer_vu(self, chemin: str) -> None:
+        """Transcription finie (réussie ou en échec) d'un fichier livré : il est désormais connu."""
+        cle = str(chemin or "").lower()
+        with self._verrou:
+            empreintes = [e for e, c in self._livres.items() if c == cle]
+            if not empreintes:
+                return
+            maintenant = time.time()
+            for e in empreintes:
+                self._memoire[e] = maintenant
             memoire = dict(self._memoire)
         ecrire_memoire(memoire)
-
-        journal.info("Dossier surveillé : %s nouveau(x) fichier(s)", len(passage["nouveaux"]))
-        self._sur_nouveaux(passage["nouveaux"])

@@ -566,7 +566,8 @@ def essai_instances(base: Path) -> None:
         finally:
             autre.kill()
             autre.wait()
-        verifier(instance.prendre_fichier(source) == 0 and verrou.read_text(encoding="ascii") == str(os.getpid()),
+        verifier(instance.prendre_fichier(source) == 0
+                 and verrou.read_text(encoding="ascii").split()[0] == str(os.getpid()),
                  "le verrou d'un processus disparu est repris")
         instance.rendre_fichier(source)
         verifier(not verrou.exists(), "le verrou est rendu en fin de fichier")
@@ -643,6 +644,436 @@ def essai_instances(base: Path) -> None:
         chemins.RACINE = racine
 
 
+def _empreinte_arbre(dossier: Path) -> dict:
+    import hashlib
+
+    return {p.relative_to(dossier).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in sorted(dossier.rglob("*")) if p.is_file()}
+
+
+def essai_version_2x(base: Path) -> None:
+    """Revue du 15/11 (S1) : une 2.x installée n'est jamais privée de ses données, où qu'elle soit."""
+    import json
+    import os
+
+    from app import chemins, inventaire
+
+    titre("WhiScribe 2.x installée : détectée par le registre, jamais déplacée ni effacée")
+    local = base / "registre-local"
+    ancien, nouveau = local / "WhiScribe", local / "Scribouille"
+    reels = {k: os.environ.get(k) for k in ("LOCALAPPDATA", "SCRIBOUILLE_ESSAI_REGISTRE", "SCRIBOUILLE_DONNEES")}
+    gele, migration_reelle = chemins.EST_GELE, dict(chemins.MIGRATION)
+    racine, imposees = chemins.RACINE, chemins.DONNEES_IMPOSEES
+
+    def preparer(avec_nouveau: bool) -> None:
+        import shutil
+
+        shutil.rmtree(local, ignore_errors=True)
+        (ancien / "modeles" / "models--Systran--faster-whisper-large-v3").mkdir(parents=True)
+        (ancien / "modeles" / "models--Systran--faster-whisper-large-v3" / "poids").write_bytes(b"p" * 64)
+        (ancien / "config.json").write_text('{"preset": "rapide"}', encoding="utf-8")
+        (ancien / "dossier-modeles.txt").write_text(str(ancien / "modeles") + "\n", encoding="utf-8")
+        (ancien / "logs").mkdir()
+        (ancien / "logs" / "2026-11-12_1.log").write_text("2.x\n", encoding="utf-8")
+        if avec_nouveau:
+            nouveau.mkdir(parents=True)
+            (nouveau / "config.json").write_text("{}", encoding="utf-8")
+
+    def registre(valeur) -> None:
+        os.environ["SCRIBOUILLE_ESSAI_REGISTRE"] = valeur if isinstance(valeur, str) else json.dumps(valeur)
+
+    try:
+        os.environ["LOCALAPPDATA"] = str(local)
+        os.environ.pop("SCRIBOUILLE_DONNEES", None)
+        chemins.EST_GELE = True
+        ailleurs = {"ruche": "HKCU", "version": "2.3.3", "dossier": str(base / "D" / "Outils" / "WhiScribe")}
+        registre([ailleurs])
+        etat = chemins.etat_version_2x()
+        verifier(etat["presente"] and etat["sure"] and etat["par"] == "registre"
+                 and chemins.ancienne_version_installee() == Path(ailleurs["dossier"]) / "WhiScribe.exe",
+                 "2.3.3 installée ailleurs que dans Programs\\WhiScribe : vue par sa clé de désinstallation", str(etat))
+        registre([{"ruche": "HKCU", "version": "3.0.0", "dossier": str(local / "Programs" / "WhiScribe")}])
+        verifier(not chemins.etat_version_2x()["presente"],
+                 "clé de la 3.x installée par-dessus (même identifiant) : plus de 2.x")
+        registre("erreur")
+        etat = chemins.etat_version_2x()
+        verifier(etat["presente"] and not etat["sure"], "registre illisible : tenue pour présente", str(etat))
+        registre([{"ruche": "HKLM", "version": "", "dossier": ""}])
+        verifier(chemins.etat_version_2x()["presente"], "clé sans version lisible : tenue pour présente")
+
+        for cas, valeur, avec_nouveau, attendu_racine, attendu_etat in (
+                ("2.x ailleurs, Scribouille déjà en service (3.0 antérieure)", [ailleurs], True, nouveau, "bloquee"),
+                ("2.x ailleurs, jamais ouverte par la 3.x", [ailleurs], False, ancien, "partage"),
+                ("registre illisible", "erreur", True, nouveau, "bloquee")):
+            preparer(avec_nouveau)
+            registre(valeur)
+            avant = _empreinte_arbre(ancien)
+            chemins.MIGRATION.clear()
+            obtenue = chemins._dossier_donnees()
+            verifier(obtenue == attendu_racine and chemins.MIGRATION.get("etat") == attendu_etat
+                     and _empreinte_arbre(ancien) == avant and not (nouveau / "migration-whiscribe.json").exists(),
+                     f"{cas} : rien de WhiScribe déplacé ni réécrit (dossier {attendu_etat})",
+                     f"{obtenue} {chemins.MIGRATION} {sorted(set(avant) ^ set(_empreinte_arbre(ancien)))}")
+        # Effacement complet : WhiScribe hors de tout poste quand la 2.x est là.
+        preparer(True)
+        registre([ailleurs])
+        chemins.RACINE, chemins.DONNEES_IMPOSEES = nouveau, False
+        reglages = {"dossier_sortie": str(base / "sorties-2x")}   # jamais les vraies Transcriptions
+        postes = {p.cle for p in inventaire.postes(reglages, mesurer=False)[0]}
+        apercu = inventaire.apercu_effacement(True, reglages, avec_programme=False)
+        verifier("ancien_dossier" not in postes and str(ancien) in apercu["partages"]
+                 and not any(str(c).lower().startswith(str(ancien).lower())
+                             for p in apercu["postes"] for c in p["chemins"]),
+                 "effacer --complet : WhiScribe montré à part, jamais dans ce qui s'efface", str(sorted(postes)))
+        registre([])
+        preparer(False)
+        chemins.MIGRATION.clear()
+        chemins.RACINE = chemins._dossier_donnees()
+        verifier(chemins.RACINE == nouveau and (nouveau / "config.json").is_file() and not (ancien / "config.json").exists(),
+                 "sans 2.x : la reprise de l'ancien dossier se fait comme avant", str(chemins.MIGRATION))
+        # La simulation n'est lue que sur un LOCALAPPDATA d'essai.
+        os.environ["LOCALAPPDATA"] = chemins._localappdata_reel() or str(local)
+        verifier(not chemins._essai_registre_permis() or not chemins._localappdata_reel(),
+                 "vrai LOCALAPPDATA : la simulation du registre est ignorée (vrai registre lu)")
+    finally:
+        chemins.EST_GELE, chemins.RACINE, chemins.DONNEES_IMPOSEES = gele, racine, imposees
+        chemins.MIGRATION.clear()
+        chemins.MIGRATION.update(migration_reelle)
+        for cle, valeur in reels.items():
+            if valeur is None:
+                os.environ.pop(cle, None)
+            else:
+                os.environ[cle] = valeur
+
+
+def essai_reprise_tolerante(base: Path) -> None:
+    """Revue du 15/11 (S2 à S5, M4) : une reprise ne se perd ni à la lecture, ni à la suite, ni à la purge."""
+    import json
+    from datetime import datetime, timedelta
+
+    from app import chemins, lecture, reprise
+    from app.moteur import Segment
+
+    titre("Reprises : lecture ligne par ligne, suite propre, purge prudente, à l'abri de la 2.3.3")
+    racine = chemins.RACINE
+    chemins.RACINE = base / "reprises-tolerantes"
+    try:
+        source = base / "reunion-tolerante.ogg"
+        source.write_bytes(b"audio")
+
+        def ligne(k: int) -> bytes:
+            return json.dumps({"d": k, "f": k + 1, "t": f"Segment {k}", "m": []}).encode("utf-8") + b"\n"
+
+        s = reprise.Session("tolerante01", active=True)
+        s.ouvrir(source, "tiny", 60.0, nouvelle=True)
+        s.fermer()
+        fichier = chemins.RACINE / "reprises" / "tolerante01.jsonl"
+        # Une ligne au milieu avec un octet UTF-8 invalide, une dernière ligne coupée net.
+        fichier.write_bytes(ligne(0) + ligne(1) + b'{"d": 2, "f": 3, "t": "caf\xe9"}\n' + ligne(3)
+                            + b'{"d": 4, "f": 5, "t": "Segm')
+        lus = [x.texte for x in reprise.lire_segments("tolerante01")]
+        verifier(lus == ["Segment 0", "Segment 1", "Segment 3"],
+                 "octet invalide et dernière ligne tronquée : seules ces lignes-là sont écartées", str(lus))
+        s = reprise.Session("tolerante01", active=True)
+        s.ouvrir(source, "tiny", 60.0, position=4.0, nb_segments=3)
+        s.ajouter(Segment(debut=4.0, fin=5.0, texte="Segment 4", mots=[]), 1.0)
+        s.fermer()
+        lus = [x.texte for x in reprise.lire_segments("tolerante01")]
+        verifier(lus == ["Segment 0", "Segment 1", "Segment 3", "Segment 4"] and fichier.read_bytes().endswith(b"\n")
+                 and b"Segm\n" not in fichier.read_bytes() and b"Segm{" not in fichier.read_bytes(),
+                 "à la suite : la ligne coupée est retirée, le segment suivant n'y est pas collé", str(lus))
+        # Dernière ligne entière mais sans fin de ligne : gardée et complétée.
+        fichier.write_bytes(ligne(0) + ligne(1).rstrip(b"\n"))
+        s = reprise.Session("tolerante01", active=True)
+        s.ouvrir(source, "tiny", 60.0, position=2.0, nb_segments=2)
+        s.ajouter(Segment(debut=2.0, fin=3.0, texte="Segment 2", mots=[]), 1.0)
+        s.fermer()
+        verifier([x.texte for x in reprise.lire_segments("tolerante01")] == ["Segment 0", "Segment 1", "Segment 2"],
+                 "dernière ligne entière sans fin de ligne : gardée, la suite va à la ligne")
+        # Lecture refusée par le disque : erreur dite, rien de tronqué.
+        illisible = chemins.RACINE / "reprises" / "tolerante02.jsonl"
+        illisible.mkdir()
+        try:
+            reprise.lire_segments("tolerante02")
+            leve = False
+        except reprise.RepriseIllisible:
+            leve = True
+        verifier(leve and illisible.is_dir() and reprise.a_garder("tolerante02"),
+                 "segments illisibles pour l'instant : erreur dite, reprise gardée, rien d'écrit")
+        illisible.rmdir()
+        # À l'abri de la 2.3.3 : elle ne liste et ne purge que « *.json ».
+        verifier(not list((chemins.RACINE / "reprises").glob("*.json"))
+                 and (chemins.RACINE / "reprises" / "tolerante01.etat").is_file(),
+                 "l'état d'une reprise de la 3.x ne finit plus par .json (invisible pour la 2.3.3)")
+        reprise.oublier("tolerante01")
+        ancienne =chemins.RACINE / "reprises" / "tolerante03.json"
+        ancienne.write_text(json.dumps({"auteur": reprise.AUTEUR, "source": str(source), "nom": source.name,
+                                        "modele": "tiny", "position": 1.0, "nb_segments": 1}), encoding="utf-8")
+        (chemins.RACINE / "reprises" / "tolerante03.jsonl").write_bytes(ligne(0))
+        cles = {r["cle"] for r in reprise.lister()}
+        s = reprise.Session("tolerante03", active=True)
+        s.ouvrir(source, "tiny", 60.0, position=1.0, nb_segments=1)
+        s.fermer()
+        verifier("tolerante03" in cles and not ancienne.exists()
+                 and (chemins.RACINE / "reprises" / "tolerante03.etat").is_file()
+                 and len(reprise.lire_segments("tolerante03")) == 1,
+                 "reprise de la 3.x d'avant (état en .json) : lue, puis renommée à la reprise, segments gardés")
+        reprise.oublier("tolerante03")
+        # Redéposer ou relancer : la reprise est gardée (a_garder) et retrouvée par fichier.
+        cle = reprise.cle(source, "tiny")
+        s = reprise.Session(cle, active=True)
+        s.ouvrir(source, "tiny", 60.0, nouvelle=True)
+        s.ajouter(Segment(debut=0.0, fin=1.0, texte="Gardé", mots=[]), 1.0)
+        s.fermer()
+        trouvee = reprise.reprise_du_fichier(source)
+        verifier(reprise.a_garder(cle) and trouvee and trouvee["cle"] == cle,
+                 "un fichier redéposé retrouve sa reprise (au moins un segment gardé)")
+        reprise.oublier(cle)
+
+        # Purge du démarrage : jamais sur une absence passagère.
+        def etat_vers(identifiant: str, chemin_source: str) -> None:
+            (chemins.RACINE / "reprises" / f"{identifiant}.etat").write_text(json.dumps(
+                {"auteur": reprise.AUTEUR, "source": chemin_source, "nom": Path(chemin_source).name, "modele": "tiny",
+                 "position": 1.0, "nb_segments": 1}), encoding="utf-8")
+            (chemins.RACINE / "reprises" / f"{identifiant}.jsonl").write_bytes(ligne(0))
+
+        etat_vers("injoignable01", str(base / "lecteur-debranche" / "sous-dossier" / "r.ogg"))
+        etat_vers("absente00001", str(base / "r-disparue.ogg"))
+        (chemins.RACINE / "reprises" / "illisible0001.etat").write_text("", encoding="utf-8")
+        (chemins.RACINE / "reprises" / "illisible0001.jsonl").write_bytes(ligne(0))
+        reprise.purger()
+        rep = chemins.RACINE / "reprises"
+        verifier((rep / "injoignable01.jsonl").is_file() and (rep / "absente00001.jsonl").is_file()
+                 and (rep / "absente00001.absente").is_file() and (rep / "illisible0001.jsonl").is_file(),
+                 "purge : source injoignable gardée, source absente datée et gardée, état vide aux segments valides gardé")
+        raisons = {o["cle"]: o for o in reprise.orphelines()}
+        verifier(raisons["injoignable01"]["raison"] == "source_injoignable"
+                 and not raisons["injoignable01"]["effacable"],
+                 "source injoignable : même « etat --nettoyer » la garde", str(raisons.get("injoignable01")))
+        reprise.nettoyer(reprise.orphelines())
+        verifier((rep / "injoignable01.jsonl").is_file() and not (rep / "absente00001.jsonl").exists(),
+                 "etat --nettoyer : la source absente (dossier joignable) s'efface sur demande, l'injoignable reste")
+        etat_vers("absente00002", str(base / "r-disparue-2.ogg"))
+        reprise.purger()
+        vieux = (datetime.now() - timedelta(days=reprise.DELAI_ABSENCE_JOURS + 1)).isoformat(timespec="seconds")
+        (rep / "absente00002.absente").write_text(vieux, encoding="ascii")
+        reprise.purger()
+        verifier(not (rep / "absente00002.jsonl").exists() and not (rep / "absente00002.absente").exists(),
+                 f"source absente depuis plus de {reprise.DELAI_ABSENCE_JOURS} jours : effacée par la purge")
+        # État qui ne se lit pas pour l'instant (verrou d'un antivirus, simulé
+        # par un verrou d'octets) : ni listé, ni effacé.
+        if sys.platform == "win32":
+            import msvcrt
+
+            etat_vers("verrouille01", str(base / "r-disparue-3.ogg"))
+            (rep / "verrouille01.etat").write_text("{ abîmé", encoding="utf-8")
+            with open(rep / "verrouille01.etat", "rb") as flux:
+                msvcrt.locking(flux.fileno(), msvcrt.LK_NBLCK, 8)
+                try:
+                    statut = reprise.lire_etat_detail("verrouille01")[1]
+                    reprise.purger()
+                    vues = {o["cle"] for o in reprise.orphelines()}
+                finally:
+                    flux.seek(0)
+                    msvcrt.locking(flux.fileno(), msvcrt.LK_UNLCK, 8)
+            verifier(statut == "acces" and (rep / "verrouille01.jsonl").is_file() and "verrouille01" not in vues,
+                     "état illisible pour l'instant (accès refusé) : pas pris pour un état abîmé, rien d'effacé",
+                     f"{statut} {sorted(vues)}")
+
+        # Historique de relecture : l'original n'est retiré que sur une absence durable.
+        historique_reel = lecture.DOSSIER_HISTORIQUE
+        lecture.DOSSIER_HISTORIQUE = base / "historique"
+        try:
+            for nom, chemin in (("injoignable", base / "cle-usb" / "dossier" / "t.txt"), ("absente", base / "t-ab.txt")):
+                d = lecture.DOSSIER_HISTORIQUE / nom
+                d.mkdir(parents=True)
+                lecture._ecrire_gz(d / "index.json.gz", {"chemin": str(chemin), "pile": [1], "suivant": 2})
+                (d / "original.json.gz").write_bytes(b"original")
+            lecture._elaguer_historique()
+            garde = (lecture.DOSSIER_HISTORIQUE / "injoignable" / "original.json.gz").is_file() \
+                and (lecture.DOSSIER_HISTORIQUE / "absente" / "original.json.gz").is_file()
+            (lecture.DOSSIER_HISTORIQUE / "absente" / lecture.NOM_ABSENCE).write_text(vieux, encoding="ascii")
+            lecture._elaguer_historique()
+            verifier(garde and not (lecture.DOSSIER_HISTORIQUE / "absente").exists()
+                     and (lecture.DOSSIER_HISTORIQUE / "injoignable" / "original.json.gz").is_file(),
+                     "historique de relecture : gardé sur un lecteur injoignable, retiré après une absence durable")
+        finally:
+            lecture.DOSSIER_HISTORIQUE = historique_reel
+    finally:
+        chemins.RACINE = racine
+
+
+def essai_verrou_et_ecritures(base: Path) -> None:
+    """Revue du 15/11 (S7 à S9, M1 à M3, M5, M6) : verrou, sorties, réglages, petits fichiers."""
+    import json
+    import os
+    import subprocess
+    import time
+
+    from app import calibration, chemins, config as config_module, instance, materiel, moteur, reglage_machine
+    from app import sorties, surveillance, temoin_puce
+    from app.moteur import Segment
+
+    titre("Verrou, sorties sur le disque, réglages illisibles, petits fichiers")
+    racine, fichier_config = chemins.RACINE, chemins.FICHIER_CONFIG
+    chemins.RACINE = base / "ecritures"
+    chemins.RACINE.mkdir()
+    try:
+        # S7 : PID réattribué après un redémarrage.
+        source = base / "verrou.wav"
+        source.write_bytes(b"x")
+        verrou = instance._fichier_verrou(source)
+        verrou.parent.mkdir(parents=True, exist_ok=True)
+        import psutil
+
+        demarrage = psutil.boot_time()
+        autre = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"], creationflags=SANS_FENETRE)
+        try:
+            # Verrou d'avant ce format (PID seul), posé avant le dernier
+            # démarrage : son PID est aujourd'hui celui d'un autre programme.
+            verrou.write_text(str(autre.pid), encoding="ascii")
+            os.utime(verrou, (demarrage - 60, demarrage - 60))
+            ancien_format = instance.prendre_fichier(source)
+            instance.rendre_fichier(source)
+            verrou.write_text(f"{autre.pid} 1000.000", encoding="ascii")
+            repris = instance.prendre_fichier(source)
+            contenu = verrou.read_text(encoding="ascii").split()
+        finally:
+            autre.kill()
+            autre.wait()
+        verifier(ancien_format == 0, "verrou d'avant ce format posé avant le démarrage du système : mort, repris",
+                 str(ancien_format))
+        verifier(repris == 0 and int(contenu[0]) == os.getpid() and len(contenu) == 2 and float(contenu[1]) > 0,
+                 "PID réattribué (heure de création différente) : verrou mort, repris, avec l'heure de création",
+                 f"{repris} {contenu}")
+        instance.rendre_fichier(source)
+        verrou.write_text("", encoding="ascii")
+        verifier(instance.prendre_fichier(source) == -1,
+                 "verrou vide tout juste créé (concurrent en train d'écrire) : tenu pour vivant")
+        os.utime(verrou, (time.time() - 60, time.time() - 60))
+        verifier(instance.prendre_fichier(source) == 0, "verrou vide ancien : repris")
+        instance.rendre_fichier(source)
+        verifier(not verrou.exists() and not list(verrou.parent.glob("*.tmp")),
+                 "verrou rendu, aucun fichier provisoire laissé")
+
+        # S8 : sorties vidées sur le disque avant d'effacer la sauvegarde.
+        vides = []
+        vrai_fsync = os.fsync
+        os.fsync = lambda fd: (vides.append(fd), vrai_fsync(fd))
+        (base / "reunion.ogg").write_bytes(b"audio")
+        try:
+            produits = sorties.ecrire_tout(chemins.RACINE / "sorties", base / "reunion.ogg",
+                                           [Segment(debut=0.0, fin=1.0, texte="Bonjour.", mots=[])],
+                                           {"modele": "tiny"}, {"txt": True, "srt": True, "vtt": True})
+        finally:
+            os.fsync = vrai_fsync
+        verifier(len(produits) == 3 and len(vides) >= 4
+                 and not list((chemins.RACINE / "sorties").glob("*scribouille-tmp")),
+                 "sorties (texte, compagnon, sous-titres) vidées sur le disque puis renommées",
+                 f"{len(produits)} sorties, {len(vides)} fsync")
+        traitement_source = (RACINE / "app" / "traitement.py").read_text(encoding="utf-8")
+        fin_normale = traitement_source.find("# Le fichier est écrit : la reprise n'a plus lieu d'être.")
+        verifier(0 < traitement_source.find("produits = sorties.ecrire_tout(") < fin_normale
+                 < traitement_source.find("session.effacer()", fin_normale),
+                 "la sauvegarde progressive n'est effacée qu'après l'écriture des sorties")
+
+        # S9 : une lecture ratée ne devient jamais une remise à zéro écrite.
+        chemins.FICHIER_CONFIG = chemins.RACINE / "config.json"
+        reglages = {**config_module.DEFAUTS, "preset": "rapide", "dossier_sortie": "D:\\Reunions"}
+        chemins.FICHIER_CONFIG.write_text(json.dumps(reglages), encoding="utf-8")
+        texte_reel = chemins.FICHIER_CONFIG.read_text(encoding="utf-8")
+        chemins.FICHIER_CONFIG.rename(chemins.RACINE / "config-cache.json")
+        chemins.FICHIER_CONFIG.mkdir()   # lecture refusée par le système, comme un verrou d'antivirus
+        lu = config_module.charger()
+        chemins.FICHIER_CONFIG.rmdir()
+        (chemins.RACINE / "config-cache.json").rename(chemins.FICHIER_CONFIG)   # le verrou est levé
+        ecrit = config_module.sauver({**lu, "zoom": 1.2})
+        verifier(lu["dossier_sortie"] != "D:\\Reunions" and not ecrit
+                 and chemins.FICHIER_CONFIG.read_text(encoding="utf-8") == texte_reel,
+                 "réglages illisibles à la lecture : rien d'écrit par-dessus, même une fois lisibles")
+        chemins.FICHIER_CONFIG.write_text("{ abîmé", encoding="utf-8")
+        lu = config_module.charger()
+        ecrit = config_module.sauver({**lu, "zoom": 1.3})
+        gardes = list(chemins.RACINE.glob("config.json.illisible-*"))
+        verifier(ecrit and len(gardes) == 1 and gardes[0].read_text(encoding="utf-8") == "{ abîmé"
+                 and json.loads(chemins.FICHIER_CONFIG.read_text(encoding="utf-8"))["zoom"] == 1.3,
+                 "réglages abîmés : gardés de côté sous un autre nom avant d'être remplacés")
+        source_config = (RACINE / "app" / "config.py").read_text(encoding="utf-8")
+        verifier("os.getpid()" in source_config and "secrets.token_hex" in source_config
+                 and not list(chemins.RACINE.glob("config.json*.tmp")),
+                 "fichier provisoire des réglages à nom unique, jamais laissé")
+
+        # M1 : le travailleur de détection garde le dossier de données du parent.
+        vus = {}
+
+        class Fini:
+            returncode, stderr = 0, b""
+
+        vrai_run = materiel.subprocess.run
+        materiel.subprocess.run = lambda *a, **k: (vus.update(k.get("env") or {}), Fini())[1]
+        try:
+            materiel.rafraichir(5)
+        finally:
+            materiel.subprocess.run = vrai_run
+        verifier(vus.get("SCRIBOUILLE_DONNEES") == str(chemins.RACINE),
+                 "détection du matériel en arrière-plan : même dossier de données (aucune reprise de l'ancien)")
+        # M2 : SCRIBOUILLE_DONNEES relatif rendu absolu.
+        p = subprocess.run([sys.executable, "-c", "from app import chemins; print(chemins.RACINE)"],
+                           cwd=str(RACINE), capture_output=True, text=True, timeout=60, creationflags=SANS_FENETRE,
+                           env={**os.environ, "SCRIBOUILLE_DONNEES": "donnees-relatives", "PYTHONPATH": str(RACINE)})
+        verifier(p.stdout.strip() == str(RACINE / "donnees-relatives"),
+                 "SCRIBOUILLE_DONNEES relatif : rendu absolu (moteur et fenêtre au même endroit)", p.stdout + p.stderr)
+        # M3 : un verdict de plantage n'est pas écrasé par une ouverture.
+        temoin_puce.noter_fin_moteur("GPU", 0xC0000005, "chargement")
+        marque = temoin_puce.poser_chargement("GPU")
+        pendant = temoin_puce.etat()["etat"]
+        temoin_puce.lever_chargement(marque)
+        verifier(pendant == "suspendue" and temoin_puce.etat()["etat"] == "suspendue",
+                 "ouverture sur la puce pendant une suspension : le verdict de plantage reste")
+        temoin_puce.lever("essai")
+        # Repli après plantage : la ligne de chargement dit « sur le processeur ».
+        annonce = getattr(moteur, "annonce_chargement", lambda modele: "")
+        ecartee = reglage_machine.PUCE_ECARTEE
+        reglage_machine.PUCE_ECARTEE = True
+        try:
+            ligne_repli = annonce("large-v3-turbo")
+        finally:
+            reglage_machine.PUCE_ECARTEE = ecartee
+        verifier("processeur" in ligne_repli and "Chargement" in annonce("large-v3-turbo")
+                 and "processeur" not in annonce("large-v3-turbo"),
+                 "moteur relancé sans la puce : « Chargement du modèle ... sur le processeur »", ligne_repli)
+        # M5 et M6 : écriture à côté puis renommage.
+        remplaces = []
+        vrai_replace = os.replace
+        os.replace = lambda a, b: (remplaces.append(Path(b).name), vrai_replace(a, b))
+        try:
+            calibration._ecrire({"version": calibration.VERSION_FICHIER, "mesures": {}})
+            surveillance.ecrire_memoire({"x|1|2": 1.0})
+        finally:
+            os.replace = vrai_replace
+        verifier({"calibration.json", "surveillance-vus.json"} <= set(remplaces)
+                 and not list(chemins.RACINE.glob("*.tmp")),
+                 "mesures de durée et mémoire du dossier surveillé : écrites à côté puis renommées", str(remplaces))
+        # M6 : un fichier surveillé n'est « vu » qu'une fois transcrit.
+        guette = base / "guette"
+        guette.mkdir()
+        (guette / "dictaphone.mp3").write_bytes(b"x" * 100)
+        surveillance.ecrire_memoire({})
+        livres = []
+        s = surveillance.Surveillant(sur_nouveaux=livres.extend)
+        s.dossier, s.actif = str(guette), True
+        s._passage()
+        s._passage()
+        s._passage()
+        avant = surveillance.charger_memoire()
+        s.marquer_vu(livres[0] if livres else "")
+        verifier(len(livres) == 1 and not avant and len(surveillance.charger_memoire()) == 1,
+                 "dossier surveillé : livré une fois, « vu » sur le disque seulement après la transcription",
+                 f"{livres} {avant}")
+    finally:
+        chemins.RACINE, chemins.FICHIER_CONFIG = racine, fichier_config
+
+
 def essai_documentation_livree() -> None:
     """Le paquet livre la documentation à côté de l'exécutable, et chacun de ses liens y mène."""
     import re
@@ -702,6 +1133,12 @@ def principal() -> int:
         essai_repetitions()
         essai_migration(base)
         essai_instances(base)
+        for essai in (essai_version_2x, essai_reprise_tolerante, essai_verrou_et_ecritures):
+            # Une section qui lève est un échec, et les suivantes passent quand même.
+            try:
+                essai(base)
+            except Exception as exc:  # noqa: BLE001
+                verifier(False, f"{essai.__name__} : levé", f"{type(exc).__name__}: {exc}")
     essai_documentation_livree()
     essai_messages()
     print(f"\n{'=' * 40}")

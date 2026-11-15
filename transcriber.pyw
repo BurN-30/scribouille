@@ -602,6 +602,12 @@ class Passerelle:
         self._js(f"onFichierTermine({_json(identifiant)}, {_json(donnees)})")
         if donnees.get("ok"):
             self.charger_historique()
+        if not donnees.get("annule"):
+            # Fichier du dossier surveillé : « vu » seulement maintenant, sa
+            # transcription faite (ou en échec), jamais à sa détection.
+            element = next((e for e in self.file.elements if e.identifiant == identifiant), None)
+            if element is not None and self.surveillant.livre(element.chemin):
+                self.surveillant.marquer_vu(element.chemin)
 
     def _sur_journal(self, niveau: str, texte: str) -> None:
         self._js(f"onJournal({_json(niveau)}, {_json(texte)})")
@@ -2118,7 +2124,7 @@ class Passerelle:
         # audios) : ils sont dits à l'écran, pas seulement dans le journal.
         ignores = [Path(c).name for c in liste
                    if c and Path(c).is_file() and not audio_module.est_audio(Path(c))]
-        ajoutes = self.file.ajouter(liste)
+        ajoutes = self._rattacher_reprises(self.file.ajouter(liste))
         if not ajoutes:
             doublons = self.file.derniers_doublons
             if ignores:
@@ -2134,10 +2140,55 @@ class Passerelle:
                               + langues.tn("app.depot.ignores_noms", len(ignores), noms=", ".join(ignores[:3])))
         else:
             self._sur_journal("info", langues.tn("app.ajoutes", len(ajoutes)))
+        trouvees = [a["reprise_trouvee"] for a in ajoutes if a.get("reprise_trouvee")]
+        if trouvees:
+            # Reprendre est déjà fait (rien ne se perd si l'on ne répond pas) ;
+            # l'interface propose de recommencer du début à la place.
+            self._js(f"onReprisesTrouvees({_json(trouvees)})")
         self.file.mesurer_durees(
             lambda identifiant, secondes, texte:
             self._js(f"onDuree({_json(identifiant)}, {secondes}, {_json(texte)})")
         )
+
+    def _rattacher_reprises(self, ajoutes: list[dict]) -> list[dict]:
+        """
+        Un fichier redéposé (ou relancé par un nouveau dépôt) qui a une
+        transcription interrompue avec du travail gardé la reprend, au lieu de
+        repartir de zéro et d'effacer la sauvegarde : c'est fait tout de suite,
+        et l'interface propose « Recommencer du début » à la place.
+        """
+        from app import instance
+
+        if not ajoutes:
+            return ajoutes
+        try:
+            connues = reprise.reprises_par_fichier()
+        except OSError:
+            return ajoutes
+        resultat = []
+        for item in ajoutes:
+            trouvee = None if item.get("reprise") else connues.get(reprise._cle_chemin(item["chemin"]))
+            if trouvee and not instance.occupant(trouvee["chemin"]):
+                remis = self.file.ajouter_pour_reprise(item["chemin"], trouvee["cle"])
+                if remis:
+                    item = {**remis, "reprise_trouvee": {
+                        "id": remis["id"], "nom": remis["nom"], "cle": trouvee["cle"], "pct": trouvee["pct"],
+                        "position_texte": presets.formater_duree(trouvee["position"]),
+                        "duree_texte": presets.formater_duree(trouvee["duree_audio"])}}
+                    self._sur_journal("info", langues.t(
+                        "app.reprise.rattachee", nom=remis["nom"],
+                        position=presets.formater_duree(trouvee["position"])))
+            resultat.append(item)
+        return resultat
+
+    def recommencer(self, identifiant: str) -> dict:
+        """« Recommencer du début » : la reprise rattachée à ce fichier en attente est abandonnée, à la demande."""
+        remis = self.file.recommencer(identifiant)
+        if not remis:
+            element = next((e for e in self.file.elements if e.identifiant == identifiant), None)
+            return {"ok": False, "message": langues.t("app.reprise.deja_partie", nom=element.nom if element else "")}
+        self._sur_journal("info", langues.t("app.reprise.recommencee", nom=remis["nom"]))
+        return {"ok": True, "element": remis, "reprises": self._reprises()}
 
     def retirer(self, identifiant: str) -> None:
         self.file.retirer(identifiant)

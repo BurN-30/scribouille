@@ -71,13 +71,14 @@ _GROUPES = {
     "reglages": ("config.json", "dossier-modeles.txt", "jeton_hf.txt", "gabarit-ia.txt", "maj-etat.json",
                  "surveillance-vus.json", "materiel.json", "materiel.json.tmp", migration.NOM_JOURNAL,
                  "openvino-chargement-en-cours.txt", "openvino-chargement-en-cours.txt.*.tmp", "config.json.tmp",
-                 "config-scribouille.json", "config-scribouille.json.tmp"),
+                 "config-scribouille.json", "config-scribouille.json.tmp", "config.json.*.tmp",
+                 "config-scribouille.json.*.tmp", "calibration.json.*.tmp", "surveillance-vus.json.*.tmp"),
     "vocabulaire": ("vocabulaire.txt", "corrections.txt", "vocabulaire.toml", "vocabulaire.toml.tmp",
                     "*-format1-sauvegarde.txt", "*-exemples-anciens.txt", "vocabulaire-propositions-*.toml",
                     "vocabulaire-propositions-*.txt"),
     "mesures": ("calibration.json", "rapports-banc", "comparaisons", "campagnes", "corpus-campagne"),
     "sauvegardes": ("scribouille-donnees-avant-import-*.zip", "whiscribe-donnees-avant-import-*.zip",
-                    migration.NOM_CONFLITS),
+                    migration.NOM_CONFLITS, "config.json.illisible-*", "config-scribouille.json.illisible-*"),
     "journaux": ("logs",),
     "reprises": ("reprises",),
     "openvino": ("extensions-openvino",),
@@ -223,6 +224,11 @@ def _ancien_dossier() -> Path | None:
     # l'ancien dossier, qui appartient à l'installation habituelle du poste.
     if chemins.DONNEES_IMPOSEES:
         return None
+    # Une WhiScribe 2.x installée (ou une détection incertaine) le lit
+    # encore : rien n'y est libérable ni effaçable, quel que soit le dossier
+    # où travaille la 3.x (`chemins.etat_version_2x`).
+    if chemins.ancienne_version_installee() is not None:
+        return None
     base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
     if not base:
         return None
@@ -297,10 +303,33 @@ def partage_2x() -> Path | None:
     return chemins.donnees_partagees_ancienne_version()
 
 
+def _ancien_garde_pour_2x() -> Path | None:
+    """L'ancien dossier `WhiScribe`, distinct du nôtre, gardé pour une 2.x installée : montré, jamais touché."""
+    if chemins.DONNEES_IMPOSEES or chemins.ancienne_version_installee() is None:
+        return None
+    base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
+    if not base:
+        return None
+    ancien = Path(base) / chemins.NOM_DOSSIER_ANCIEN
+    try:
+        if ancien.is_dir() and ancien.resolve() != chemins.RACINE.resolve():
+            return ancien
+    except OSError:
+        return None
+    return None
+
+
+def _partage_avec() -> str:
+    """La 2.x installée dont on garde les fichiers (dossier partagé, ou ancien dossier laissé à part)."""
+    exe = partage_2x() or (chemins.ancienne_version_installee() if _ancien_garde_pour_2x() else None)
+    return str(exe or "")
+
+
 def partages(config: dict | None = None) -> list[Path]:
     """Entrées du dossier de données qu'une WhiScribe 2.x installée écrit aussi : jamais touchées."""
     if partage_2x() is None:
-        return []
+        garde = _ancien_garde_pour_2x()
+        return [garde] if garde is not None else []
     trouves: list[Path] = []
     racine = chemins.RACINE
     try:
@@ -502,7 +531,7 @@ def inventaire(config: dict | None = None) -> dict:
         "postes": [p.en_dict() for p in liste],
         # Entrées qu'une WhiScribe 2.x installée écrit aussi : montrées, jamais touchées.
         "partages": [str(c) for c in communs],
-        "partage_avec": str(partage_2x() or ""),
+        "partage_avec": _partage_avec(),
         "total_octets": total,
         "total": langues.octets(total),
         "liberable_octets": sum(p.octets for p in liste if p.liberable),
@@ -671,7 +700,7 @@ def apercu_effacement(garder_transcriptions: bool = True, config: dict | None = 
         "transcriptions": {k: v for k, v in trans.items() if k != "fichiers"},
         "non_reconnus": [str(c) for c in inconnus + communs],
         "partages": [str(c) for c in communs],
-        "partage_avec": str(partage_2x() or ""),
+        "partage_avec": _partage_avec(),
         "desinstalleur": str(desinst) if (desinst and avec_programme) else "",
         "valide_s": VALIDITE_APERCU_S,
     }

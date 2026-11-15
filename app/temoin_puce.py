@@ -114,8 +114,29 @@ def normaliser(peripherique: str) -> str:
     return texte.split(".", 1)[0] or ""
 
 
+#: Appelée quand l'ouverture réelle sur la puce commence (modèle déjà sur le
+#: disque) : le processus moteur la pose pour que la garde du superviseur ne
+#: compte ni le téléchargement ni la vérification du modèle (`app/superviseur.py`).
+SUR_OUVERTURE = None
+
+
 def poser_chargement(peripherique: str) -> dict | None:
-    """Ce processus ouvre un modèle sur `peripherique` : témoin posé, et renvoyé."""
+    """
+    Ce processus ouvre un modèle sur `peripherique` : témoin posé, et renvoyé.
+    Un verdict de plantage déjà là (posé par un autre processus, ou réessai
+    explicite d'une puce suspendue) n'est jamais écrasé : il reste, et la
+    marque rendue ne lèvera rien (`lever_chargement`).
+    """
+    if SUR_OUVERTURE is not None:
+        try:
+            SUR_OUVERTURE()
+        except Exception:
+            pass
+    brut = _lire_brut()
+    if isinstance(brut, dict) and brut.get("etape") == "plantage":
+        journal.info("Témoin de la puce : verdict de plantage gardé pendant cette ouverture (%s)",
+                     brut.get("peripherique"))
+        return {"etape": "verdict_garde", "pid": os.getpid()}
     marque = {"format": FORMAT, "etape": "chargement", "peripherique": normaliser(peripherique) or "GPU",
               "pid": os.getpid(), "cree": round(_creation(os.getpid()), 3), "pose": round(time.time(), 3),
               "parent": os.getppid() if hasattr(os, "getppid") else 0, "version": _version()}

@@ -999,9 +999,15 @@ def rafraichir(delai_max: float = 120.0) -> dict | None:
     """
     commande, dossier = _commande_detection()
     priorite = 0x00004000 if sys.platform == "win32" else 0   # BELOW_NORMAL_PRIORITY_CLASS
+    # Même dossier de données que ce processus, tel quel : le travailleur ne
+    # reprend pas l'ancien dossier (une commande de lecture ne déplace rien) et
+    # écrit `materiel.json` là où on le relit.
+    import os
+
+    environnement = dict(os.environ, SCRIBOUILLE_DONNEES=str(chemins.RACINE))
     try:
         resultat = subprocess.run(commande, cwd=dossier, capture_output=True, timeout=delai_max,
-                                  creationflags=_SANS_FENETRE | priorite)
+                                  env=environnement, creationflags=_SANS_FENETRE | priorite)
     except Exception as exc:
         journal.attention("Détection du matériel en arrière-plan impossible : %s", exc)
         return None

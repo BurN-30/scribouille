@@ -997,6 +997,14 @@ _FR: dict[str, str] = {
     "trait.sauvegarde_coupee": (
         "Sauvegarde progressive coupée : cette reprise ne sera pas protégée."
     ),
+    "trait.reprise_trouvee": (
+        "« {nom} » avait une transcription interrompue : elle est poursuivie là où elle s'était arrêtée."
+    ),
+    "trait.reprise_illisible.titre": "Reprise illisible pour l'instant",
+    "trait.reprise_illisible.msg": (
+        "La sauvegarde de « {nom} » ne se lit pas en ce moment (disque ou antivirus) : elle est gardée "
+        "telle quelle. Relancer plus tard."
+    ),
     "trait.glossaire_tronque": "Glossaire tronqué pour tenir dans l'amorce du modèle.",
     "trait.locuteurs_identifies": "{n} locuteurs identifiés.",
     "trait.diar_abandonnee": "{titre} : {message} La transcription continue sans étiquettes.",
@@ -1170,6 +1178,11 @@ _FR: dict[str, str] = {
     "app.reprise.remise": (
         "« {nom} » remis en file, la transcription reprendra à {position} d'audio."
     ),
+    "app.reprise.rattachee": (
+        "« {nom} » : transcription interrompue retrouvée, elle reprendra à {position} d'audio."
+    ),
+    "app.reprise.recommencee": "« {nom} » repartira du début : sa transcription interrompue est abandonnée.",
+    "app.reprise.deja_partie": "« {nom} » a déjà commencé : sa reprise est gardée.",
     "app.langue.changee": "Langue de l'interface : français.",
 
     # -- gabarit d'instructions créé au premier usage (app/gabarit.py) -----
@@ -2393,6 +2406,14 @@ _EN: dict[str, str] = {
     "trait.sauvegarde_coupee": (
         "Progressive saving is off: this resumed run will not be protected."
     ),
+    "trait.reprise_trouvee": (
+        "\"{nom}\" had an interrupted transcription: it carries on where it stopped."
+    ),
+    "trait.reprise_illisible.titre": "Saved progress unreadable for now",
+    "trait.reprise_illisible.msg": (
+        "The saved progress of \"{nom}\" cannot be read right now (disk or antivirus): it is kept as is. "
+        "Try again later."
+    ),
     "trait.glossaire_tronque": "Glossary trimmed to fit the model prompt.",
     "trait.locuteurs_identifies": "{n} speakers identified.",
     "trait.diar_abandonnee": "{titre}: {message} Transcription continues without labels.",
@@ -2562,6 +2583,11 @@ _EN: dict[str, str] = {
     "app.reprise.remise": (
         "\"{nom}\" put back in the queue, transcription will resume at {position} of audio."
     ),
+    "app.reprise.rattachee": (
+        "\"{nom}\": interrupted transcription found, it will resume at {position} of audio."
+    ),
+    "app.reprise.recommencee": "\"{nom}\" will start over: its interrupted transcription is dropped.",
+    "app.reprise.deja_partie": "\"{nom}\" has already started: its saved progress is kept.",
     "app.langue.changee": "Interface language: English.",
 
     "gabarit.defaut": """\

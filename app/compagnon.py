@@ -330,10 +330,10 @@ def ecrire(chemin_sortie: str | Path, source: Path, segments, details: dict) -> 
     """
     cible = chemin_pour(chemin_sortie)
     try:
-        cible.write_text(
-            json.dumps(construire(source, segments, details), ensure_ascii=False),
-            encoding="utf-8",
-        )
+        from .sorties import ecrire_sur_disque
+
+        # Vidé sur le disque avant que la sauvegarde progressive ne s'efface.
+        ecrire_sur_disque(cible, json.dumps(construire(source, segments, details), ensure_ascii=False))
     except (OSError, TypeError, ValueError) as exc:
         journal.attention("Compagnon non écrit pour %s : %s", cible.name, exc)
         return None

@@ -49,7 +49,6 @@ import gc
 import json
 import math
 import os
-import shutil
 import statistics
 import subprocess
 import sys
@@ -532,10 +531,16 @@ def _executer(passages: int, cle: str, pression: bool, memoire_libre: float, rec
 
     nom = f"{cle}-{(peripherique or 'cpu').lower()}-{passages}" + ("-pression" if pression else "")
     dossier = DOSSIER / nom
-    if recommencer and dossier.exists():
-        shutil.rmtree(dossier, ignore_errors=True)
-    dossier.mkdir(parents=True, exist_ok=True)
     fichier = dossier / "passages.jsonl"
+    if recommencer:
+        # Seulement les passages et leurs paramètres : les rapports déjà
+        # écrits (`rapport-endurance-*.txt`) restent, ils datent chacun une épreuve.
+        for vieux in (fichier, dossier / "parametres.json"):
+            try:
+                vieux.unlink(missing_ok=True)
+            except OSError as exc:
+                raise journal.ErreurLisible(langues.t("end.refuse.titre"), str(exc)) from exc
+    dossier.mkdir(parents=True, exist_ok=True)
 
     try:
         extraits = corpus.preparer(None, paquet or None, 0, interrompu)

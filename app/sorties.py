@@ -13,6 +13,7 @@ relire les en-têtes des deux langues (voir `app/lecture.py`).
 
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from pathlib import Path
 
@@ -192,8 +193,30 @@ def corps_texte(segments, avec_locuteurs: bool, avec_horodatage: bool = False) -
     return "\n\n".join(blocs) + "\n"
 
 
+def ecrire_sur_disque(chemin: Path, texte: str) -> None:
+    """
+    Écrit un fichier de sortie pour de bon : à côté, vidé sur le disque
+    (`fsync`), puis renommé. La sauvegarde progressive n'est effacée qu'après :
+    une coupure de courant juste après la fin ne laisse jamais un texte vide
+    ou rempli de zéros sans sa reprise.
+    """
+    provisoire = chemin.with_name(f"{chemin.name}.{os.getpid()}.scribouille-tmp")
+    try:
+        with open(provisoire, "w", encoding="utf-8") as flux:
+            flux.write(texte)
+            flux.flush()
+            os.fsync(flux.fileno())
+        os.replace(provisoire, chemin)
+    except BaseException:
+        try:
+            provisoire.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+
+
 def ecrire_txt(chemin: Path, entete: str, corps: str) -> Path:
-    chemin.write_text(entete + corps, encoding="utf-8")
+    ecrire_sur_disque(chemin, entete + corps)
     journal.info("Écrit : %s", chemin)
     return chemin
 
@@ -208,7 +231,7 @@ def ecrire_srt(chemin: Path, segments, avec_locuteurs: bool) -> Path:
         lignes.append(f"{_horodatage_srt(segment.debut)} --> {_horodatage_srt(segment.fin)}")
         lignes.append(texte)
         lignes.append("")
-    chemin.write_text("\n".join(lignes), encoding="utf-8")
+    ecrire_sur_disque(chemin, "\n".join(lignes))
     journal.info("Écrit : %s", chemin)
     return chemin
 
@@ -222,7 +245,7 @@ def ecrire_vtt(chemin: Path, segments, avec_locuteurs: bool) -> Path:
         lignes.append(f"{_horodatage_vtt(segment.debut)} --> {_horodatage_vtt(segment.fin)}")
         lignes.append(texte)
         lignes.append("")
-    chemin.write_text("\n".join(lignes), encoding="utf-8")
+    ecrire_sur_disque(chemin, "\n".join(lignes))
     journal.info("Écrit : %s", chemin)
     return chemin
 

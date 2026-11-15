@@ -515,6 +515,12 @@ fr: {
   'ui.reprise.reprendre': 'Reprendre',
   'ui.reprise.oublier': 'Oublier',
   'ui.reprise.oubliee': 'Reprise oubliée.',
+  'ui.reprise_trouvee.titre': 'Transcription interrompue',
+  'ui.reprise_trouvee.texte': "« {nom} » s'était arrêté à {position} sur {duree} ({pct} %). La transcription reprendra là où elle s'était arrêtée, sans rien refaire.",
+  'ui.reprise_trouvee.texte_n': "Ces fichiers avaient une transcription interrompue. Chacun reprendra là où il s'était arrêté, sans rien refaire :",
+  'ui.reprise_trouvee.ligne': '{nom} : {position} sur {duree} ({pct} %)',
+  'ui.reprise_trouvee.recommencer': 'Recommencer du début',
+  'ui.reprise_trouvee.recommencer_aide': 'Recommencer efface ce qui avait été transcrit.',
 
   /* -- modale aide -------------------------------------------------------- */
   'ui.modale.aide.titre': 'Aide',
@@ -1303,6 +1309,12 @@ en: {
   'ui.reprise.reprendre': 'Resume',
   'ui.reprise.oublier': 'Forget',
   'ui.reprise.oubliee': 'Resume point forgotten.',
+  'ui.reprise_trouvee.titre': 'Interrupted transcription',
+  'ui.reprise_trouvee.texte': "\"{nom}\" had stopped at {position} of {duree} ({pct}%). The transcription will resume where it stopped, without redoing anything.",
+  'ui.reprise_trouvee.texte_n': 'These files had an interrupted transcription. Each will resume where it stopped, without redoing anything:',
+  'ui.reprise_trouvee.ligne': '{nom}: {position} of {duree} ({pct}%)',
+  'ui.reprise_trouvee.recommencer': 'Start over',
+  'ui.reprise_trouvee.recommencer_aide': 'Starting over erases what had been transcribed.',
 
   'ui.modale.aide.titre': 'Help',
   'ui.aide.h_outil': 'What this tool does',

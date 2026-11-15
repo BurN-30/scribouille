@@ -55,6 +55,8 @@ MOTIFS = (
     "*-format1-sauvegarde.txt", "*-exemples-anciens.txt", "vocabulaire-propositions-*.toml",
     "vocabulaire-propositions-*.txt",
     "scribouille-donnees-avant-import-*.zip", "whiscribe-donnees-avant-import-*.zip",
+    # Réglages abîmés gardés de côté avant d'être remplacés (`config.sauver`).
+    "config.json.illisible-*", "config-scribouille.json.illisible-*",
 )
 #: Dossiers que Scribouille crée dans son dossier de données.
 DOSSIERS = (

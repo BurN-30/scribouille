@@ -166,7 +166,15 @@ class InstanceSurveillee:
         object.__setattr__(self, "_modele", str(modele))
         object.__setattr__(self, "_charge", False)
         self._annoncer("chargement")
-        self._instance.charger(modele, signaler)
+        from . import temoin_puce
+
+        # L'ouverture réelle sur la puce (après un téléchargement éventuel du
+        # modèle) est annoncée à part : c'est elle seule que la garde borne.
+        temoin_puce.SUR_OUVERTURE = lambda: self._annoncer("ouverture")
+        try:
+            self._instance.charger(modele, signaler)
+        finally:
+            temoin_puce.SUR_OUVERTURE = None
         object.__setattr__(self, "_charge", True)
         self._annoncer("pret")
 
@@ -256,7 +264,7 @@ class Moteur:
             taille=int(donnees.get("taille") or 0), duree=float(donnees.get("duree") or 0.0),
             etat="attente", reprise=str(donnees.get("reprise") or ""),
             duree_annoncee=float(donnees.get("duree_annoncee") or 0.0),
-            sortie=str(donnees.get("sortie") or ""))
+            sortie=str(donnees.get("sortie") or ""), recommencer=bool(donnees.get("recommencer")))
         statut = self.file.traiter_element(element, self.config, self.contexte, self._rappels())
         self.canal.envoyer("fini", n=n, id=element.identifiant, statut=statut,
                            element={"etat": element.etat, "duree": element.duree,

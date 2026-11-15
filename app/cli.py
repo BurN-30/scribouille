@@ -322,6 +322,9 @@ def _analyseur() -> argparse.ArgumentParser:
     _ajouter(t, "--recursif", action="store_true", aide="Sous-dossiers compris.")
     _ajouter(t, "--telecharger", action="store_true", aide="Permet de télécharger un modèle absent.")
     _ajouter(t, "--ecraser", action="store_true", aide="Refait un fichier déjà transcrit.")
+    _ajouter(t, "--recommencer", action="store_true",
+             aide="Repart du début même si une transcription interrompue de ce fichier existe (elle est "
+                  "abandonnée) ; défaut : elle est poursuivie.")
     t.add_argument("--json", action="store_true")
 
     r = commande("reprendre", "[CLE|FICHIER] [options]", "reprendre une transcription interrompue",
@@ -338,7 +341,8 @@ def _analyseur() -> argparse.ArgumentParser:
                  "Transcriptions en cours et reprenables, moteurs actifs, et sauvegardes orphelines (qui ne "
                  "peuvent plus être reprises), avec leur raison.")
     _ajouter(e, "--nettoyer", action="store_true",
-             aide="Efface les sauvegardes orphelines (source disparue, illisibles, plus de 30 jours).")
+             aide="Efface les sauvegardes orphelines (source disparue, illisibles, plus de 30 jours) ; jamais "
+                  "celles dont la source est sur un lecteur qui ne répond pas.")
     e.add_argument("--json", action="store_true")
 
     lire = commande("lire", "SORTIE.json|SORTIE.txt [options]", "lire une transcription par pages",
@@ -1097,6 +1101,45 @@ def _options_satisfaites(options, config: dict, mat, sortie: Sortie) -> None:
             raise Echec("arguments", f"--vocabulaire {fichier} : illisible ({exc})", ARGUMENTS) from None
 
 
+def _reprise_de_transcrire(sortie: Sortie, element, source: Path, modele: str, trouvee: dict | None,
+                           recommencer: bool) -> None:
+    """
+    `transcrire` sur un fichier qui a une transcription interrompue : même
+    modèle, elle est poursuivie (c'est dit) ; autre modèle, elle est gardée
+    telle quelle et `reprendre` la poursuit ; `--recommencer` les abandonne,
+    explicitement, et repart du début.
+    """
+    from . import presets, reprise as reprise_module
+
+    meme = reprise_module.cle(source, modele)
+    garder_meme = reprise_module.a_garder(meme)
+    if recommencer:
+        abandonnees = [c for c in {meme if garder_meme else "", (trouvee or {}).get("cle", "")} if c]
+        for c in abandonnees:
+            reprise_module.oublier(c)
+        element.recommencer = True
+        if abandonnees:
+            sortie.evenement("reprise_abandonnee", fichier=str(source), cles=sorted(abandonnees))
+            sortie.dire(f"{source.name} : transcription interrompue abandonnée (--recommencer), départ du début.",
+                        erreur=True)
+        return
+    if garder_meme:
+        etat = reprise_module.lire_etat(meme) or {}
+        element.reprise = meme
+        position = presets.formater_duree(float(etat.get("position") or 0))
+        sortie.evenement("reprise_trouvee", fichier=str(source), cle=meme, poursuivie=True,
+                         position_s=float(etat.get("position") or 0))
+        sortie.dire(f"{source.name} : transcription interrompue retrouvée, poursuivie à {position} "
+                    "(--recommencer pour repartir du début).", erreur=True)
+        return
+    if trouvee:
+        sortie.evenement("reprise_trouvee", fichier=str(source), cle=trouvee["cle"], poursuivie=False,
+                         modele=trouvee.get("modele_demande") or trouvee.get("modele"))
+        sortie.dire(f"{source.name} : une transcription interrompue avec un autre modèle "
+                    f"({trouvee.get('modele_demande') or trouvee.get('modele')}) est gardée telle quelle "
+                    f"(« scribouille reprendre {trouvee['cle']} » la poursuit) ; celle-ci part du début.", erreur=True)
+
+
 def cmd_transcrire(options, sortie: Sortie) -> int:
     from . import moteur, traitement
     from .materiel import detecter_au_demarrage
@@ -1114,6 +1157,13 @@ def cmd_transcrire(options, sortie: Sortie) -> int:
                                                taille=moteur.taille_annoncee(modele)), PAS_PRET,
                     "relancer avec --telecharger (accord de l'utilisateur), ou poser le modèle dans "
                     + str(chemins.DOSSIER_MODELES))
+    from . import config as config_module, reprise as reprise_module
+
+    # Transcriptions interrompues de ces fichiers : poursuivies par défaut,
+    # jamais effacées en silence ; --recommencer repart du début.
+    sauvegarde = bool(config.get("sauvegarde_progressive", True))
+    modele_file = config_module.reglages_effectifs(config)["modele"]
+    connues = reprise_module.reprises_par_fichier() if sauvegarde else {}
     elements, ignores = [], []
     for rang, f in enumerate(fichiers):
         dossier = Path(options.sortie).expanduser().resolve() if options.sortie else f.parent
@@ -1128,8 +1178,12 @@ def cmd_transcrire(options, sortie: Sortie) -> int:
             dossier.mkdir(parents=True, exist_ok=True)
         for ancienne in deja:
             ancienne.unlink(missing_ok=True)
-        elements.append(traitement.Element(identifiant=f"c{rang + 1}", chemin=str(f), nom=f.name,
-                                           taille=f.stat().st_size, sortie=str(dossier)))
+        element = traitement.Element(identifiant=f"c{rang + 1}", chemin=str(f), nom=f.name,
+                                     taille=f.stat().st_size, sortie=str(dossier))
+        if sauvegarde:
+            _reprise_de_transcrire(sortie, element, f, modele_file, connues.get(reprise_module._cle_chemin(f)),
+                                   bool(getattr(options, "recommencer", False)))
+        elements.append(element)
     if not elements:
         sortie.evenement("fin", reussis=0, echecs=0, annules=0, ignores=len(ignores), code_retour=SORTIE_EXISTANTE,
                          fichiers=[], ignores_detail=ignores)
@@ -1252,6 +1306,7 @@ def _moteurs_actifs() -> list[dict]:
 
 RAISONS_ORPHELINE = {
     "source_absente": "fichier source déplacé ou effacé",
+    "source_injoignable": "source sur un lecteur ou un dossier qui ne répond pas (gardée)",
     "etat_illisible": "état illisible",
     "segments_sans_etat": "segments sans état",
     "trop_vieille": "plus de 30 jours",
@@ -1289,11 +1344,16 @@ def cmd_etat(options, sortie: Sortie) -> int:
         lignes.append(f"  {o['nom'] or o['cle'] or Path(o['fichiers'][0]).name} : "
                       f"{RAISONS_ORPHELINE.get(o['raison'], o['raison'])}"
                       + (f", non effacé : {', '.join(o['restes'])}" if o.get("restes") else ""))
+    # Gardées même sur demande : la source est sur un lecteur qui ne répond
+    # pas (peut-être passager), jamais effacée sur ce seul constat.
+    gardees = [o for o in orphelines if not o.get("effacable", True)] if options.nettoyer else []
+    for o in gardees:
+        lignes.append(f"  gardée : {o['nom'] or o['cle']} : {RAISONS_ORPHELINE.get(o['raison'], o['raison'])}")
     from . import temoin_puce
 
     puce = temoin_puce.etat()
     lignes.append(f"Puce graphique : {temoin_puce.resume(puce)}")
-    sortie.donnees({"moteurs": moteurs, "taches": taches, "orphelines": [] if options.nettoyer else orphelines,
+    sortie.donnees({"moteurs": moteurs, "taches": taches, "orphelines": gardees if options.nettoyer else orphelines,
                     "nettoyees": nettoyees, "puce": puce}, "\n".join(lignes))
     return OK
 

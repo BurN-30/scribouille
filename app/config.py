@@ -94,20 +94,78 @@ def partage_ancienne_version() -> bool:
     return chemins.donnees_partagees_ancienne_version() is not None
 
 
+#: Résultat de la dernière lecture de chaque fichier de réglages, par chemin :
+#: « ok », « absent », « acces » (ne se lit pas pour l'instant : verrou d'un
+#: antivirus, remplacement en cours ailleurs) ou « abime » (contenu illisible).
+#: `sauver` s'en sert pour ne jamais écrire des valeurs par défaut par-dessus
+#: des réglages qu'il n'a pas pu lire.
+_LECTURES: dict[str, str] = {}
+
+#: Lecture refusée par le système : nouvel essai après une courte pause.
+ESSAIS_LECTURE = 3
+PAUSE_LECTURE_S = 0.2
+
+
+def _lire_detail(chemin) -> tuple[dict, str]:
+    """(contenu, statut) ; voir `_LECTURES`. Ne lève jamais."""
+    import time
+
+    texte = None
+    for essai in range(ESSAIS_LECTURE):
+        try:
+            texte = chemin.read_bytes()
+            break
+        except FileNotFoundError:
+            return {}, "absent"
+        except OSError as exc:
+            if essai == ESSAIS_LECTURE - 1:
+                journal.attention("%s illisible pour l'instant, valeurs par défaut en mémoire, rien n'est écrit "
+                                  "par-dessus : %s", chemin.name, exc)
+                return {}, "acces"
+            time.sleep(PAUSE_LECTURE_S)
+    try:
+        donnees = json.loads(texte.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as exc:
+        journal.attention("%s illisible, valeurs par défaut utilisées ; il sera gardé de côté avant toute "
+                          "sauvegarde : %s", chemin.name, exc)
+        return {}, "abime"
+    if not isinstance(donnees, dict):
+        return {}, "abime"
+    return donnees, "ok"
+
+
 def _lire_json(chemin) -> dict:
-    try:
-        texte = chemin.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return {}
-    except OSError as exc:
-        journal.attention("%s illisible, valeurs par défaut utilisées : %s", chemin.name, exc)
-        return {}
-    try:
-        donnees = json.loads(texte)
-    except json.JSONDecodeError as exc:
-        journal.attention("%s illisible, valeurs par défaut utilisées : %s", chemin.name, exc)
-        return {}
-    return donnees if isinstance(donnees, dict) else {}
+    donnees, statut = _lire_detail(chemin)
+    _LECTURES[str(chemin)] = statut
+    return donnees
+
+
+class SauvegardeRefusee(OSError):
+    """Les réglages du disque n'ont pas pu être lus : rien n'est écrit par-dessus."""
+
+
+def _mettre_de_cote(chemin) -> None:
+    """Un fichier de réglages abîmé est gardé sous un autre nom avant d'être remplacé, et c'est dit."""
+    from datetime import datetime
+
+    cible = chemin.with_name(f"{chemin.name}.illisible-{datetime.now():%Y%m%d-%H%M%S}")
+    os.replace(chemin, cible)
+    journal.attention("%s illisible, gardé de côté sous %s ; nouveaux réglages écrits", chemin.name, cible.name)
+
+
+def _verifier_avant_ecriture(chemin) -> dict:
+    """
+    Relit `chemin` juste avant d'écrire : contenu à garder. Lecture refusée
+    (maintenant, ou à la dernière lecture qui a servi à bâtir les réglages) :
+    `SauvegardeRefusee`. Contenu abîmé : mis de côté, sous un autre nom.
+    """
+    donnees, statut = _lire_detail(chemin)
+    if statut == "acces" or _LECTURES.get(str(chemin)) == "acces":
+        raise SauvegardeRefusee(f"{chemin.name} illisible pour l'instant : réglages non enregistrés, "
+                                "le fichier n'est pas écrasé")
+    if statut == "abime":
+        _mettre_de_cote(chemin)
+    return donnees
 
 
 def charger(definir_langue: bool = False) -> dict:
@@ -143,31 +201,75 @@ def charger(definir_langue: bool = False) -> dict:
 
 
 def _ecrire(chemin, contenu: dict) -> None:
-    temporaire = chemin.with_name(chemin.name + ".tmp")
-    temporaire.write_text(json.dumps(contenu, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    os.replace(temporaire, chemin)
+    # Nom provisoire propre à ce processus et à cette écriture : une fenêtre
+    # et une commande qui écrivent en même temps ne se mélangent pas.
+    import secrets
+
+    temporaire = chemin.with_name(f"{chemin.name}.{os.getpid()}-{secrets.token_hex(3)}.tmp")
+    try:
+        temporaire.write_text(json.dumps(contenu, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        os.replace(temporaire, chemin)
+    finally:
+        try:
+            temporaire.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
-def sauver(config: dict) -> None:
+def _retirer_propre(config: dict) -> None:
+    """
+    La 2.x partie, nos réglages à part (`config-scribouille.json`) sont dans
+    `config.json` : le fichier à part s'en va. S'il n'a pas été lu, ou pas
+    entièrement repris, il est gardé de côté plutôt qu'effacé.
+    """
+    propre = fichier_propre()
+    if not propre.exists():
+        return
+    statut = _LECTURES.get(str(propre))
+    if statut == "acces":
+        return
+    donnees, lu = _lire_detail(propre)
+    repris = statut == "ok" or all(config.get(cle) == valeur for cle, valeur in donnees.items() if cle in DEFAUTS)
+    if lu == "ok" and repris:
+        propre.unlink(missing_ok=True)
+    elif lu in ("ok", "abime"):
+        _mettre_de_cote(propre)
+
+
+def sauver(config: dict) -> bool:
     """
     Écrit les réglages. Dossier partagé avec une WhiScribe 2.x : dans notre
     fichier à nous, seulement ce qui diffère de son `config.json`, qui reste
     tel quel. Sinon dans `config.json`, en gardant les clés qu'on ne connaît
     pas (celles d'une autre version) au lieu de les effacer.
+
+    Un fichier qui n'a pas pu être lu (à la lecture qui a bâti ces réglages,
+    ou juste avant d'écrire) n'est jamais écrasé : rien n'est écrit, c'est
+    dit au journal. Un fichier abîmé est gardé de côté sous un autre nom
+    (`<nom>.illisible-<date>`) avant d'être remplacé. Vrai si c'est écrit.
     """
     try:
         if partage_ancienne_version():
-            base = _fusionner(DEFAUTS, _lire_json(chemins.FICHIER_CONFIG))
+            base_lue = _lire_json(chemins.FICHIER_CONFIG)
+            if _LECTURES.get(str(chemins.FICHIER_CONFIG)) == "acces":
+                raise SauvegardeRefusee(f"{chemins.FICHIER_CONFIG.name} illisible pour l'instant : "
+                                        "réglages non enregistrés")
+            base = _fusionner(DEFAUTS, base_lue)
             propre = {cle: valeur for cle, valeur in config.items()
                       if cle in DEFAUTS and base.get(cle) != valeur}
+            _verifier_avant_ecriture(fichier_propre())
             _ecrire(fichier_propre(), propre)
-            return
-        existant = _lire_json(chemins.FICHIER_CONFIG)
+            _LECTURES[str(fichier_propre())] = "ok"
+            return True
+        existant = _verifier_avant_ecriture(chemins.FICHIER_CONFIG)
         etrangers = {cle: valeur for cle, valeur in existant.items() if cle not in DEFAUTS}
         _ecrire(chemins.FICHIER_CONFIG, {**etrangers, **config})
-        fichier_propre().unlink(missing_ok=True)
+        _LECTURES[str(chemins.FICHIER_CONFIG)] = "ok"
+        _retirer_propre(config)
+        return True
     except OSError as exc:
         journal.attention("Sauvegarde de la configuration impossible : %s", exc)
+        return False
 
 
 def reglages_effectifs(config: dict) -> dict:

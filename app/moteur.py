@@ -714,6 +714,21 @@ def chemin_instanciation(modele: str) -> str:
     return modele
 
 
+def annonce_chargement(modele: str, annonce: str = "") -> str:
+    """
+    La ligne « Chargement du modèle » du moteur habituel. Moteur relancé sans
+    la puce après un plantage sur elle (`reglage_machine.PUCE_ECARTEE`) : elle
+    dit « sur le processeur », pour suivre la ligne de la puce sans l'imiter.
+    """
+    if annonce:
+        return annonce
+    from . import reglage_machine
+
+    if reglage_machine.PUCE_ECARTEE:
+        return langues.t("moteur.chargement_repli", modele=_nom_court(modele))
+    return langues.t("moteur.chargement", modele=_nom_court(modele))
+
+
 class MoteurTranscription:
     """Enveloppe autour de WhisperModel, avec libération explicite."""
 
@@ -769,7 +784,7 @@ class MoteurTranscription:
             etat["etat"],
         )
         if signaler:
-            signaler("info", annonce or langues.t("moteur.chargement", modele=_nom_court(modele)))
+            signaler("info", annonce_chargement(modele, annonce))
 
         try:
             self._modele = self._instancier(modele)

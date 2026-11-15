@@ -64,6 +64,9 @@ TEMPORAIRE = Path(tempfile.mkdtemp(prefix="scribouille-moteur-"))
 os.environ["SCRIBOUILLE_DONNEES"] = str(TEMPORAIRE / "donnees")
 os.environ["LOCALAPPDATA"] = str(TEMPORAIRE / "localappdata")
 (TEMPORAIRE / "localappdata").mkdir()
+# Aucune clé de désinstallation : une WhiScribe 2.x réellement installée sur
+# le poste ne change rien aux essais (voir `chemins.etat_version_2x`).
+os.environ["SCRIBOUILLE_ESSAI_REGISTRE"] = "[]"
 # Dossier personnel factice : Documents\Transcriptions par défaut, fiches
 # d'agent, bureau. Rien de réel n'est lu ni écrit.
 os.environ["USERPROFILE"] = str(TEMPORAIRE / "maison")
@@ -310,6 +313,26 @@ def essai_annulation() -> None:
              "reprise : tous les segments, une seule fois, dans l'ordre", str(len(f.segments())))
     verifier(not reprise.lire_etat(cle), "reprise menée au bout : sauvegarde effacée")
 
+    # Arrêté, puis redéposé (« ajouter » sans reprise) : le moteur retrouve la
+    # sauvegarde et la poursuit au lieu de repartir de zéro en l'effaçant.
+    f = File("redepot", {"segments": 40, "pause_s": 0.15})
+    f.demarrer()
+    attendre(lambda: f.progressions() >= 8, 30)
+    f.file.arreter()
+    f.attendre(10)
+    cle = f.file.elements[0].reprise
+    gardes = len(reprise.lire_segments(cle)) if cle else 0
+    f.file.ajouter([str(f.sources[0])])
+    sans_cle = f.file.elements[0].reprise == ""
+    f.fini.clear()
+    f.demarrer()
+    f.attendre(60)
+    textes = " | ".join(f.journal())
+    verifier(gardes > 0 and sans_cle and f.segments() == attendu(40) and "transcription interrompue" in textes
+             and "Reprise de" in textes,
+             "redéposé après un arrêt : sauvegarde retrouvée et poursuivie, texte complet",
+             f"{gardes} {sans_cle} {len(f.segments())} {textes[-300:]}")
+
 
 # ---------------------------------------------------------------------------
 # 4. Plantages
@@ -485,6 +508,21 @@ def essai_temoin_puce() -> None:
     verifier(termine and etat.get("etat") == "suspendue" and etat.get("cause") == "blocage",
              "chargement sur la puce bloqué au-delà de la borne : moteur arrêté, puce suspendue (blocage)",
              f"{f.bilan} {etat}")
+    temoin_puce.lever("essai")
+
+    # Téléchargement du modèle plus long que la borne, avant l'ouverture : il ne
+    # compte pas (revue du 15/11 : un proxy lent suspendait la puce).
+    superviseur.DELAI_CHARGEMENT_PUCE_S = 3.0
+    try:
+        f = File("puce-telechargement", {"segments": 4, "pause_s": 0.01, "puce": True, "telechargement_s": 7})
+        f.demarrer()
+        termine = f.attendre(60)
+    finally:
+        superviseur.DELAI_CHARGEMENT_PUCE_S = borne
+    etat = temoin_puce.etat()
+    verifier(termine and f.bilan.get("reussis") == 1 and etat.get("etat") == "libre" and f.sup.lancements == 1
+             and not f.sup.puce_ecartee,
+             "téléchargement plus long que la borne : ni arrêt, ni suspension de la puce", f"{f.bilan} {etat}")
     temoin_puce.lever("essai")
 
 
@@ -732,7 +770,7 @@ def essai_coupure_avant_premier_segment(dossier: Path) -> None:
         else:
             def sauvegarde_ecrite():
                 return any((reprise_module.lire_etat(f.stem) or {}).get("nom") == nom
-                           for f in (chemins.RACINE / "reprises").glob("*.json"))
+                           for f in (chemins.RACINE / "reprises").glob("*.etat"))
             attendre(sauvegarde_ecrite, 60)
         time.sleep(2)
         _tuer_arbre(p)
@@ -754,35 +792,67 @@ def essai_coupure_avant_premier_segment(dossier: Path) -> None:
                  f"{code} {produits} {err[-200:]}")
         verifier(not reprise_module.lire_etat(tache.get("cle", "?")), "reprise faite : sauvegarde effacée")
 
-    # Une NOUVELLE transcription d'un fichier qui avait laissé une reprise
-    # repart d'une sauvegarde vide : avant, ses segments s'ajoutaient aux
-    # anciens, et une seconde coupure donnait un texte en double.
+    # « transcrire » relancé sur un fichier qui a une reprise : elle est
+    # poursuivie (revue du 15/11 : la sauvegarde était effacée sans rien dire),
+    # deux coupures de suite ne doublent aucun segment, et --recommencer seul
+    # repart du début.
     source = dossier / "deux-coupures.ogg"
     source.write_bytes(EXTRAIT.read_bytes())
     sorties = TEMPORAIRE / "cli-sorties-deux-coupures"
-    for _ in range(2):
+
+    def couper(*options) -> list[bytes]:
         env = dict(os.environ, SCRIBOUILLE_MOTEUR_ESSAI=json.dumps({"segments": 200, "pause_s": 0.1}))
         p = subprocess.Popen([PYTHON, str(RACINE / "transcriber.pyw"), "transcrire", str(source), "--json",
-                              "--telecharger", "--sortie", str(sorties)],
+                              "--telecharger", "--sortie", str(sorties), *options],
                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env, cwd=str(TEMPORAIRE),
                              creationflags=SANS_FENETRE)
-        vus = 0
+        lues, vus = [], 0
         for x in p.stdout:
+            lues.append(x)
             if b'"progres"' in x:
                 vus += 1
                 if vus >= 4:
                     break
         _tuer_arbre(p)
-    code, lignes, _ = cli("etat", "--json")
-    tache = next((t for t in (lignes[-1]["donnees"]["taches"] if lignes else [])
-                  if Path(t["chemin"]).name == source.name), {})
-    code, lignes, err = cli("reprendre", tache.get("cle", "?"), "--json", essai={"segments": 200, "pause_s": 0.0})
+        return lues
+
+    def tache_de_source() -> dict:
+        _code, lignes_, _ = cli("etat", "--json")
+        return next((t for t in (lignes_[-1]["donnees"]["taches"] if lignes_ else [])
+                     if Path(t["chemin"]).name == source.name), {})
+
+    couper()
+    premiere = tache_de_source()
+    lues = couper()
+    seconde = tache_de_source()
+    evenements = [json.loads(x) for x in lues if x.strip().startswith(b"{")]
+    trouvee = next((e for e in evenements if e.get("evenement") == "reprise_trouvee"), {})
+    verifier(trouvee.get("poursuivie") is True and trouvee.get("cle") == premiere.get("cle")
+             and seconde.get("cle") == premiere.get("cle")
+             and seconde.get("nb_segments", 0) > premiere.get("nb_segments", 0) > 0,
+             "transcrire relancé : la transcription interrompue est poursuivie (et dit), pas effacée",
+             f"{trouvee} {premiere.get('nb_segments')} -> {seconde.get('nb_segments')}")
+    code, lignes, err = cli("transcrire", str(source), "--json", "--telecharger", "--sortie", str(sorties),
+                            essai={"segments": 200, "pause_s": 0.0})
     compagnons = sorted(sorties.glob("*.json"))
     contenu = json.loads(compagnons[-1].read_text(encoding="utf-8")) if compagnons else {}
     textes = [s["t"] for s in contenu.get("segments", [])]
-    verifier(code == 0 and textes == attendu(200) and tache.get("nb_segments", 0) > 0,
-             "transcrite de nouveau puis coupée encore : la reprise ne double aucun segment",
-             f"{code} {len(textes)} segments {err[-200:]}")
+    verifier(code == 0 and textes == attendu(200) and "poursuivie" in err,
+             "deux coupures puis transcrire : texte complet, aucun segment doublé ni perdu",
+             f"{code} {len(textes)} segments {err[-300:]}")
+    for f in sorties.glob("*"):
+        f.unlink()
+    couper()
+    avant = tache_de_source()
+    code, lignes, err = cli("transcrire", str(source), "--json", "--telecharger", "--sortie", str(sorties),
+                            "--recommencer", essai={"segments": 30, "pause_s": 0.0})
+    abandon = next((e for e in lignes if e.get("evenement") == "reprise_abandonnee"), {})
+    compagnons = sorted(sorties.glob("*.json"))
+    contenu = json.loads(compagnons[-1].read_text(encoding="utf-8")) if compagnons else {}
+    verifier(code == 0 and avant.get("cle") in abandon.get("cles", [])
+             and [s["t"] for s in contenu.get("segments", [])] == attendu(30) and not tache_de_source(),
+             "--recommencer : la reprise est abandonnée (dit), la transcription repart du début",
+             f"{code} {abandon} {err[-200:]}")
 
     # Un échec avant le premier segment (audio illisible) ne laisse rien à
     # reprendre : « Relancer » ferait la même chose, une reprise rejouerait l'échec.
@@ -824,7 +894,7 @@ def essai_coupure_avant_premier_segment(dossier: Path) -> None:
     # vont avec elles : PC du travail, 15/11) ; les autres sont effacés.
     des_reprenables = {instance_module._fichier_verrou(t["chemin"]).name.lower()
                        for t in reprise_module.lister()}
-    verifier(code == 0 and restants == ["0000reprenable001.json", "0000reprenable001.jsonl"]
+    verifier(code == 0 and restants == ["0000reprenable001.etat", "0000reprenable001.jsonl"]
              and {v.name.lower() for v in rep_.glob("*.en-cours")} <= des_reprenables
              and len((lignes[-1]["donnees"] if lignes else {}).get("nettoyees", [])) >= 2,
              "etat --nettoyer : les orphelines effacées, la reprise valable gardée",
