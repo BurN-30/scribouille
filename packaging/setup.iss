@@ -472,6 +472,7 @@ begin
   DeleteFile(Base + '\openvino-chargement-en-cours.txt');
   DeleteFile(Base + '\migration-whiscribe.json');
   DelTree(Base + '\*-format1-sauvegarde.txt', False, True, False);
+  DelTree(Base + '\*-exemples-anciens.txt', False, True, False);
   DelTree(Base + '\vocabulaire-propositions-*', False, True, False);
   { Sauvegardes automatiques posées avant chaque import de données, sous le
     nom actuel et sous l'ancien (avant la 2.4.0). }

@@ -35,6 +35,7 @@ const etat = {
   apercuChemin: null,
   importChemin: null,
   reprises: [],
+  exemplesAnciens: null,  // exemples fictifs des versions 2.x : carte retires | proposes
   surveillance: { actif: false, dossier: '', probleme: '' },
   maj: null,              // version plus recente annoncee par le bandeau
   version: '',            // version installee, affichee dans l'aide
@@ -87,6 +88,7 @@ function initialiser(d, silencieux) {
   etat.diarisation = d.diarisation || etat.diarisation;
   etat.modeles = d.modeles || etat.modeles;
   etat.reprises = d.reprises || [];
+  etat.exemplesAnciens = d.exemples_anciens || null;
   etat.surveillance = d.surveillance || etat.surveillance;
   etat.versionInstallee = !!d.version_installee;
   etat.vitesse = d.vitesse || etat.vitesse;
@@ -2109,13 +2111,32 @@ function dessinerReprises() {
   const zone = $('#bloc-reprises');
   const enFile = new Set(Array.from(etat.fichiers.values()).map((f) => String(f.chemin || '').toLowerCase()));
   const reprises = etat.reprises.filter((r) => !enFile.has(String(r.chemin || '').toLowerCase()));
-  if (!reprises.length) { zone.innerHTML = ''; return; }
-  zone.innerHTML = reprises.map((r) => `
+  // Exemples fictifs des anciennes versions (vocabulaire.txt, corrections.txt) :
+  // retrait annonce et reversible, ou seulement propose quand WhiScribe 2.x,
+  // encore installe, lit les memes fichiers. Meme carte que les reprises.
+  const ex = etat.exemplesAnciens;
+  const carteExemples = ex ? `
+    <div class="reprise-carte annonce" data-exemples>
+      ${icone('i-info')}
+      <div class="infos">
+        <div class="nom">${ech(t('ui.exemples.titre_' + ex.etat))}</div>
+        <div class="meta">${ech(t('ui.exemples.meta_' + ex.etat, {
+          fichiers: (ex.fichiers || []).join(', '), copies: (ex.copies || []).join(', '),
+        }))}</div>
+      </div>
+      ${ex.etat === 'retires'
+        ? `<button class="bouton bouton-petit" data-ex="remettre">${ech(t('ui.exemples.remettre'))}</button>
+           <button class="bouton bouton-discret bouton-petit" data-ex="vu">${ech(t('ui.exemples.compris'))}</button>`
+        : `<button class="bouton bouton-petit" data-ex="retirer">${ech(t('ui.exemples.retirer'))}</button>
+           <button class="bouton bouton-discret bouton-petit" data-ex="garder">${ech(t('ui.exemples.garder'))}</button>`}
+    </div>` : '';
+  if (!reprises.length && !carteExemples) { zone.innerHTML = ''; return; }
+  zone.innerHTML = carteExemples + reprises.map((r) => `
     <div class="reprise-carte" data-cle="${ech(r.cle)}">
       ${icone('i-reprise')}
       <div class="infos">
         <div class="nom">${ech(r.nom)}</div>
-        <div class="meta">${ech(t('ui.reprise.meta', {
+        <div class="meta">${ech(r.depuis_debut ? t('ui.reprise.meta_debut') : t('ui.reprise.meta', {
           position: r.position_texte, duree: r.duree_texte, pct: r.pct,
           ecoule: r.ecoule_texte,
         }))}</div>
@@ -2147,6 +2168,17 @@ function dessinerReprises() {
       etat.reprises = (r && r.reprises) || [];
       dessinerReprises();
       journaliser('info', t('ui.reprise.oubliee'));
+    };
+  });
+  $$('#bloc-reprises [data-ex]').forEach((b) => {
+    b.onclick = async () => {
+      const r = await pywebview.api.exemples_anciens(b.dataset.ex);
+      if (!r || !r.ok) return;
+      etat.exemplesAnciens = r.carte || null;
+      if (r.glossaire) majGlossaire(r.glossaire.resume);
+      if (r.corrections) majCorrections(r.corrections);
+      if (r.message) journaliser('info', r.message);
+      dessinerReprises();
     };
   });
 }

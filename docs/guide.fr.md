@@ -325,7 +325,7 @@ Où vivent les fichiers, selon la manière dont l'application est lancée :
 | Réglages, journaux, glossaire | `%LOCALAPPDATA%\Scribouille` (`WhiScribe` jusqu'à la 2.4, repris au premier lancement) | à côté du script |
 | Modèles | choisi à l'installation, modifiable dans les réglages | `modeles/`, modifiable dans les réglages |
 
-Jusqu'à la 2.4, le dossier de données portait l'ancien nom de l'application, `WhiScribe`. La 3.0 le renomme au premier lancement, sans copie ni retéléchargement, en ne déplaçant que les fichiers de Scribouille (un logiciel homonyme range ses modèles au même endroit) ; `scribouille donnees revenir-whiscribe` fait le chemin inverse.
+Jusqu'à la 2.4, le dossier de données portait l'ancien nom de l'application, `WhiScribe`. La 3.0 le renomme au premier lancement, sans copie ni retéléchargement, en ne déplaçant que les fichiers de Scribouille (un logiciel homonyme range ses modèles au même endroit) ; `scribouille donnees revenir-whiscribe` fait le chemin inverse. Tant qu'une version 2.x (WhiScribe) reste installée, elle lit encore ce dossier : la 3.0 y travaille alors elle aussi, sans rien déplacer, et le renommage se fait au premier lancement qui suit sa désinstallation ou sa mise à jour.
 
 </details>
 

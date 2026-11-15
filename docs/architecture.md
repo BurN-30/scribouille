@@ -52,7 +52,7 @@ Une clé ajoutée ne change pas la version ; une clé retirée ou un sens chang�
 | Dossier de sortie, ou à côté de la source (ligne de commande) | `<date>-<nom>.txt`, `.json` (compagnon : segments, mots, probabilités, remplacements), `.srt`, `.vtt` |
 | Version installée | Raccourcis du menu Démarrer et du bureau, clé `HKCU\...\Uninstall\{4E1B7C86-...}_is1` |
 
-`app/inventaire.py` tient cette liste : `scribouille espace` la mesure, `scribouille effacer` ne supprime que ce qu'elle reconnaît. L'ancien dossier `%LOCALAPPDATA%\WhiScribe` (avant la 3.0) est repris au premier lancement (`app/migration.py`) ; un projet tiers homonyme y range ses modèles, ils ne sont jamais touchés.
+`app/inventaire.py` tient cette liste : `scribouille espace` la mesure, `scribouille effacer` ne supprime que ce qu'elle reconnaît. L'ancien dossier `%LOCALAPPDATA%\WhiScribe` (avant la 3.0) est repris au premier lancement (`app/migration.py`), sauf tant qu'une version 2.x installée le lit encore (`chemins._garder_ancien_dossier` : la 3.0 y travaille alors, partagé) ; un projet tiers homonyme y range ses modèles, ils ne sont jamais touchés.
 
 ## Repères dans le code
 

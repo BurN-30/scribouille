@@ -140,35 +140,122 @@ def corrections_exemple_intactes(contenu: str) -> bool:
     return not erreurs and [(r.source.lower(), r.cible) for r in regles] == list(CORRECTIONS_ANCIENNES)
 
 
-def retirer_exemples_anciens() -> list[str]:
-    """
-    Remplace le glossaire et la table de corrections d'une installation ancienne
-    restés EXACTEMENT tels que livrés, exemples actifs compris, par les modèles
-    actuels (mêmes exemples, en commentaire). Une copie de l'ancien fichier est
-    gardée à côté. Un fichier retouché, ne serait-ce que d'un terme, n'est pas
-    touché. Renvoie les noms des fichiers remplacés.
+def copie_exemples_anciens(cible: Path) -> Path:
+    """Où le retrait des exemples garde l'ancien fichier, tel quel."""
+    return cible.with_name(cible.stem + "-exemples-anciens.txt")
 
-    Constaté sur un poste : les douze exemples fictifs partaient en amorce de
-    chaque transcription, et la règle « mon entreprise => MonEntreprise »
-    réécrivait une tournure française courante.
-    """
-    remplaces = []
+
+def fichiers_exemples_intacts() -> list[Path]:
+    """Glossaire et table de corrections restés EXACTEMENT tels que livrés par les anciennes versions."""
+    trouves = []
     for cible, intact in ((chemins.FICHIER_VOCABULAIRE, glossaire_exemple_intact),
                           (chemins.FICHIER_CORRECTIONS, corrections_exemple_intactes)):
         source = chemins.MODELES_FICHIERS_EXEMPLE.get(cible)
         if source is None or cible == source or not cible.is_file() or not source.is_file():
             continue
         try:
+            if intact(cible.read_text(encoding="utf-8-sig")):
+                trouves.append(cible)
+        except OSError:
+            continue
+    return trouves
+
+
+def copies_exemples_anciens() -> list[Path]:
+    """Les copies laissées par un retrait, que `remettre_exemples_anciens` peut rétablir."""
+    return [copie_exemples_anciens(c) for c in (chemins.FICHIER_VOCABULAIRE, chemins.FICHIER_CORRECTIONS)
+            if copie_exemples_anciens(c).is_file()]
+
+
+def retirer_exemples_anciens() -> list[str]:
+    """
+    Remplace le glossaire et la table de corrections d'une installation ancienne
+    restés EXACTEMENT tels que livrés, exemples actifs compris, par les modèles
+    actuels (mêmes exemples, en commentaire). Une copie de l'ancien fichier est
+    gardée à côté (`copie_exemples_anciens`), et `remettre_exemples_anciens`
+    défait le tout. Un fichier retouché, ne serait-ce que d'un terme, n'est pas
+    touché. Renvoie les noms des fichiers remplacés.
+
+    Constaté sur un poste : les douze exemples fictifs partaient en amorce de
+    chaque transcription, et la règle « mon entreprise => MonEntreprise »
+    réécrivait une tournure française courante.
+
+    La fenêtre le fait à son ouverture et le dit, sauf quand une version 2.x
+    installée lit le même dossier (`chemins.donnees_partagees_ancienne_version`) :
+    elle le propose alors seulement. La ligne de commande ne le fait que sur
+    demande (`scribouille vocabulaire retirer-exemples`).
+    """
+    remplaces = []
+    for cible in fichiers_exemples_intacts():
+        source = chemins.MODELES_FICHIERS_EXEMPLE[cible]
+        try:
             contenu = cible.read_text(encoding="utf-8-sig")
-            if not intact(contenu):
-                continue
-            cible.with_name(cible.stem + "-exemples-anciens.txt").write_text(contenu, encoding="utf-8")
+            copie_exemples_anciens(cible).write_text(contenu, encoding="utf-8")
             cible.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
             remplaces.append(cible.name)
-            journal.info("%s : exemples livrés actifs remplacés par le modèle actuel", cible.name)
+            journal.info("%s : exemples livrés actifs remplacés par le modèle actuel, copie dans %s",
+                         cible.name, copie_exemples_anciens(cible).name)
         except OSError as exc:
             journal.attention("Exemples anciens non retirés de %s : %s", cible.name, exc)
     return remplaces
+
+
+def remettre_exemples_anciens() -> dict:
+    """
+    Défait `retirer_exemples_anciens` : chaque fichier reprend sa copie, qui
+    disparaît. Un fichier retouché depuis le retrait (autre chose que le modèle
+    livré) n'est pas écrasé : il est dit dans `retouches`, sa copie reste.
+    """
+    remis, retouches = [], []
+    for cible in (chemins.FICHIER_VOCABULAIRE, chemins.FICHIER_CORRECTIONS):
+        copie = copie_exemples_anciens(cible)
+        source = chemins.MODELES_FICHIERS_EXEMPLE.get(cible)
+        if not copie.is_file() or source is None or cible == source:
+            continue
+        try:
+            actuel = cible.read_text(encoding="utf-8-sig") if cible.is_file() else ""
+            modele = source.read_text(encoding="utf-8") if source.is_file() else ""
+            if actuel.strip() and actuel != modele:
+                retouches.append(cible.name)
+                continue
+            cible.write_text(copie.read_text(encoding="utf-8"), encoding="utf-8")
+            copie.unlink()
+            remis.append(cible.name)
+            journal.info("%s : exemples des anciennes versions remis", cible.name)
+        except OSError as exc:
+            journal.attention("Exemples anciens non remis dans %s : %s", cible.name, exc)
+            retouches.append(cible.name)
+    return {"remis": remis, "retouches": retouches}
+
+
+def exemples_au_demarrage(etat: str) -> tuple[str, str]:
+    """
+    Décision de la fenêtre à son ouverture, d'après l'état enregistré
+    (réglage interne `exemples_anciens`) : (état à enregistrer, carte à
+    montrer : « retires », « proposes » ou vide).
+    """
+    etat = str(etat or "")
+    if etat == "gardes":
+        return etat, ""
+    if not etat and fichiers_exemples_intacts():
+        partage = chemins.donnees_partagees_ancienne_version()
+        if partage is not None:
+            journal.info("Exemples fictifs des anciennes versions laissés en place : %s lit le même dossier",
+                         partage)
+            return etat, "proposes"
+        if retirer_exemples_anciens():
+            etat = "retires"
+    if etat == "retires" and copies_exemples_anciens():
+        return etat, "retires"
+    return etat, ""
+
+
+def etat_exemples_anciens() -> dict:
+    """Ce qu'il en est, sans rien écrire : fichiers intacts, copies, version 2.x qui partage le dossier."""
+    partage = chemins.donnees_partagees_ancienne_version()
+    return {"intacts": [f.name for f in fichiers_exemples_intacts()],
+            "copies": [f.name for f in copies_exemples_anciens()],
+            "partage": str(partage) if partage else ""}
 
 
 def _compter_jetons(texte: str, tokeniseur=None) -> int:

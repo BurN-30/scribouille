@@ -194,7 +194,10 @@ if "--mesurer-vocabulaire" in sys.argv[1:]:
 journal.demarrer()
 journal.purger()
 journal.silence_bibliotheques()
-if chemins.MIGRATION.get("etat") not in (None, "rien"):
+if chemins.MIGRATION.get("etat") == "partage":
+    journal.info("Données gardées dans %s : la version installée %s le lit encore ; reprise après sa "
+                 "désinstallation ou sa mise à jour", chemins.RACINE, chemins.MIGRATION.get("ancienne"))
+elif chemins.MIGRATION.get("etat") not in (None, "rien"):
     _m = chemins.MIGRATION
     journal.info("Données reprises de %s : déplacées %s, doublons rangés à part %s, état %s%s",
                  chemins.NOM_DOSSIER_ANCIEN, len(_m.get("deplaces") or []), len(_m.get("conflits") or []),
@@ -482,10 +485,11 @@ class Passerelle:
         #: un seul fichier servi à la fois, démarré au premier besoin.
         self._ecoute = ecoute.Ecoute()
         # Glossaire et corrections d'une installation ancienne restés tels que
-        # livrés, exemples fictifs actifs : remplacés par les modèles actuels.
-        # Seulement à l'ouverture de la fenêtre, jamais depuis la ligne de
-        # commande (banc, comparaison, campagne ne modifient rien).
-        vocabulaire.retirer_exemples_anciens()
+        # livrés, exemples fictifs actifs : remplacés par les modèles actuels,
+        # copie gardée, annoncé et réversible ; seulement proposé si une
+        # version 2.x installée lit le même dossier. Seulement à l'ouverture de
+        # la fenêtre, jamais d'office depuis la ligne de commande.
+        self._exemples_anciens = self._exemples_anciens_au_demarrage()
         # Matériel gardé du lancement précédent : la fenêtre s'ouvre sans
         # attendre les pilotes. La détection lente est relancée en arrière-plan
         # une fois la page chargée (`rafraichir_materiel_en_fond`).
@@ -668,6 +672,7 @@ class Passerelle:
                 "extension": self.etat_locuteurs(),
             },
             "reprises": self._reprises(),
+            "exemples_anciens": self._exemples_anciens,
             "surveillance": self.surveillant.etat(),
             "nommage": {
                 "defaut": nommage.MOTIF_DEFAUT,
@@ -1297,6 +1302,63 @@ class Passerelle:
         regles, erreurs = vocabulaire.analyser_corrections(contenu or "")
         journal.info("Corrections enregistrées : %s règles, %s erreurs", len(regles), len(erreurs))
         return {"nb": len(regles), "erreurs": erreurs}
+
+    # -- exemples fictifs des anciennes versions ----------------------------
+
+    def _exemples_anciens_au_demarrage(self) -> dict | None:
+        """
+        Carte à montrer sur l'écran des réunions, ou None. Retrait fait ici
+        (annoncé, copie gardée, « Remettre » le défait), sauf si une version
+        2.x installée lit le même dossier : proposé seulement.
+        """
+        try:
+            avant = str(self.config.get("exemples_anciens") or "")
+            etat, carte = vocabulaire.exemples_au_demarrage(avant)
+            if etat != avant:
+                self.config["exemples_anciens"] = etat
+                self._enregistrer_config()
+            return self._carte_exemples(carte) if carte else None
+        except Exception as exc:  # jamais bloquant au démarrage
+            journal.exception("Exemples des anciennes versions", exc)
+        return None
+
+    def _carte_exemples(self, etat: str) -> dict:
+        retat = vocabulaire.etat_exemples_anciens()
+        return {"etat": etat, "fichiers": retat["intacts"] if etat == "proposes" else
+                [n.replace("-exemples-anciens", "") for n in retat["copies"]],
+                "copies": retat["copies"], "ancienne": retat["partage"]}
+
+    def exemples_anciens(self, action: str) -> dict:
+        """
+        « remettre » (défait le retrait), « retirer » (le fait, sur demande),
+        « garder » (laisse les exemples, plus rien n'est proposé), « vu »
+        (l'annonce est lue). Renvoie le message et la carte à montrer.
+        """
+        if action == "remettre":
+            fait = vocabulaire.remettre_exemples_anciens()
+            if fait["retouches"]:
+                message = langues.t("app.exemples.retouches", fichiers=", ".join(fait["retouches"]))
+            else:
+                message = langues.t("app.exemples.remis")
+            self.config["exemples_anciens"] = "gardes" if not vocabulaire.copies_exemples_anciens() else "retires"
+        elif action == "retirer":
+            faits = vocabulaire.retirer_exemples_anciens()
+            message = langues.t("app.exemples.retires_demande") if faits else langues.t("app.exemples.rien")
+            self.config["exemples_anciens"] = "vus"
+        elif action in ("garder", "vu"):
+            self.config["exemples_anciens"] = "gardes" if action == "garder" else "vus"
+            message = ""
+        else:
+            return {"ok": False, "message": ""}
+        self._enregistrer_config()
+        journal.info("Exemples des anciennes versions : %s", action)
+        self._exemples_anciens = (self._carte_exemples("retires")
+                                  if self.config["exemples_anciens"] == "retires" else None)
+        glossaire = vocabulaire.resume_glossaire(self.config.get("langue", "fr"))
+        return {"ok": True, "message": message, "carte": self._exemples_anciens,
+                "glossaire": {"contenu": vocabulaire.lire_glossaire(), "resume": glossaire},
+                "corrections": {"contenu": vocabulaire.lire_corrections(), "nb": glossaire.get("nb_corrections", 0),
+                                "erreurs": glossaire.get("erreurs_corrections", [])}}
 
     def enregistrer_jeton(self, valeur: str) -> dict:
         valeur = (valeur or "").strip()

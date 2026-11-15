@@ -90,7 +90,7 @@ PSEUDO_CLES = ("moteur", "peripherique", "dossier_modeles")
 #: Clés de config.json tenues par l'application elle-même, hors de `reglages` :
 #: état de la fenêtre, et réglage du poste (écrit par les pseudo-clés moteur
 #: et peripherique, ou par le banc et la campagne).
-INTERNES = ("reglage_machine", "zoom", "journal_ouvert", "proposition_ecartee")
+INTERNES = ("reglage_machine", "zoom", "journal_ouvert", "proposition_ecartee", "exemples_anciens")
 
 #: Commandes qui n'écrivent rien dans le dossier de données, ni journal ni
 #: réglages : regarder l'espace occupé, ou l'effacer, ne recrée rien.
@@ -404,10 +404,14 @@ def _analyseur() -> argparse.ArgumentParser:
     _ajouter(ef, "--oui", action="store_true", aide="Confirme sans question.")
     ef.add_argument("--json", action="store_true")
 
-    v = commande("vocabulaire", "[etat|appliquer F|importer F|exporter F|apprendre ...] [options]",
-                 "vocabulaire personnel et d'équipe")
-    _ajouter(v, "action", nargs="?", default="etat", choices=("etat", "appliquer", "importer", "exporter", "apprendre"),
-             metavar="etat|appliquer|importer|exporter|apprendre", aide="Défaut : etat.")
+    v = commande("vocabulaire", "[etat|appliquer F|importer F|exporter F|apprendre ...|retirer-exemples|"
+                                "remettre-exemples] [options]", "vocabulaire personnel et d'équipe",
+                 "retirer-exemples : retire de vocabulaire.txt et corrections.txt les exemples fictifs livrés "
+                 "actifs avant la 2.4, copie gardée à côté ; remettre-exemples : le défait.")
+    _ajouter(v, "action", nargs="?", default="etat",
+             choices=("etat", "appliquer", "importer", "exporter", "apprendre", "retirer-exemples", "remettre-exemples"),
+             metavar="etat|appliquer|importer|exporter|apprendre|retirer-exemples|remettre-exemples",
+             aide="Défaut : etat.")
     _ajouter(v, "fichier", nargs="?", default="", metavar="F", aide="Fichier lu ou écrit.")
     _ajouter(v, "--sortie", default="", metavar="F", aide="appliquer, apprendre : fichier écrit.")
     _ajouter(v, "--ecraser", action="store_true", aide="appliquer, exporter : remplace un fichier existant.")
@@ -701,12 +705,13 @@ def _controler_options(commande: str, o) -> None:
             refuser("--apercu et --oui ne vont pas ensemble : regarder, ou effacer")
     elif commande == "vocabulaire":
         par_action = {"etat": (), "importer": (), "exporter": ("ecraser",), "appliquer": ("sortie", "ecraser"),
-                      "apprendre": ("sortie", "brut", "propre", "cr", "importer")}
+                      "apprendre": ("sortie", "brut", "propre", "cr", "importer"),
+                      "retirer-exemples": (), "remettre-exemples": ()}
         en_trop = [n for n in ("sortie", "ecraser", "brut", "propre", "cr", "importer")
                    if getattr(o, n) and n not in par_action[o.action]]
         if en_trop:
             refuser(f"vocabulaire {o.action} : " + ", ".join("--" + n for n in en_trop) + " sans objet ici")
-        if o.action in ("etat", "apprendre") and o.fichier:
+        if o.action in ("etat", "apprendre", "retirer-exemples", "remettre-exemples") and o.fichier:
             refuser(f"vocabulaire {o.action} ne prend pas de fichier (« {o.fichier} »)")
         if o.action in ("importer", "exporter", "appliquer") and not o.fichier:
             refuser(f"vocabulaire {o.action} FICHIER : fichier manquant")
@@ -1736,17 +1741,44 @@ def _resume_desinstalleur(apercu: dict) -> str:
 def cmd_vocabulaire(options, sortie: Sortie) -> int:
     from . import config as config_module, vocabulaire_interface, vocabulaire_v2
 
+    from . import vocabulaire as vocabulaire_v1
+
     config = config_module.charger()
     if options.action == "etat":
         etat = vocabulaire_interface.etat(config, config.get("langue", "fr"))
         resume = vocabulaire_v2.resume(vocabulaire_v2.effectif(config)[0])
+        exemples = vocabulaire_v1.etat_exemples_anciens()
         categories = ", ".join(f"{c} {n}" for c, n in (resume.get("categories") or {}).items() if n)
         texte = (f"Vocabulaire : {resume['actifs']} actifs, {resume['proposes']} à relire, "
                  f"{resume['refuses']} refusés ; {resume['fautes']} fautes connues"
                  + (f" ; {resume['conflits']} conflits" if resume.get("conflits") else "")
                  + (f"\n  Par catégorie : {categories}" if categories else "")
-                 + f"\n  Fichier : {vocabulaire_v2.FICHIER_PERSONNEL}")
-        sortie.donnees({"etat": etat, "resume": resume, "fichier": str(vocabulaire_v2.FICHIER_PERSONNEL)}, texte)
+                 + f"\n  Fichier : {vocabulaire_v2.FICHIER_PERSONNEL}"
+                 + (f"\n  Exemples fictifs des anciennes versions encore actifs : {', '.join(exemples['intacts'])}"
+                    " (scribouille vocabulaire retirer-exemples)" if exemples["intacts"] else "")
+                 + (f"\n  Exemples retirés, copie : {', '.join(exemples['copies'])}"
+                    " (scribouille vocabulaire remettre-exemples)" if exemples["copies"] else ""))
+        sortie.donnees({"etat": etat, "resume": resume, "fichier": str(vocabulaire_v2.FICHIER_PERSONNEL),
+                        "exemples_anciens": exemples}, texte)
+        return OK
+    if options.action in ("retirer-exemples", "remettre-exemples"):
+        # Sur demande seulement : la ligne de commande ne le fait jamais d'office.
+        if options.action == "retirer-exemples":
+            faits = vocabulaire_v1.retirer_exemples_anciens()
+            retour = {"retires": faits, "copies": [p.name for p in vocabulaire_v1.copies_exemples_anciens()]}
+            texte = (f"Exemples retirés de {', '.join(faits)} ; copie : {', '.join(retour['copies'])}" if faits
+                     else "Aucun exemple des anciennes versions à retirer (fichiers déjà retouchés ou retirés).")
+            config["exemples_anciens"] = "vus" if faits else config.get("exemples_anciens", "")
+        else:
+            retour = vocabulaire_v1.remettre_exemples_anciens()
+            texte = ((f"Exemples remis dans {', '.join(retour['remis'])}" if retour["remis"]
+                      else "Aucune copie d'exemples à remettre")
+                     + (f" ; retouchés depuis, non remis : {', '.join(retour['retouches'])}"
+                        if retour["retouches"] else ""))
+            if retour["remis"] and not vocabulaire_v1.copies_exemples_anciens():
+                config["exemples_anciens"] = "gardes"
+        config_module.sauver(config)
+        sortie.donnees(retour, texte)
         return OK
     if options.action in ("importer", "exporter", "appliquer") and not options.fichier:
         raise Echec("arguments", f"vocabulaire {options.action} FICHIER", ARGUMENTS)

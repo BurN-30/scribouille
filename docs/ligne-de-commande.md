@@ -138,9 +138,12 @@ scribouille vocabulaire importer F.toml          propositions ou vocabulaire d'�
 scribouille vocabulaire exporter F.toml [--ecraser]
 scribouille vocabulaire appliquer TEXTE.txt (--sortie F.txt | --ecraser)
 scribouille vocabulaire apprendre --brut B.txt --propre RELUE.txt [--cr CR] [--sortie F.toml] [--importer]
+scribouille vocabulaire retirer-exemples | remettre-exemples
 ```
 
 `appliquer` passe les corrections du vocabulaire effectif sur un texte existant et liste les remplacements. `apprendre` : par paires `--brut`/`--propre` (transcription brute, la même relue), `--cr` facultatif ; écrit des propositions à relire.
+
+`retirer-exemples` : `vocabulaire.txt` et `corrections.txt` restés tels que les versions 1.x à 2.3 les livraient, avec leurs exemples fictifs actifs (Jean Dupont, MonEntreprise...), envoyés au modèle à chaque transcription, reprennent le modèle actuel (exemples en commentaire) ; l'ancien contenu est gardé dans `vocabulaire-exemples-anciens.txt` et `corrections-exemples-anciens.txt`. Un fichier retouché n'est jamais touché. `remettre-exemples` le défait (sauf un fichier retouché depuis, dit). `vocabulaire etat` dit ce qui reste (`exemples_anciens`). La fenêtre fait ce retrait à son ouverture et l'annonce (avec « Remettre ») ; quand une version 2.x installée (WhiScribe) lit le même dossier de données, elle le propose seulement. La ligne de commande ne le fait jamais d'office.
 
 ### agent
 

@@ -2097,6 +2097,68 @@ def essai_campagne(base: Path) -> None:
                  and (dossier_v / "vocabulaire-exemples-anciens.txt").is_file()
                  and "maison => Maison" in chemins.FICHIER_CORRECTIONS.read_text(encoding="utf-8"),
                  "exemples d'origine remplacés (copie gardée), fichier retouché laissé tel quel")
+        remis = vocabulaire.remettre_exemples_anciens()
+        verifier(remis == {"remis": ["vocabulaire.txt"], "retouches": []}
+                 and chemins.FICHIER_VOCABULAIRE.read_text(encoding="utf-8") == ancien
+                 and not vocabulaire.copies_exemples_anciens(),
+                 "« Remettre » : le fichier d'origine revient à l'identique, la copie disparaît", str(remis))
+        vocabulaire.retirer_exemples_anciens()
+        chemins.FICHIER_VOCABULAIRE.write_text("Scribouille\n", encoding="utf-8")
+        remis = vocabulaire.remettre_exemples_anciens()
+        verifier(remis["retouches"] == ["vocabulaire.txt"]
+                 and chemins.FICHIER_VOCABULAIRE.read_text(encoding="utf-8") == "Scribouille\n"
+                 and (dossier_v / "vocabulaire-exemples-anciens.txt").is_file(),
+                 "retouché depuis le retrait : jamais écrasé, dit, la copie reste")
+
+        # Décision de la fenêtre à son ouverture : retrait annoncé, ou seulement
+        # proposé quand WhiScribe 2.x installé lit le même dossier.
+        (dossier_v / "vocabulaire-exemples-anciens.txt").unlink()
+        local_reel = os.environ.get("LOCALAPPDATA")
+        racine_reelle = chemins.RACINE
+        faux_local = base / "local"
+        programme = faux_local / "Programs" / "WhiScribe"
+        programme.mkdir(parents=True)
+        (programme / "WhiScribe.exe").write_bytes(b"MZ")
+        os.environ["LOCALAPPDATA"] = str(faux_local)
+        chemins.RACINE = faux_local / "WhiScribe"
+        chemins.RACINE.mkdir()
+        try:
+            chemins.FICHIER_VOCABULAIRE.write_text(ancien, encoding="utf-8")
+            partage = chemins.donnees_partagees_ancienne_version()
+            decision = vocabulaire.exemples_au_demarrage("")
+            verifier(partage == programme / "WhiScribe.exe" and decision == ("", "proposes")
+                     and chemins.FICHIER_VOCABULAIRE.read_text(encoding="utf-8") == ancien,
+                     "dossier partagé avec WhiScribe 2.x installé : rien n'est réécrit, c'est proposé", str(decision))
+            (programme / "Scribouille.exe").write_bytes(b"MZ")
+            verifier(chemins.ancienne_version_installee() is None,
+                     "WhiScribe mis à jour en 3.0 dans son dossier (Scribouille.exe à côté) : plus d'ancienne version")
+            (programme / "Scribouille.exe").unlink()
+            chemins.RACINE = base / "vocab"
+            decision = vocabulaire.exemples_au_demarrage("")
+            verifier(decision == ("retires", "retires") and vocabulaire.copies_exemples_anciens()
+                     and vocabulaire.exemples_au_demarrage("retires") == ("retires", "retires")
+                     and vocabulaire.exemples_au_demarrage("vus") == ("vus", "")
+                     and vocabulaire.exemples_au_demarrage("gardes") == ("gardes", ""),
+                     "dossier à Scribouille seul : retiré et annoncé, puis plus rien une fois vu", str(decision))
+            # Reprise de l'ancien dossier : gardé tant que WhiScribe 2.x l'utilise.
+            ancien_dossier, nouveau_dossier = faux_local / "WhiScribe", faux_local / "Scribouille"
+            (ancien_dossier / "config.json").write_text("{}", encoding="utf-8")
+            garde = chemins._garder_ancien_dossier(ancien_dossier, nouveau_dossier)
+            nouveau_dossier.mkdir()
+            (nouveau_dossier / "config.json").write_text("{}", encoding="utf-8")
+            deja = chemins._garder_ancien_dossier(ancien_dossier, nouveau_dossier)
+            (programme / "WhiScribe.exe").unlink()
+            (nouveau_dossier / "config.json").unlink()
+            sans_ancienne = chemins._garder_ancien_dossier(ancien_dossier, nouveau_dossier)
+            verifier(garde and not deja and not sans_ancienne,
+                     "WhiScribe 2.x installé : ses données restent dans son dossier, partagé ; reprises "
+                     "après sa désinstallation, jamais si la 3.0 a déjà son dossier", f"{garde} {deja} {sans_ancienne}")
+        finally:
+            chemins.RACINE = racine_reelle
+            if local_reel is None:
+                os.environ.pop("LOCALAPPDATA", None)
+            else:
+                os.environ["LOCALAPPDATA"] = local_reel
     finally:
         chemins.FICHIER_VOCABULAIRE, chemins.FICHIER_CORRECTIONS = vocab_reel, corr_reel
         chemins.MODELES_FICHIERS_EXEMPLE.clear()

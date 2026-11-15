@@ -52,7 +52,8 @@ FICHIERS = (
 )
 #: Fichiers datés ou dérivés, reconnus à leur nom.
 MOTIFS = (
-    "*-format1-sauvegarde.txt", "vocabulaire-propositions-*.toml", "vocabulaire-propositions-*.txt",
+    "*-format1-sauvegarde.txt", "*-exemples-anciens.txt", "vocabulaire-propositions-*.toml",
+    "vocabulaire-propositions-*.txt",
     "scribouille-donnees-avant-import-*.zip", "whiscribe-donnees-avant-import-*.zip",
 )
 #: Dossiers que Scribouille crée dans son dossier de données.

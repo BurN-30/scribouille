@@ -327,7 +327,7 @@ Where files live, depending on how the app was started:
 | Settings, logs, glossary | `%LOCALAPPDATA%\Scribouille` (`WhiScribe` up to 2.4, taken over on first launch) | next to the script |
 | Models | chosen at install time, changeable in the settings | `modeles/`, changeable in the settings |
 
-Up to 2.4, the data folder carried the application's old name, `WhiScribe`. Version 3.0 renames it on first launch, without copying or downloading anything again, moving only Scribouille's own files (a namesake program keeps its models in the same place); `scribouille donnees revenir-whiscribe` goes back.
+Up to 2.4, the data folder carried the application's old name, `WhiScribe`. Version 3.0 renames it on first launch, without copying or downloading anything again, moving only Scribouille's own files (a namesake program keeps its models in the same place); `scribouille donnees revenir-whiscribe` goes back. While a 2.x version (WhiScribe) is still installed, it still reads that folder: 3.0 then works there too, without moving anything, and the rename happens on the first launch after it is uninstalled or updated.
 
 </details>
 

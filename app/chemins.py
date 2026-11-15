@@ -81,11 +81,50 @@ def _dossier_programme() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def ancienne_version_installee() -> Path | None:
+    """
+    L'exécutable d'une version 2.x installée (WhiScribe), encore là, ou None.
+
+    Inno range l'installation par identifiant : la 3.0 installée par-dessus
+    se pose dans le même dossier, « Programs\\WhiScribe », avec
+    « Scribouille.exe ». Seul « WhiScribe.exe » sans « Scribouille.exe » à côté
+    est donc une ancienne version qui lit encore `%LOCALAPPDATA%\\WhiScribe`.
+    """
+    base = os.environ.get("LOCALAPPDATA")
+    if not base:
+        return None
+    dossier = Path(base) / "Programs" / NOM_DOSSIER_ANCIEN
+    exe = dossier / f"{NOM_DOSSIER_ANCIEN}.exe"
+    try:
+        if exe.is_file() and not (dossier / f"{NOM_DOSSIER_UTILISATEUR}.exe").is_file():
+            return exe
+    except OSError:
+        pass
+    return None
+
+
+def _garder_ancien_dossier(ancien: Path, nouveau: Path) -> bool:
+    """
+    Une version 2.x installée lit encore l'ancien dossier : le déplacer la
+    priverait de ses réglages et de ses modèles (plusieurs gigaoctets à
+    retélécharger). Tant qu'elle est là, et que rien n'a encore été repris, la
+    3.0 travaille dans l'ancien dossier, partagé ; la reprise se fera au premier
+    lancement qui suivra sa désinstallation ou sa mise à jour.
+    """
+    try:
+        return (ancienne_version_installee() is not None and (ancien / "config.json").is_file()
+                and not (nouveau / "config.json").exists()
+                and not (nouveau / "migration-whiscribe.json").exists())
+    except OSError:
+        return False
+
+
 def _dossier_donnees() -> Path:
     """
     Racine où l'application écrit : à côté des sources, ou dans l'espace
     utilisateur. Dans la version gelée, l'ancien dossier « WhiScribe » est
-    repris ici, avant que quoi que ce soit ne lise ses fichiers.
+    repris ici, avant que quoi que ce soit ne lise ses fichiers, sauf s'il
+    sert encore à une version 2.x installée (`_garder_ancien_dossier`).
     """
     # Dossier imposé (mesures, essais côte à côte d'une autre version) : pris
     # tel quel, sans reprise de l'ancien dossier.
@@ -98,6 +137,10 @@ def _dossier_donnees() -> Path:
     if not base:
         return Path.home() / f".{NOM_DOSSIER_UTILISATEUR.lower()}"
     nouveau = Path(base) / NOM_DOSSIER_UTILISATEUR
+    ancien = Path(base) / NOM_DOSSIER_ANCIEN
+    if "--revenir-whiscribe" not in sys.argv and _garder_ancien_dossier(ancien, nouveau):
+        MIGRATION.update({"etat": "partage", "ancienne": str(ancienne_version_installee())})
+        return ancien
     if "--revenir-whiscribe" not in sys.argv:
         try:
             from . import migration
@@ -114,6 +157,25 @@ DONNEES_IMPOSEES = bool(os.environ.get("SCRIBOUILLE_DONNEES", "").strip())
 
 DOSSIER_RESSOURCES = _dossier_ressources()
 DOSSIER_PROGRAMME = _dossier_programme()
+
+
+def donnees_partagees_ancienne_version() -> Path | None:
+    """
+    L'exécutable de la version 2.x installée qui lit le même dossier de
+    données que nous (`%LOCALAPPDATA%\\WhiScribe`, gardé tant qu'elle est là,
+    ou imposé par SCRIBOUILLE_DONNEES), sinon None. Ce qu'elle lit aussi
+    (glossaire, corrections) n'est alors jamais réécrit d'office.
+    """
+    exe = ancienne_version_installee()
+    base = os.environ.get("LOCALAPPDATA")
+    if exe is None or not base:
+        return None
+    try:
+        if str(RACINE.resolve()).lower() == str((Path(base) / NOM_DOSSIER_ANCIEN).resolve()).lower():
+            return exe
+    except OSError:
+        pass
+    return None
 
 
 def mode_programme() -> str:

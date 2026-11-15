@@ -49,6 +49,11 @@ DEFAUTS: dict = {
     "rythme": "",
     "rythme_auto": False,           # s'adapter tout seul à l'usage du poste
     "proposition_ecartee": "",      # signature du poste dont la proposition a été écartée
+    # Exemples fictifs des anciennes versions dans vocabulaire.txt et
+    # corrections.txt (voir `vocabulaire.retirer_exemples_anciens`) : vide,
+    # « retires » (fait, à annoncer), « vus » (annoncé), « gardes » (remis ou
+    # gardés par l'utilisateur : plus rien n'est proposé).
+    "exemples_anciens": "",
     "theme": "auto",                # auto | clair | sombre
     "zoom": 1.0,
     "journal_ouvert": False,

@@ -1064,6 +1064,14 @@ _FR: dict[str, str] = {
     ),
     "app.jeton.prefixe": "Un jeton Hugging Face commence par « hf_ ». Vérifiez le copier-coller.",
     "app.jeton.efface": "Jeton effacé.",
+    "app.exemples.remis": "Exemples des anciennes versions remis dans le glossaire et les corrections.",
+    "app.exemples.retouches": (
+        "Retouché depuis le retrait, donc non remis : {fichiers}. La copie d'origine reste à côté."
+    ),
+    "app.exemples.retires_demande": (
+        "Exemples des anciennes versions retirés, copie gardée à côté de chaque fichier."
+    ),
+    "app.exemples.rien": "Plus aucun exemple des anciennes versions à retirer.",
     "app.jeton.enregistre": (
         "Jeton enregistré. Il sera vérifié au premier usage de la séparation des locuteurs."
     ),
@@ -2470,6 +2478,14 @@ _EN: dict[str, str] = {
     ),
     "app.jeton.prefixe": "A Hugging Face token starts with \"hf_\". Check what you pasted.",
     "app.jeton.efface": "Token cleared.",
+    "app.exemples.remis": "Examples from older versions put back into the glossary and corrections.",
+    "app.exemples.retouches": (
+        "Edited since they were removed, so not put back: {fichiers}. The original copy stays alongside."
+    ),
+    "app.exemples.retires_demande": (
+        "Examples from older versions removed, a copy is kept next to each file."
+    ),
+    "app.exemples.rien": "No examples from older versions left to remove.",
     "app.jeton.enregistre": (
         "Token saved. It will be checked the first time speaker separation runs."
     ),
