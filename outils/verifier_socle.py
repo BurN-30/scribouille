@@ -397,6 +397,14 @@ def essai_repetitions() -> None:
 
     decouper, etat_modele, transcription = mo.decouper, moteur.etat_modele, moteur.MoteurTranscription
     mo.decouper = lambda signal: [[{"start": 0, "end": 32000}]]
+    # OpenVINO est une extension : absent (service de vérification de GitHub),
+    # le moteur simulé n'en demande que l'état du flux, prêté ici.
+    import importlib.util
+
+    simule = importlib.util.find_spec("openvino_genai") is None
+    if simule:
+        sys.modules["openvino_genai"] = SimpleNamespace(
+            __version__="simulé", StreamingStatus=SimpleNamespace(RUNNING=0, CANCEL=1))
     signal = np.zeros(32000, dtype=np.float32)
     mat = materiel.detecter_au_demarrage()[0]
 
@@ -448,6 +456,8 @@ def essai_repetitions() -> None:
                  "autre moteur absent du disque : jamais téléchargé, la boucle est coupée et comptée")
     finally:
         mo.decouper, moteur.etat_modele, moteur.MoteurTranscription = decouper, etat_modele, transcription
+        if simule:
+            sys.modules.pop("openvino_genai", None)
 
 
 # ---------------------------------------------------------------------------

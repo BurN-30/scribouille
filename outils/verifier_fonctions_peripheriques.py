@@ -2425,6 +2425,14 @@ def essai_openvino_faisceau() -> None:
     decouper_reel = mo.decouper
     mo.decouper = lambda signal: [[{"start": 0, "end": 32000}]]
     boucle, propre = "bonjour " * 40, "Bonjour à tous, on commence."
+    # OpenVINO est une extension : absent (service de vérification de GitHub),
+    # le moteur simulé n'en demande que l'état du flux, prêté ici.
+    import importlib.util
+
+    simule = importlib.util.find_spec("openvino_genai") is None
+    if simule:
+        sys.modules["openvino_genai"] = SimpleNamespace(
+            __version__="simulé", StreamingStatus=SimpleNamespace(RUNNING=0, CANCEL=1))
     mat = materiel.detecter()
 
     def moteur_sur(peripherique: str, pipeline) -> "mo.MoteurOpenVINO":
@@ -2463,6 +2471,8 @@ def essai_openvino_faisceau() -> None:
                  "la fenêtre est gardée, boucle coupée, au lieu de faire tomber la transcription")
     finally:
         mo.decouper = decouper_reel
+        if simule:
+            sys.modules.pop("openvino_genai", None)
 
 
 def essai_filet_openvino() -> None:
