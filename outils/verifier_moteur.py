@@ -731,7 +731,11 @@ def essai_ligne_de_commande() -> None:
     verifier(all(x.get("schema") == "scribouille.cli/1" for x in lignes), "chaque ligne porte le schéma versionné")
     fichier = (fin.get("fichiers") or [{}])[0]
     compagnon = Path(fichier.get("json") or "")
-    verifier(compagnon.is_file() and compagnon.parent == dossier, "sorties à côté de la source, .json compris",
+    # Chemins comparés résolus : la ligne de commande rend des chemins absolus
+    # résolus, le dossier temporaire peut avoir une autre forme (nom court
+    # « RUNNER~1 » sur le service de GitHub, jonction).
+    verifier(compagnon.is_file() and compagnon.parent.resolve() == dossier.resolve(),
+             "sorties à côté de la source, .json compris",
              str(fichier))
     verifier("progres" in evenements and "fichier_fini" in evenements, "progression et fin de fichier en JSON")
 
