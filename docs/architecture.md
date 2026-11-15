@@ -36,7 +36,7 @@ Une clé ajoutée ne change pas la version ; une clé retirée ou un sens chang�
 | Situation | Effet |
 |---|---|
 | Annulation | Le processus est arrêté (TerminateProcess), quelle que soit la phase : quelques millisecondes. Le fichier finit « arrêté », sa reprise intacte. |
-| Plantage du moteur (pilote graphique, mémoire) | La fenêtre reste. Le fichier repart une fois, au segment près, sans la puce graphique si elle était en jeu (témoin `openvino-chargement-en-cours.txt`). Second plantage : fichier en erreur, reprenable. |
+| Plantage du moteur (pilote graphique, mémoire) | La fenêtre reste. Le fichier repart une fois, au segment près, sans la puce graphique si elle était en jeu. Code de plantage (`0xC0000005`...) ou ouverture sur la puce de plus de 10 min : puce suspendue (`app/temoin_puce.py`). Arrêt venu de dehors (Ctrl+C, console fermée, processus tué, poste éteint) : jamais pris pour un plantage, la prochaine ouverture réessaie la puce. Second plantage : fichier en erreur, reprenable. |
 | Moteur muet 15 min (hors veille) | Arrêté, traité comme un plantage. |
 | Retour de veille | Saut d'horloge reconnu, rien n'est arrêté ; si le pilote n'a pas survécu, repli d'OpenVINO ou plantage géré. |
 | Deux Scribouille en même temps | Une seule fenêtre par dossier de données (mutex) ; ligne de commande libre ; un enregistrement n'est transcrit que par un processus (verrou `reprises\<empreinte>.en-cours`, repris si son PID est mort). |
@@ -60,6 +60,7 @@ Une clé ajoutée ne change pas la version ; une clé retirée ou un sens chang�
 |---|---|
 | `transcriber.pyw` | Point d'entrée, aiguillage, passerelle de la fenêtre (`Passerelle`) |
 | `app/superviseur.py` | Lance, pilote, surveille, arrête le moteur |
+| `app/temoin_puce.py` | Témoin de la puce graphique : en cours, à vérifier, suspendue après un plantage constaté |
 | `app/moteur_processus.py` | Boucle du moteur, relais des rappels en messages |
 | `app/protocole.py` | Messages et version |
 | `app/traitement.py` | La file : `ouvrir_file`, `traiter_element`, `fermer_file` ; locale ou distante |

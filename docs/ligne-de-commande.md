@@ -16,7 +16,8 @@ scribouille COMMANDE [options] [--json]
 - Aucun téléchargement sans `--telecharger`, aucun écrasement sans `--ecraser`, aucun effacement sans `--oui` (ou confirmation tapée dans un terminal).
 - Aucun appel réseau hors téléchargement d'un modèle demandé.
 - `transcrire` ne modifie jamais les réglages : ses options valent pour la commande seule.
-- `espace`, `effacer --apercu`, `etat` (sans `--nettoyer`), `lire` et `agent` n'écrivent rien dans le dossier de données.
+- **Les commandes de lecture n'écrivent rien**, nulle part : ni réglages, ni journal, ni témoin, ni reprise de l'ancien dossier. Ce sont `version`, `aide` (et toute demande d'aide), `diagnostic`, `verifier` (et `--verifier`), `lire`, `espace`, `etat` sans `--nettoyer`, `agent afficher`, `reglages liste|lire`, `vocabulaire etat`, `materiel proposer` sans `--appliquer`, `materiel puce` sans `--lever`. `diagnostic --materiel` et `materiel detecter` relancent la détection : `materiel.json` n'est réécrit que s'il a changé. `effacer --apercu` n'efface rien.
+- **WhiScribe 2.x encore installée**, qui lit le même dossier (`%LOCALAPPDATA%\WhiScribe`) : son `config.json` n'est jamais modifié, ni clé ajoutée ni clé retirée. Les réglages de la 3.x vont dans `config-scribouille.json`, à côté, et seulement ceux qui diffèrent ; une fois la 2.x partie, la première sauvegarde les reverse dans `config.json` (en gardant ses clés) et retire ce fichier.
 - Chemins absolus dans les sorties JSON ; aucun texte transcrit dans les journaux.
 - Ctrl+C ou Ctrl+Pause : arrêt propre, code 5, le travail fait reste sur le disque, `reprendre` le poursuit. Fermeture de la session SSH ou arrêt de la tâche : le moteur s'arrête avec la commande, le travail fait reste aussi sur le disque.
 
@@ -77,6 +78,8 @@ scribouille etat [--nettoyer]
 
 Transcriptions reprenables, avec position, pourcentage et clé : `interrompue`, ou `en_cours` (avec `pid`) quand un autre processus la transcrit en ce moment ; processus moteurs actifs (PID, mémoire). Une transcription coupée avant son premier segment (pendant la lecture de l'audio ou le chargement du modèle) est reprenable aussi : `depuis_debut` vaut `true`, `reprendre` la refait du début avec la demande de départ. Un échec (audio illisible, mémoire, deux plantages du moteur) avant le premier segment ne laisse rien à reprendre.
 
+`puce` : l'état du témoin de la puce graphique, comme `materiel puce`.
+
 `orphelines` : ce qui ne peut plus être repris, avec sa raison (`source_absente`, `etat_illisible`, `segments_sans_etat`, `trop_vieille` au-delà de 30 jours, `verrou_mort`, `provisoire`). Rien n'est effacé sans `--nettoyer` ; la fenêtre les efface à son ouverture et note chacune au journal.
 
 ### lire
@@ -110,7 +113,7 @@ Chaque réglage, sa valeur par défaut et son effet : [reglages.md](reglages.md)
 
 ### diagnostic
 
-`scribouille diagnostic [--materiel]` : version, mode (installée, portable, sources), dossiers, matériel, moteurs (CTranslate2, OpenVINO et ses périphériques), réglage effectif, modèles du catalogue et leur état, locuteurs, vocabulaire, verdict de campagne, durée prévue pour une heure, `pret` et `raisons`. Code 3 si pas prêt. `--materiel` relance d'abord la détection lente (cartes, NPU, OpenVINO).
+`scribouille diagnostic [--materiel]` : version, mode (installée, portable, sources), dossiers, matériel, moteurs (CTranslate2, OpenVINO et ses périphériques), réglage effectif, modèles du catalogue et leur état, locuteurs, vocabulaire, verdict de campagne, durée prévue pour une heure, `puce` (témoin de la puce graphique, voir `materiel puce`), `donnees_partagees` (l'exécutable d'une WhiScribe 2.x qui lit le même dossier, sinon vide), `pret` et `raisons`, `avertissements` (ce qui ne bloque pas mais change le résultat : puce suspendue ou à vérifier, séparation des voix cochée mais non installée). Code 3 si pas prêt. `--materiel` relance d'abord la détection lente (cartes, NPU, OpenVINO).
 
 ### espace
 
@@ -166,13 +169,26 @@ scribouille vocabulaire retirer-exemples | remettre-exemples
 
 `scribouille materiel [detecter]` : relance la détection lente (cartes, NPU, OpenVINO) et l'écrit dans `materiel.json`. `scribouille materiel proposer [--appliquer]` : le poste, le réglage proposé et pourquoi ; `--appliquer` l'enregistre.
 
+`scribouille materiel puce [--lever]` : le témoin de la puce graphique (`openvino-chargement-en-cours.txt`), posé pendant chaque ouverture d'un modèle sur la puce ou le NPU. `etat` vaut :
+
+| `etat` | Sens | La puce sert-elle ? |
+|---|---|---|
+| `libre` | Pas de témoin. | Oui. |
+| `en_cours` | Une ouverture se fait en ce moment dans un autre processus (`pid`, vivant). | Oui. |
+| `a_verifier` | Une ouverture n'a pas abouti sans plantage prouvé : processus tué, console fermée, poste éteint (`origine` : `coupure`, `extinction`), témoin d'une version antérieure (`ancien_format`), ou plantage d'avant une mise à jour de Scribouille, d'OpenVINO ou du pilote graphique (`mise_a_jour`). | Oui : la prochaine ouverture tranche, dans le processus moteur, sous la garde du superviseur. |
+| `suspendue` | Le moteur est mort sur la puce avec un code de plantage (`code`, par exemple `0xC0000005`), ou son ouverture a dépassé 10 min (`cause` : `blocage`). | Non : CTranslate2 sur le processeur ; la puce imposée à `transcrire` rend le code 3. |
+
+Un arrêt venu de dehors (Ctrl+C, console fermée, `0xC000013A`, arrêt par un autre programme) n'est jamais pris pour un plantage. `--lever` lève la suspension : la prochaine ouverture réessaie la puce, protégée (un nouveau plantage la suspend de nouveau et le fichier repart sur le processeur). La fenêtre a le même bouton (Réglages, Poste, « Réessayer la puce graphique »).
+
+**Essai du repli sur une vraie machine** : `set SCRIBOUILLE_ESSAI_PUCE=plantage` avant une commande fait tomber le moteur au moment d'ouvrir la puce ou le NPU, comme une violation d'accès du pilote ; `erreur` lui fait lever une erreur (repli propre), `blocage` l'arrête net (borné par la garde). Sans la variable, rien ne change ; le journal dit chaque échec simulé. Exemple : `set SCRIBOUILLE_ESSAI_PUCE=plantage`, puis une transcription sur la puce (réglage du poste, ou la puce imposée à `transcrire`) : le fichier est fait sur le processeur, `materiel puce` dit `suspendue`, `materiel puce --lever` la lève.
+
 ### donnees
 
 `scribouille donnees revenir-whiscribe` : remet les données dans l'ancien dossier `WhiScribe`, pour revenir à une version antérieure à la 2.4.
 
 ### verifier
 
-`scribouille verifier` : bilan de l'installation (imports, décodeur, écriture des dossiers) ; code 3 si quelque chose manque.
+`scribouille verifier` : bilan de l'installation (imports, décodeur, droit d'écrire dans les dossiers, vérifié sans rien écrire) ; code 3 si quelque chose manque. La ligne du matériel distingue les fils logiques du poste et les fils de calcul (sur un Core Ultra 5 225U : 14 fils logiques, 12 cœurs, calcul sur 10 fils au plus, un par cœur performant ou efficace).
 
 ### aide, version
 
@@ -193,6 +209,7 @@ Toujours acceptées, telles quelles, par `scribouille.com` :
 | `vocabulaire apprendre ...` | `--apprendre-vocabulaire ...` |
 | `materiel [detecter]` | `--detecter-materiel` |
 | `materiel proposer [--appliquer]` | `--reconnaitre [--appliquer]` |
+| `materiel puce [--lever]` | (nouvelle en 3.0) |
 | `donnees revenir-whiscribe` | `--revenir-whiscribe` |
 | `verifier` | `--verifier` (et `scribouille-verifier.exe` seul, avant la 3.0) |
 

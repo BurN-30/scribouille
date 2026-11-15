@@ -1,6 +1,6 @@
 # Réglages
 
-Fichier : `config.json` dans le dossier de données (`%LOCALAPPDATA%\Scribouille` ; `%LOCALAPPDATA%\WhiScribe` tant qu'une version 2.x installée le lit ; ou `SCRIBOUILLE_DONNEES`). Une clé absente prend sa valeur par défaut ; une clé inconnue est ignorée.
+Fichier : `config.json` dans le dossier de données (`%LOCALAPPDATA%\Scribouille` ; `%LOCALAPPDATA%\WhiScribe` tant qu'une version 2.x installée le lit ; ou `SCRIBOUILLE_DONNEES`). Une clé absente prend sa valeur par défaut ; une clé inconnue est ignorée, et gardée telle quelle à la sauvegarde. Lire les réglages ne les réécrit jamais (aucune commande de lecture n'écrit quoi que ce soit). Tant qu'une WhiScribe 2.x installée lit le même dossier, son `config.json` n'est jamais modifié : les réglages de la 3.x qui en diffèrent vont dans `config-scribouille.json`, relu par-dessus ; une fois la 2.x partie, la première sauvegarde les reverse dans `config.json` et retire ce fichier.
 
 En ligne de commande : `scribouille reglages` (liste), `reglages lire CLE`, `reglages definir CLE=VALEUR [CLE=VALEUR...]`, `reglages defaut CLE`. Booléens : `oui`/`non` ; listes : séparées par `;` ; `formats` : `txt,srt`. `transcrire` n'enregistre jamais rien : ses options ne valent que pour la commande.
 
@@ -60,7 +60,7 @@ Sans `mode_avance`, les quatre clés suivantes sont ignorées.
 
 | Clé | Défaut | Effet |
 |---|---|---|
-| `langue_interface` | vide | `fr` ou `en` ; vide : celle de Windows au premier lancement. Vaut aussi pour les en-têtes des fichiers produits. |
+| `langue_interface` | vide | `fr` ou `en` ; vide : celle de Windows (enregistrée avec la première sauvegarde des réglages, jamais à la lecture). Vaut aussi pour les en-têtes des fichiers produits. |
 | `surveillance` | `false` | Transcrire ce qui arrive dans `dossier_surveille`. |
 | `dossier_surveille` | vide | Dossier scruté. |
 | `barre_taches` | `true` | Progression sur l'icône de la barre des tâches. |
@@ -68,7 +68,7 @@ Sans `mode_avance`, les quatre clés suivantes sont ignorées.
 | `maj_verifier` | `false` | Vérifier les nouvelles versions sur GitHub, une fois par jour au plus. Seul appel réseau hors téléchargement d'un modèle. |
 | `theme` | `auto` | Thème de la fenêtre : `auto` (celui de Windows), `clair` ou `sombre`. |
 
-Clés internes, tenues par l'application et refusées par `reglages` : `zoom`, `journal_ouvert` (état de la fenêtre), `proposition_ecartee` (réglage proposé écarté sur ce poste), `exemples_anciens` (retrait des exemples fictifs des versions 2.x de `vocabulaire.txt` et `corrections.txt` : vide, `retires`, `vus`, `gardes`), `reglage_machine` (écrit par les pseudo-clés `moteur` et `peripherique`, le banc et la campagne).
+Clés internes, tenues par l'application et refusées par `reglages` : `zoom`, `journal_ouvert` (état de la fenêtre), `proposition_ecartee` (réglage proposé écarté sur ce poste), `exemples_anciens` (retrait des exemples fictifs des versions 2.x de `vocabulaire.txt` et `corrections.txt` : vide, `retires`, `vus`, `gardes`), `avis_locuteurs` (séparation des voix cochée mais non installée, déjà dite une fois par la ligne de commande ; remis à faux quand `diarisation` change), `reglage_machine` (écrit par les pseudo-clés `moteur` et `peripherique`, le banc et la campagne).
 
 ## Variables d'environnement
 

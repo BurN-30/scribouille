@@ -154,6 +154,51 @@ Avant l'essai sur le PC du travail
   poste, séries alternées : interface prête en 1,04 à 1,12 s au lieu de 1,25
   à 1,60 s.
 
+Après l'essai sur le PC du travail (Core Ultra 5 225U, WhiScribe 2.3.3 encore installée)
+
+- **Puce graphique suspendue pour toujours après une coupure** : une commande
+  tuée pendant le chargement du modèle laissait le témoin d'OpenVINO, et la
+  puce restait écartée sans plantage (facteur 0,74 sur le processeur au lieu
+  de 0,20). Le témoin dit désormais qui l'a posé et quand ; seul un plantage
+  constaté par le superviseur (code de plantage, ou ouverture de plus de
+  10 min) suspend la puce. Un arrêt venu de dehors (processus tué, console
+  fermée, poste éteint) ou un témoin d'avant (3 octets) la font seulement
+  réessayer, dans le processus moteur, sous garde. `diagnostic`, `etat` et la
+  fenêtre disent l'état ; `scribouille materiel puce --lever` et le bouton
+  « Réessayer la puce graphique » lèvent la suspension, et une mise à jour du
+  pilote graphique, d'OpenVINO ou de Scribouille la fait réessayer d'elle-même.
+- **Les commandes de lecture n'écrivent plus rien** : `verifier` réécrivait
+  `config.json` (clés ajoutées, `lecture_audio` de la 2.x retirée) et laissait
+  un journal ; `diagnostic`, `etat`, `lire`, `materiel proposer`, `version`...
+  ne touchent plus au dossier. Lire les réglages ne les réécrit jamais.
+- **WhiScribe 2.x lit le même dossier** : son `config.json` n'est plus jamais
+  modifié ; les réglages de la 3.x vont dans `config-scribouille.json`, et
+  rejoignent `config.json` une fois la 2.x partie. `materiel.json` n'est plus
+  réécrit à chaque lancement quand rien n'a changé.
+- **Bilan de `verifier`** : « 10 fils » devient « 14 fils logiques, 12 cœurs
+  (2 performants, 8 efficaces, 2 basse consommation) ; calcul sur processeur :
+  10 fils au plus ». Le nombre donné au moteur ne change pas : un fil par
+  cœur performant ou efficace, voulu (moins en rythme équilibré ou discret).
+- **Séparation des voix héritée de la 2.x** (cochée par défaut là-bas) : dite
+  une fois par la ligne de commande, puis seulement dans le JSON et dans
+  `diagnostic`, au lieu d'à chaque transcription.
+- **Journal** : la ligne « Données gardées dans … » paraît aussi dans celui de
+  la ligne de commande.
+- **Plus de processus de console à l'ouverture** : les deux vus au travail
+  étaient la détection du matériel en fond (`scribouille.com
+  --detecter-materiel`) et son hôte de console caché (`conhost.exe`), à chaque
+  ouverture de la fenêtre. Elle passe par l'exécutable fenêtré, sans journal
+  à elle (elle en ouvrait un de plus à chaque lancement).
+- **Démarrage** : la partie Windows de l'affichage (pythonnet, WinForms,
+  WebView2) se charge en fond pendant que le programme démarre. Programme
+  gelé, même poste, séries alternées : interface prête en 0,96 à 1,11 s au
+  lieu de 1,11 à 1,16 s. Le journal note désormais les jalons du démarrage
+  (page lue, passerelle prête, état reçu et dessiné) : sur un poste lent, on
+  voit ce qui sépare la fenêtre affichée de l'interface prête.
+- **Essai du repli sur une vraie machine** : `SCRIBOUILLE_ESSAI_PUCE=plantage`
+  (ou `erreur`, `blocage`) simule l'échec de la puce au moment de l'ouvrir ;
+  sans la variable, rien ne change.
+
 ---
 
 ## 2.4.0
