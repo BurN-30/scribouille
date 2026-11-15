@@ -117,11 +117,42 @@ Corrigé après la recette
   clic ; documentation livrée à côté de l'exécutable et accordée au
   comportement par un contrôle automatique.
 
-Corrigé après le premier essai sur le PC à puce Intel
+Avant l'essai sur le PC du travail
 
 - **Langue** : lire la configuration ne change plus la langue de l'interface ;
   une langue choisie l'emporte toujours sur celle du système (un Windows en
-  anglais faisait passer en anglais des messages attendus en français).
+  anglais faisait passer en anglais des messages attendus en français, d'où
+  l'échec de la vérification sur GitHub).
+- **Reprise après un arrêt brutal** : une transcription coupée avant son
+  premier segment (lecture de l'audio, chargement du modèle) est reprenable,
+  du début, avec la demande de départ ; `reprendre` ne répond plus « aucune
+  transcription interrompue ». Un échec avant le premier segment (audio
+  illisible, deux plantages du moteur) ne laisse rien à reprendre ; refaire un
+  fichier qui avait une reprise ne double plus son texte. `scribouille etat`
+  dit qui transcrit quoi (`en_cours` et son PID) et les sauvegardes qui ne
+  peuvent plus servir, avec leur raison ; `etat --nettoyer` les efface.
+- **Exemples des anciennes versions** : le retrait des exemples fictifs de
+  `vocabulaire.txt` et `corrections.txt` (versions 1.x à 2.3) est annoncé à
+  l'ouverture, avec une copie et « Remettre » ; en ligne de commande,
+  `vocabulaire retirer-exemples` et `remettre-exemples`. Quand WhiScribe 2.x,
+  encore installé, lit le même dossier, il est seulement proposé.
+- **WhiScribe 2.x encore installé** : ses données restent dans
+  `%LOCALAPPDATA%\WhiScribe`, partagées, au lieu d'être déplacées (il aurait
+  perdu réglages et modèles) ; la reprise se fait après sa désinstallation
+  ou sa mise à jour.
+- **Rythme par défaut selon le moteur** : vitesse maximale quand la puce
+  graphique ou une carte NVIDIA calcule (une heure en 5 min 06 avec 92 % du
+  processeur libre sur un Core Ultra 5 225U), équilibré sur le processeur
+  seul. Un rythme choisi reste choisi.
+- **Distillation française** de large-v3 (`bofenghuang`) proposée en mode
+  avancé, jamais par défaut : son avance sur turbo n'est pas démontrée
+  (32,2 % d'erreur contre 33,3 %). Sans version OpenVINO, elle calcule sur
+  le processeur.
+- **Démarrage** : ce que la page attend de lent (taille du dossier des
+  modèles, mode d'alimentation, pilote NVIDIA) est lu pendant que la fenêtre
+  s'ouvre, et le nom du système ne passe plus par WMI. Programme gelé, même
+  poste, séries alternées : interface prête en 1,04 à 1,12 s au lieu de 1,25
+  à 1,60 s.
 
 ---
 
