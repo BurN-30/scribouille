@@ -247,6 +247,40 @@ Après le second essai sur le PC du travail
 - **Épreuve d'endurance** : le diagnostic de l'échec du 12/11 (deux passages
   en plus, et la lecture des journaux) est retiré.
 
+Après la revue de code du 15/11
+
+- **WhiScribe 2.x reconnue où qu'elle soit installée** : par sa clé de
+  désinstallation (HKCU ou HKLM), plus seulement par
+  `Programs\WhiScribe`. Tant qu'elle est là, rien n'est repris de
+  `WhiScribe` ni effacé par `effacer --complet`, même quand la 3.x travaille
+  déjà dans `Scribouille` ; un registre illisible vaut présence.
+- **Redéposer un fichier interrompu ne perd plus le travail fait** : la
+  transcription reprend là où elle s'était arrêtée ; la fenêtre propose
+  « Recommencer du début » à la place. En ligne de commande, `transcrire`
+  poursuit et le dit ; `--recommencer` repart du début.
+- **Reprise après une coupure** : une ligne abîmée dans la sauvegarde ne fait
+  plus repartir de zéro (elle seule est écartée, et notée) ; une dernière ligne
+  coupée est retirée avant d'écrire la suite ; une sauvegarde illisible pour
+  l'instant n'est jamais tronquée. Les sorties sont sur le disque avant que la
+  sauvegarde ne s'efface.
+- **Rien d'effacé sur une absence passagère** : une reprise dont la source est
+  sur un lecteur qui ne répond pas, ou l'historique de relecture d'une
+  transcription sur une clé débranchée, restent ; une source vraiment absente
+  n'est effacée qu'après sept jours.
+- **Puce graphique** : le téléchargement du modèle n'entre plus dans la garde
+  de dix minutes ; un plantage noté n'est plus effacé par une ouverture
+  ailleurs.
+- **Verrou d'un fichier en cours** : un PID réattribué après un redémarrage
+  ne bloque plus la reprise.
+- **Réglages illisibles** : jamais remplacés par les valeurs par défaut ; un
+  fichier abîmé est gardé sous un autre nom.
+- **Divers** : les reprises de la 3.x ne sont plus visibles (ni purgeables)
+  par une WhiScribe 2.3.3 qui partage le dossier ; un fichier du dossier
+  surveillé n'est « vu » qu'une fois transcrit ; mesures de durée et mémoire
+  du dossier surveillé écrites sans risque de troncature ; `mesurer endurance
+  --recommencer` garde les anciens rapports ; après un repli dû à un
+  plantage, « Chargement du modèle » dit « sur le processeur ».
+
 ---
 
 ## 2.4.0

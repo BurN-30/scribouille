@@ -74,5 +74,6 @@ Clés internes, tenues par l'application et refusées par `reglages` : `zoom`, `
 
 | Variable | Effet |
 |---|---|
-| `SCRIBOUILLE_DONNEES` | Dossier de données imposé, sans reprise de l'ancien dossier `WhiScribe` (essais, mesures, agents). Le dossier de sortie par défaut est alors `Transcriptions` dans ce dossier, jamais le `Documents` de l'utilisateur : rien n'est écrit hors de ce dossier sans qu'on le demande (sauf les modèles, si `dossier-modeles.txt` en désigne d'autres). |
+| `SCRIBOUILLE_DONNEES` | Dossier de données imposé (un chemin relatif est rendu absolu), sans reprise de l'ancien dossier `WhiScribe` (essais, mesures, agents). Le dossier de sortie par défaut est alors `Transcriptions` dans ce dossier, jamais le `Documents` de l'utilisateur : rien n'est écrit hors de ce dossier sans qu'on le demande (sauf les modèles, si `dossier-modeles.txt` en désigne d'autres). |
+| `SCRIBOUILLE_ESSAI_REGISTRE` | Vérifications seulement : clés de désinstallation simulées (JSON, ou `erreur`) à la place du registre, pour éprouver la détection d'une WhiScribe 2.x. Lue seulement quand `LOCALAPPDATA` désigne un autre dossier que le vrai : elle ne peut jamais lever la protection d'une vraie 2.x. |
 | `TRANSCRIPTEUR_DEBUG` | Outils de développement de la fenêtre. |

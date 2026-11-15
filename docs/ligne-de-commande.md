@@ -18,7 +18,7 @@ scribouille COMMANDE [options] [--json]
 - `transcrire` ne modifie jamais les réglages : ses options valent pour la commande seule.
 - **Les commandes de lecture n'écrivent rien**, nulle part : ni réglages, ni journal, ni témoin, ni reprise de l'ancien dossier. Ce sont `version`, `aide` (et toute demande d'aide), `diagnostic`, `verifier` (et `--verifier`), `lire`, `espace`, `etat` sans `--nettoyer`, `agent afficher`, `reglages liste|lire`, `vocabulaire etat`, `materiel proposer` sans `--appliquer`, `materiel puce` sans `--lever`. `diagnostic --materiel` et `materiel detecter` relancent la détection : `materiel.json` n'est réécrit que s'il a changé. `effacer --apercu` n'efface rien.
 - **WhiScribe 2.x encore installée**, qui lit le même dossier (`%LOCALAPPDATA%\WhiScribe`) : son `config.json` n'est jamais modifié, ni clé ajoutée ni clé retirée. Les réglages de la 3.x vont dans `config-scribouille.json`, à côté, et seulement ceux qui diffèrent ; une fois la 2.x partie, la première sauvegarde les reverse dans `config.json` (en gardant ses clés) et retire ce fichier.
-- **Jamais d'effacement de ce qui n'est pas à Scribouille 3.x.** Ses journaux vont dans `logs\scribouille\` (une 2.x ne regarde pas les sous-dossiers de `logs\`) ; seuls ceux-là sont purgés, et doucement : rien de moins d'un mois, toujours les 50 derniers. Dans `reprises\`, une 2.x installée garde ses fichiers : la 3.x ne lit, ne propose et n'efface que les siens (états marqués). Ce que la 2.x écrit aussi (réglages, glossaire, jeton, modèles, extensions, caches) n'est dans aucun poste de `espace` et `effacer` : montré à part (`partages`), jamais effacé. Une fois la 2.x désinstallée, tout redevient à la 3.x.
+- **Jamais d'effacement de ce qui n'est pas à Scribouille 3.x.** Ses journaux vont dans `logs\scribouille\` (une 2.x ne regarde pas les sous-dossiers de `logs\`) ; seuls ceux-là sont purgés, et doucement : rien de moins d'un mois, toujours les 50 derniers. Dans `reprises\`, une 2.x installée garde ses fichiers : la 3.x ne lit, ne propose et n'efface que les siens (états marqués). Ce que la 2.x écrit aussi (réglages, glossaire, jeton, modèles, extensions, caches) n'est dans aucun poste de `espace` et `effacer` : montré à part (`partages`), jamais effacé. Une fois la 2.x désinstallée, tout redevient à la 3.x. La 2.x est reconnue à sa clé de désinstallation (HKCU ou HKLM, version 2.x, où qu'elle ait été installée) ou à `Programs\WhiScribe\WhiScribe.exe` ; un registre illisible vaut présence. Tant qu'elle est là, `WhiScribe` n'est jamais repris ni effacé, même quand la 3.x travaille dans `Scribouille`.
 - Chemins absolus dans les sorties JSON ; aucun texte transcrit dans les journaux.
 - Ctrl+C ou Ctrl+Pause : arrêt propre, code 5, le travail fait reste sur le disque, `reprendre` le poursuit. Fermeture de la session SSH ou arrêt de la tâche : le moteur s'arrête avec la commande, le travail fait reste aussi sur le disque.
 
@@ -58,6 +58,9 @@ scribouille transcrire FICHIER|DOSSIER... [options]
 | `--recursif` | | Sous-dossiers compris. |
 | `--telecharger` | | Permet de télécharger un modèle absent. |
 | `--ecraser` | | Refait un fichier déjà transcrit (ses anciennes sorties sont remplacées). |
+| `--recommencer` | | Repart du début même si une transcription interrompue de ce fichier existe : elle est abandonnée (`reprise_abandonnee`). |
+
+Une transcription interrompue du même fichier, avec le même modèle et au moins un segment gardé, est poursuivie par défaut, au segment près, et c'est dit (`reprise_trouvee`, `poursuivie: true`, et sur la sortie d'erreur) : relancer `transcrire` ne perd jamais le calcul déjà fait. Gardée avec un autre modèle : elle reste telle quelle (`reprise_trouvee`, `poursuivie: false`, `scribouille reprendre CLE` la poursuit), et ce fichier part du début avec le modèle demandé.
 
 Une option demandée qu'on ne peut pas honorer n'est jamais ignorée : elle rend son code (2 ou 3) avant tout calcul. La même demande venue des réglages (réglage OpenVINO du poste) est dite (`journal`, niveau `attention`, et sur la sortie d'erreur), puis contournée. La séparation des voix cochée dans les réglages mais non installée (souvent héritée d'une 2.x, où elle était cochée par défaut) est dite une seule fois pour de bon ; ensuite, seulement `diagnostic` (`avertissements`) et, en JSON, le champ `locuteurs` de l'événement `debut`.
 
@@ -83,7 +86,7 @@ Transcriptions reprenables, avec position, pourcentage, clé, `modele` (celui qu
 
 `puce` : l'état du témoin de la puce graphique, comme `materiel puce`.
 
-`orphelines` : ce qui ne peut plus être repris, avec sa raison (`source_absente`, `etat_illisible`, `segments_sans_etat`, `trop_vieille` au-delà de 30 jours, `verrou_mort`, `provisoire`). Le verrou laissé par une coupure va avec sa transcription reprenable : il n'est pas une orpheline (`reprendre` le reprend puis le retire). Rien n'est effacé sans `--nettoyer` ; la fenêtre les efface à son ouverture et note chacune au journal. Seuls les fichiers de la 3.x sont regardés (voir Garanties).
+`orphelines` : ce qui ne peut plus être repris, avec sa raison (`source_absente` : dossier joignable, fichier introuvable, avec `absente_depuis` ; `source_injoignable` : lecteur ou dossier qui ne répond pas ; `etat_illisible` et `segments_sans_etat`, avec `segments`, le nombre de lignes encore valides ; `trop_vieille` au-delà de 30 jours ; `verrou_mort` ; `provisoire`), `effacable` (`--nettoyer` l'efface) et `purgeable` (la fenêtre peut le faire seule). Un état qui ne se lit pas pour l'instant (accès refusé) n'est pas listé. Le verrou laissé par une coupure va avec sa transcription reprenable : il n'est pas une orpheline (`reprendre` le reprend puis le retire). Rien n'est effacé sans `--nettoyer`, qui garde toujours une source injoignable (listée dans `orphelines` après le nettoyage). La fenêtre, à son ouverture, n'efface que ce que rien ne peut rendre utile, chacune notée au journal : jamais une source injoignable ni des segments valides (avant 30 jours) ; une source introuvable est datée au premier constat et effacée 7 jours plus tard. Seuls les fichiers de la 3.x sont regardés (voir Garanties).
 
 ### lire
 
@@ -242,6 +245,8 @@ Schéma `scribouille.cli/1`. Une enveloppe par réponse :
 | `fichier_fini` | `id`, `fichier`, `sorties`, `json`, `duree`, `facteur`, `locuteurs`, `corrections` |
 | `fichier_echec` | `id`, `fichier`, `annule`, `erreur`, `detail`, `reprise` |
 | `fichier_ignore` | `fichier`, `raison` (`deja_transcrit`), `sorties` |
+| `reprise_trouvee` | `fichier`, `cle`, `poursuivie` (vrai : même modèle, poursuivie ; faux : autre modèle, gardée), `position_s` ou `modele` |
+| `reprise_abandonnee` | `fichier`, `cles` (`--recommencer`) |
 | `fin` | `reussis`, `echecs`, `annules`, `ignores`, `code_retour`, `fichiers` (un résultat par fichier) |
 
 Résultat structuré : le compagnon `.json` (`format: scribouille-transcription`, version 1) ; `lire` en donne des pages :
