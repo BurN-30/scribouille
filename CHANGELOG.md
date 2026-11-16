@@ -319,6 +319,52 @@ Après le troisième essai sur le PC du travail (16/11)
   journal de migration ; la simulation du registre des vérifications refuse
   un autre nom du vrai dossier.
 
+Après le quatrième essai sur le PC du travail (16/11)
+
+- **Plafond du cache d'OpenVINO vraiment tenu** : sur le portable, le cache
+  restait à 6 Go malgré la purge. OpenVINO écrit ses modèles compilés en
+  lecture seule : leur effacement échouait, la purge comptait quand même
+  leur taille comme libérée et s'arrêtait en se croyant sous les 4 Go (le
+  journal annonçait 3,9 Go restants). L'attribut est désormais levé juste
+  avant d'effacer (`effacer cache_openvino` compris) ; un échec n'est plus
+  décompté, la purge passe au suivant, et le reste annoncé est celui du
+  dossier réel. Les échecs sont notés au journal en une ligne (nombre,
+  taille, cause) et dits par `diagnostic`, `espace` et l'écran « Espace
+  disque ».
+- **Jamais les compilés en service** : ceux d'avant le suivi du cache
+  n'étaient rattachés à aucun réglage, et les plus anciens, ceux du réglage
+  habituel, seraient partis les premiers. Chaque ouverture d'un modèle
+  rattache désormais à son réglage les compilés qu'elle relit (dernier accès
+  avancé pendant l'ouverture, fichier tenu ou projeté en mémoire), puis
+  borne le cache dans la foulée. Tant qu'un réglage chargé dans les 30
+  derniers jours n'est pas reconnu, rien d'antérieur ne part au plafond (au
+  plus 30 jours, et c'est dit) ; ensuite, le dernier accès le plus ancien
+  part d'abord. Sur un cache comme celui du portable (essai à l'échelle),
+  un chargement de chacun des deux modèles en service suffit pour repasser
+  sous 4 Go, sans recompilation.
+- **Fichiers d'état réécrits à l'identique** : `config-scribouille.json`,
+  `config.json`, l'index du cache d'OpenVINO, les mesures de durée, la
+  mémoire du dossier surveillé et le choix du dossier des modèles ne sont
+  plus réécrits (ni redatés) quand rien n'y change.
+- **`vocabulaire apprendre`** : horodatages et marques de voix (ceux de
+  Scribouille et les variantes courantes, entre crochets ou parenthèses,
+  collés à un mot) sont retirés des deux côtés avant de comparer ; ce que la
+  relue n'a pas en face dans le brut (en-tête, participants, sommaire, pied
+  de page) ne propose plus rien. Plus de « terme [hh:mm:ss », plus de noms
+  tirés de l'en-tête. Un compte rendu (`--cr`) reste lu en entier.
+- **Reprise sur OpenVINO identique au passage complet** : la parole d'après
+  la coupure était redécoupée en fenêtres depuis la jointure, et toutes les
+  fenêtres suivantes se décalaient (sur 11 min 49, 269 segments au lieu de
+  271 et 95,4 % de mots identiques ; reproduit sur processeur, 10 min : 218
+  au lieu de 220, 94,1 %). Ce sont maintenant celles du passage complet :
+  même texte au mot près quand la coupure tombe entre deux fenêtres (le cas
+  habituel, puisque les segments s'écrivent fenêtre par fenêtre) ; la seule
+  fenêtre à cheval sur la jointure est redécoupée sur sa partie d'après,
+  comme avant, sans segment perdu ni doublé. De même pour le rejeu après une
+  panne d'OpenVINO. Sur CTranslate2, rien ne change : ses passages complets
+  ne sont pas toujours reproductibles au mot près (repli de température par
+  tirage).
+
 Ce que change chaque choix
 
 - **Fiche « ce que ça change »** : un bouton ⓘ à côté de la qualité, du
