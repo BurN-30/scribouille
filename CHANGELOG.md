@@ -26,8 +26,8 @@ arrivé en 2.4.0 ; la 2.3.3 calcule sur le processeur seul.
 | Une heure, qualité maximale | | **18 min** environ (large-v3 sur la puce) |
 | Une heure, processeur seul | | **20 min** environ (turbo, CTranslate2), processeur occupé à 80 % |
 | Fidélité (trois réunions de 10 min à 1 h 30, texte relu par un humain) | | qualité maximale : 0,5 à 1,8 point au-dessus du réglage proposé, pour 3,2 à 3,5 fois le temps |
-| Vocabulaire de 14 termes | | termes bien écrits : **de 11 à 95 sur 154**, sans perte ailleurs ni temps en plus (réunions qui ont servi à choisir les termes) |
-| Fiabilité | | endurance 10 sur 10 ; coupure puis reprise : même texte qu'un passage complet ; plantage du pilote graphique simulé : fichier fini sur le processeur, fenêtre ouverte ; source débranchée : reprise gardée ; aucune alerte antivirus |
+| Vocabulaire de 14 termes | | termes bien écrits : **de 11 à 92 sur 154**, sans perte ailleurs ni temps en plus (réunions qui ont servi à choisir les termes) |
+| Fiabilité | | endurance 10 sur 10 ; coupure puis reprise : même texte qu'un passage complet, à trois mots près sur 2 260 quand la coupure tombe au milieu d'un bloc, rien de perdu ; plantage du pilote graphique simulé : fichier fini sur le processeur, fenêtre ouverte ; source débranchée : reprise gardée ; aucune alerte antivirus |
 | Fenêtre au repos | 612 Mo (poste de développement, où la 3.0.0 en prend 72) | **75 Mo**, interface prête en 1,8 à 3,1 s |
 | Programme installé | 349 Mo | **263 Mo** ; paquet portable : 258 Mo décompressé, 105,5 Mo à télécharger |
 | Modèle téléchargé | large-v3 CTranslate2 : 2 948 Mo | turbo OpenVINO : 790 Mo (large-v3 OpenVINO : 1 496 Mo) |
@@ -92,8 +92,7 @@ ailleurs (sur OpenVINO s'il est installé).
   utilisateurs, désinstallations silencieuse et avec effacement), pas encore
   sur un poste de travail.
 - Fenêtre vérifiée par contrôles automatiques et captures.
-- Mesures faites sur un seul modèle de portable ; le gain du vocabulaire date
-  d'avant la correction à l'oreille plus prudente, à remesurer.
+- Mesures faites sur un seul modèle de portable.
 
 ---
 
