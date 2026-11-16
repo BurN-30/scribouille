@@ -903,6 +903,446 @@ def essai_reprise_tolerante(base: Path) -> None:
         chemins.RACINE = racine
 
 
+def _simuler_2x(local: Path, valeur) -> None:
+    import json
+
+    os.environ["LOCALAPPDATA"] = str(local)
+    os.environ["SCRIBOUILLE_ESSAI_REGISTRE"] = valeur if isinstance(valeur, str) else json.dumps(valeur)
+
+
+def _environnement_garde():
+    return {k: os.environ.get(k) for k in ("LOCALAPPDATA", "SCRIBOUILLE_ESSAI_REGISTRE", "SCRIBOUILLE_DONNEES")}
+
+
+def _rendre_environnement(reels: dict) -> None:
+    for cle, valeur in reels.items():
+        if valeur is None:
+            os.environ.pop(cle, None)
+        else:
+            os.environ[cle] = valeur
+
+
+def essai_classement_2x(base: Path) -> None:
+    """16/11 (point 2, M7) : ce que seule une 2.4 écrit n'est plus tenu pour la 2.3.3, et reste protégé dans le doute."""
+    from app import cache_openvino, chemins, inventaire, migration
+
+    titre("Dossier partagé : ce que la 2.3.3 n'écrit pas n'est plus rangé parmi ses fichiers")
+    local = base / "classement-local"
+    donnees = local / "WhiScribe"
+    (donnees / "cache-openvino").mkdir(parents=True)
+    (donnees / "config.json").write_text("{}", encoding="utf-8")
+    (donnees / "calibration.json").write_text("{}", encoding="utf-8")
+    (donnees / "cache-openvino" / "1234567890123456789.blob").write_bytes(b"b" * 1000)
+    (donnees / "cache-openvino" / "1234567890123456780.cl_cache").write_bytes(b"c" * 10)
+    reels = _environnement_garde()
+    racine, imposees = chemins.RACINE, chemins.DONNEES_IMPOSEES
+    reglages = {"dossier_sortie": str(base / "sorties-classement")}
+    deux33 = {"ruche": "HKCU", "version": "2.3.3", "dossier": str(local / "Programs" / "WhiScribe")}
+    try:
+        chemins.RACINE, chemins.DONNEES_IMPOSEES = donnees, False
+        _simuler_2x(local, [deux33])
+        verifier(chemins.version_2x_sans_openvino() and not migration.etendu_2x(),
+                 "2.3.3 lue dans le registre : sûrement sans OpenVINO")
+        noms = {Path(c).name for c in inventaire.partages(reglages)}
+        postes = {p.cle: p for p in inventaire.postes(reglages)[0]}
+        verifier("config.json" in noms and "cache-openvino" not in noms and "calibration.json" not in noms,
+                 "2.3.3 : réglages toujours à la 2.x ; cache OpenVINO et mesures de durée à la 3.x seule", str(sorted(noms)))
+        verifier("cache_openvino" in postes and postes["cache_openvino"].liberable
+                 and postes["cache_openvino"].octets == 1010,
+                 "2.3.3 : le cache OpenVINO est un poste à nous, avec sa taille, libérable",
+                 str({k: (p.octets, p.liberable) for k, p in postes.items()}))
+        for cas, valeur in (("2.4.0 installée", [{**deux33, "version": "2.4.0"}]),
+                            ("registre illisible", "erreur"),
+                            ("version 2.3.10 inconnue", [{**deux33, "version": "2.3.10"}]),
+                            ("clé sans version", [{**deux33, "version": ""}])):
+            _simuler_2x(local, valeur)
+            noms = {Path(c).name for c in inventaire.partages(reglages)}
+            verifier(migration.etendu_2x() and {"cache-openvino", "calibration.json", "config.json"} <= noms,
+                     f"{cas} : cache OpenVINO et mesures tenus pour la 2.x aussi (dans le doute)", str(sorted(noms)))
+        _simuler_2x(local, [deux33])
+        (local / "Programs" / "WhiScribe").mkdir(parents=True)
+        (local / "Programs" / "WhiScribe" / "Scribouille.exe").write_bytes(b"MZ")
+        verifier(migration.etendu_2x(), "2.3.3 dans le registre mais Scribouille.exe à côté (une 2.4 ?) : dans le doute")
+        (local / "Programs" / "WhiScribe" / "Scribouille.exe").unlink()
+        # Dans le doute (2.4 possible), seules les entrées de notre index sont à nous.
+        _simuler_2x(local, [{**deux33, "version": "2.4.0"}])
+        verifier(cache_openvino.fichiers_a_nous() == [] and not cache_openvino.adoption_permise(),
+                 "2.4 possible : aucune entrée sans index n'est prise pour la nôtre")
+        index = cache_openvino._index_vide()
+        index["entrees"]["1234567890123456780.cl_cache"] = {"cle": "k", "octets": 10, "ecrit": 0}
+        cache_openvino._ecrire_index(index)
+        postes = {p.cle: p for p in inventaire.postes(reglages)[0]}
+        verifier([c.name for c in postes.get("cache_openvino", inventaire.Poste("x")).chemins]
+                 == ["1234567890123456780.cl_cache"],
+                 "2.4 possible : le poste « cache OpenVINO » ne tient que les entrées de notre index",
+                 str(postes.get("cache_openvino")))
+    finally:
+        chemins.RACINE, chemins.DONNEES_IMPOSEES = racine, imposees
+        _rendre_environnement(reels)
+
+
+def essai_cache_openvino(base: Path) -> None:
+    """16/11 (point 2) : le cache de compilation d'OpenVINO est indexé, borné, jamais touché pendant un calcul."""
+    import json
+    import time
+    import types
+
+    from app import cache_openvino, chemins, inventaire, moteur, moteur_openvino, presets
+
+    titre("Cache OpenVINO : index, délai, plafond, marque d'usage, jamais ce qui n'est pas à nous")
+    racine, imposees = chemins.RACINE, chemins.DONNEES_IMPOSEES
+    reels = _environnement_garde()
+    chemins.RACINE, chemins.DONNEES_IMPOSEES = base / "cache-ov", True
+    cache = chemins.RACINE / "cache-openvino"
+    cache.mkdir(parents=True)
+    sauves = (moteur.etat_modele, moteur.assurer_modele_telecharge, sys.modules.get("openvino_genai"))
+    vus_ov = (moteur_openvino._peripheriques_vus, moteur_openvino._version_vue, moteur_openvino._supposes)
+    modeles_ov = base / "modele-ov-factice"
+    modeles_ov.mkdir()
+    jour = 86400
+
+    class Pipeline:
+        """WhisperPipeline factice : « compile » en écrivant dans CACHE_DIR, comme OpenVINO."""
+
+        def __init__(self, dossier, peripherique, **proprietes):
+            empreinte = abs(hash((peripherique, json.dumps(proprietes, sort_keys=True)))) % 10 ** 18
+            (Path(proprietes["CACHE_DIR"]) / f"{10 ** 18 + empreinte}.blob").write_bytes(b"x" * 5000)
+
+    try:
+        os.environ["LOCALAPPDATA"] = str(base / "cache-ov-local")
+        os.environ["SCRIBOUILLE_ESSAI_REGISTRE"] = "[]"
+        moteur.etat_modele = lambda depot: {"etat": "complet", "snapshot": str(modeles_ov)}
+        moteur.assurer_modele_telecharge = lambda depot, etat, signaler=None: {"snapshot": str(modeles_ov)}
+        sys.modules["openvino_genai"] = types.SimpleNamespace(WhisperPipeline=Pipeline)
+        moteur_openvino.amorcer("2026.4.1", ["CPU", "GPU"])
+        depot = presets.depot_openvino(presets.MODELE_TURBO) or "OpenVINO/whisper-large-v3-turbo-int8-ov"
+        ov = moteur_openvino.MoteurOpenVINO(None, "CPU")
+        ov.proprietes = {"INFERENCE_NUM_THREADS": 4}
+        ov.charger(presets.MODELE_TURBO)
+        marques = list(cache.glob("scribouille-usage-*.marque"))
+        index = cache_openvino.lire_index()
+        verifier(len(index["entrees"]) == 1 and len(index["cles"]) == 1 and len(marques) == 1,
+                 "ouverture : le compilé écrit est rattaché à son réglage, marque d'usage posée", json.dumps(index)[:300])
+        (cache / "999999999999999999.cl_cache").write_bytes(b"k" * 50)   # noyau compilé pendant le calcul
+        ov.liberer()
+        index = cache_openvino.lire_index()
+        cle = next(iter(index["cles"]))
+        verifier(index["entrees"].get("999999999999999999.cl_cache", {}).get("cle") == cle
+                 and not list(cache.glob("scribouille-usage-*.marque"))
+                 and index["cles"][cle]["proprietes"] == {"INFERENCE_NUM_THREADS": "4"}
+                 and index["cles"][cle]["modele"] == depot,
+                 "libération : les noyaux écrits pendant le calcul vont avec ce réglage, marque levée",
+                 json.dumps(index)[:400])
+
+        # Un autre réglage (campagne), une entrée d'avant l'index, un fichier inconnu.
+        ov.proprietes = {"PERFORMANCE_HINT": "LATENCY"}
+        ov.charger(presets.MODELE_TURBO)
+        ov.liberer()
+        (cache / "555555555555555555.blob").write_bytes(b"a" * 3000)    # sans index : d'une version d'avant
+        (cache / "inconnu.bin").write_bytes(b"?")
+        maintenant = time.time()
+        bilan = cache_openvino.purger(maintenant=maintenant)
+        verifier(bilan["fait"] and not bilan["effacees"]
+                 and "555555555555555555.blob" in cache_openvino.lire_index()["anterieures"],
+                 "purge du jour : rien d'effacé, l'entrée sans index est datée à son premier constat", str(bilan))
+        # Le réglage de campagne n'a plus servi depuis 31 jours ; l'autre, si.
+        index = cache_openvino.lire_index()
+        campagne = next(c for c, f in index["cles"].items() if "PERFORMANCE_HINT" in f["proprietes"])
+        index["cles"][campagne]["dernier_usage"] = maintenant - 31 * jour
+        cle_service = next(c for c in index["cles"] if c != campagne)
+        index["cles"][cle_service]["dernier_usage"] = maintenant + 30 * jour
+        index["anterieures"]["555555555555555555.blob"]["vue"] = maintenant - 31 * jour
+        cache_openvino._ecrire_index(index)
+        vieux = maintenant - 2 * jour
+        for f in cache.iterdir():
+            os.utime(f, (vieux, vieux))
+        (cache / "777777777777777777.blob").write_bytes(b"r" * 10)    # écrite à l'instant, sans index
+        fichiers_campagne = [n for n, f in index["entrees"].items() if f["cle"] == campagne]
+        bilan = cache_openvino.purger(maintenant=maintenant)
+        effacees = {e["nom"] for e in bilan["effacees"]}
+        verifier(effacees == set(fichiers_campagne) | {"555555555555555555.blob"},
+                 f"purge : réglage inutilisé depuis {cache_openvino.DELAI_JOURS} jours et entrée d'avant vue il y a "
+                 "plus longtemps effacés", str(sorted(effacees)))
+        verifier((cache / "inconnu.bin").is_file() and (cache / "777777777777777777.blob").is_file()
+                 and (cache / "999999999999999999.cl_cache").is_file(),
+                 "purge : fichier inconnu, entrée toute récente et réglage en service jamais touchés")
+        # Plafond : au-delà, le moins utile part, jamais le réglage le plus récent.
+        for k in range(3):
+            (cache / f"88888888888888888{k}.blob").write_bytes(b"p" * 4000)
+            os.utime(cache / f"88888888888888888{k}.blob", (vieux - k, vieux - k))
+        cache_openvino.purger(maintenant=maintenant)   # premier constat
+        bilan = cache_openvino.purger(maintenant=maintenant, plafond=9000)
+        restants = {f.name for f in cache.iterdir()}
+        service = {n for n, f in cache_openvino.lire_index()["entrees"].items() if f["cle"] == cle_service}
+        verifier(bilan["reconnues_octets"] <= 9000 and service <= restants and "inconnu.bin" in restants
+                 and all(e["raison"] == "plafond" for e in bilan["effacees"]) and bilan["effacees"],
+                 "plafond : les plus anciennes partent d'abord, le réglage en service reste", str(bilan)[:300])
+
+        # Jamais pendant un calcul : marque d'usage d'un autre processus vivant.
+        enfant = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], creationflags=SANS_FENETRE)
+        try:
+            from app import instance
+
+            createur = instance._creation(enfant.pid)
+            (cache / f"scribouille-usage-{enfant.pid}.marque").write_text(f"{enfant.pid} {createur:.3f}",
+                                                                          encoding="ascii")
+            avant = sorted(f.name for f in cache.iterdir())
+            bilan = cache_openvino.purger(maintenant=maintenant + 400 * jour)
+            libere = inventaire.liberer(["cache_openvino"], {"dossier_sortie": str(base / "sorties-cache")})
+            verifier(bilan["raison"] == "calcul_en_cours" and sorted(f.name for f in cache.iterdir()) == avant
+                     and libere["octets"] == 0 and libere["restes"],
+                     "un autre processus calcule avec ce cache : ni purge, ni libération", str(bilan) + str(libere))
+        finally:
+            enfant.kill()
+            enfant.wait(10)
+        bilan = cache_openvino.purger(maintenant=maintenant + 400 * jour)
+        verifier(bilan["fait"] and not list(cache.glob("scribouille-usage-*.marque")),
+                 "processus mort : sa marque est retirée, la purge reprend", str(bilan)[:200])
+        verifier((cache / "inconnu.bin").is_file(), "même après un an : le fichier inconnu est toujours là")
+
+        # Dossier partagé avec une 2.x qui peut être une 2.4 : les entrées sans index restent.
+        local = base / "cache-ov-partage"
+        donnees = local / "WhiScribe"
+        (donnees / "cache-openvino").mkdir(parents=True)
+        chemins.RACINE = donnees
+        os.environ["LOCALAPPDATA"] = str(local)
+        os.environ["SCRIBOUILLE_ESSAI_REGISTRE"] = json.dumps([{"ruche": "HKCU", "version": "2.4.0", "dossier": ""}])
+        (donnees / "cache-openvino" / "444444444444444444.blob").write_bytes(b"z" * 100)
+        cache_openvino.purger(maintenant=maintenant)
+        bilan = cache_openvino.purger(maintenant=maintenant + 400 * jour, plafond=0)
+        verifier((donnees / "cache-openvino" / "444444444444444444.blob").is_file() and not bilan["effacees"],
+                 "2.4 possible sur le dossier partagé : une entrée sans index n'est jamais effacée")
+        # Commande de lecture : rien d'écrit, rien d'effacé.
+        chemins.LECTURE_SEULE = True
+        try:
+            bilan = cache_openvino.purger(maintenant=maintenant + 400 * jour)
+            resume = cache_openvino.resume()
+        finally:
+            chemins.LECTURE_SEULE = False
+        verifier(bilan["raison"] == "lecture_seule" and resume["octets"] == 100 and resume["reconnues"] == 0
+                 and resume["non_reconnues_octets"] == 100,
+                 "lecture seule : purge refusée ; le résumé dit la taille et ce qui n'est pas reconnu", str(resume))
+    finally:
+        moteur.etat_modele, moteur.assurer_modele_telecharge = sauves[0], sauves[1]
+        if sauves[2] is None:
+            sys.modules.pop("openvino_genai", None)
+        else:
+            sys.modules["openvino_genai"] = sauves[2]
+        moteur_openvino._peripheriques_vus, moteur_openvino._version_vue, moteur_openvino._supposes = vus_ov
+        chemins.RACINE, chemins.DONNEES_IMPOSEES = racine, imposees
+        _rendre_environnement(reels)
+
+
+def essai_reprise_reconstruite(base: Path) -> None:
+    """16/11 (point 3) : un état vidé par une coupure ne fait plus perdre la reprise."""
+    import json
+
+    from app import chemins, reprise
+    from app.moteur import Segment
+
+    titre("Reprise : état perdu par une coupure, reconstruit avec la demande de départ")
+    racine = chemins.RACINE
+    chemins.RACINE = base / "reprises-reconstruites"
+    try:
+        source = base / "reunion-coupee.ogg"
+        source.write_bytes(b"audio")
+        rep = chemins.RACINE / "reprises"
+        resultats = {}
+        for cas, abimer in (("état vidé (0 octet)", lambda f: f.write_bytes(b"")),
+                            ("état rempli de zéros", lambda f: f.write_bytes(b"\x00" * 300)),
+                            ("état disparu", lambda f: f.unlink())):
+            s = reprise.Session("coupure0000001", active=True)
+            s.ouvrir(source, "tiny", 60.0, sortie=str(base / "sorties-coupure"),
+                     demande={"formats": {"txt": True, "srt": True}, "langue": "fr"}, nouvelle=True)
+            s.ajouter(Segment(debut=0.0, fin=4.0, texte="Un.", mots=[]), 1.0)
+            s.ajouter(Segment(debut=4.0, fin=9.5, texte="Deux.", mots=[]), 2.0)
+            s.fermer()
+            abimer(rep / "coupure0000001.etat")
+            trouvees = {r["cle"]: r for r in reprise.lister()}
+            etat = reprise.lire_etat("coupure0000001") or {}
+            orphelines = [o for o in reprise.orphelines() if o.get("cle") == "coupure0000001"]
+            resultats[cas] = (trouvees.get("coupure0000001", {}).get("nb_segments"),
+                              trouvees.get("coupure0000001", {}).get("position"),
+                              etat.get("demande", {}).get("formats", {}).get("srt"), etat.get("sortie"), orphelines)
+            verifier(resultats[cas][:3] == (2, 9.5, True) and resultats[cas][3] and not orphelines,
+                     f"{cas} : la reprise est toujours proposée, au segment près, avec toute sa demande",
+                     str(resultats[cas]))
+            reprise.oublier("coupure0000001")
+        verifier(not list(rep.glob("coupure0000001*")), "fin ou abandon : la demande de départ part avec le reste",
+                 str(sorted(f.name for f in rep.glob("coupure0000001*"))))
+        # Écrite durablement : à côté, vidée sur le disque, puis renommée.
+        appels = []
+        fsync_reel = os.fsync
+        os.fsync = lambda d: (appels.append(d), fsync_reel(d))[1]
+        try:
+            s = reprise.Session("coupure0000002", active=True)
+            s.ouvrir(source, "tiny", 60.0, nouvelle=True)
+            s.fermer()
+        finally:
+            os.fsync = fsync_reel
+        verifier(appels and (rep / "coupure0000002.depart").is_file() and not list(rep.glob("*.tmp")),
+                 "demande de départ vidée sur le disque (fsync) avant d'être renommée")
+        reprise.oublier("coupure0000002")
+        # Une reprise d'avant (sans demande de départ) dont l'état est perdu : signalée, rien d'effacé d'office.
+        (rep / "ancienne000001.etat").write_bytes(b"")
+        (rep / "ancienne000001.jsonl").write_text(json.dumps({"d": 0, "f": 1, "t": "Texte", "m": []}) + "\n",
+                                                  encoding="utf-8")
+        trouvee = next((o for o in reprise.orphelines() if o.get("cle") == "ancienne000001"), {})
+        verifier(trouvee.get("raison") == "etat_illisible" and trouvee.get("segments") == 1
+                 and trouvee.get("segments_fichier", "").endswith("ancienne000001.jsonl") and not trouvee.get("purgeable"),
+                 "sans demande de départ : segments signalés avec leur fichier, gardés par la purge", str(trouvee))
+        reprise.purger()
+        verifier((rep / "ancienne000001.jsonl").is_file(), "purge : les segments gardés restent")
+    finally:
+        chemins.RACINE = racine
+
+
+def essai_migration_provisoire(base: Path) -> None:
+    """Revue du 15/11 (M8) : le journal de migration s'écrit sous un nom provisoire propre à chaque écriture."""
+    from app import inventaire, migration
+
+    titre("Migration : nom provisoire unique pour son journal")
+    dossier = base / "migration-provisoire"
+    dossier.mkdir()
+    vus = []
+    remplacer = os.replace
+
+    def noter(source, cible):
+        vus.append(Path(source).name)
+        return remplacer(source, cible)
+
+    os.replace = noter
+    try:
+        migration._ecrire_journal(dossier, {"etat": "en_cours"})
+        migration._ecrire_journal(dossier, {"etat": "terminee"})
+    finally:
+        os.replace = remplacer
+    verifier(len(set(vus)) == 2 and all(str(os.getpid()) in n and n.endswith(".tmp") for n in vus)
+             and (dossier / migration.NOM_JOURNAL).is_file() and not list(dossier.glob("*.tmp")),
+             "deux écritures, deux noms provisoires (PID et hasard), rien de laissé", str(vus))
+    verifier(inventaire._groupe_de(vus[0], False) == "reglages",
+             "un provisoire laissé par une coupure est reconnu par l'inventaire")
+
+
+def essai_relecture_8b5eae8(base: Path) -> None:
+    """16/11 (point 6) : régressions et cas limites relevés à la relecture des correctifs du 15/11."""
+    import json
+    import types
+
+    from app import chemins, cli, reprise, sorties, superviseur, traitement
+    from app.moteur import Segment
+
+    titre("Relecture des correctifs du 15/11 : reprises d'un autre modèle, états en retard, noms provisoires")
+    racine = chemins.RACINE
+    chemins.RACINE = base / "relecture-15-11"
+    reels = _environnement_garde()
+    try:
+        source = base / "relecture.ogg"
+        source.write_bytes(b"audio")
+        rep = chemins.RACINE / "reprises"
+
+        def reprise_de(modele: str, segments: int = 1) -> str:
+            cle = reprise.cle(source, modele)
+            s = reprise.Session(cle, active=True)
+            s.ouvrir(source, modele, 60.0, nouvelle=True)
+            for k in range(segments):
+                s.ajouter(Segment(debut=float(k), fin=k + 1.0, texte=f"S{k}", mots=[]), 1.0)
+            s.fermer()
+            return cle
+
+        muet = types.SimpleNamespace(evenement=lambda *a, **k: None, dire=lambda *a, **k: None,
+                                     journal_ui=lambda *a, **k: None)
+        # --recommencer : jamais la reprise d'un autre modèle, jamais avant le verrou.
+        autre = reprise_de("modele-b")
+        trouvee = {"cle": autre, "modele_demande": "modele-b", "modele": "modele-b"}
+        element = traitement.Element(identifiant="c1", chemin=str(source), nom=source.name, taille=5)
+        cli._reprise_de_transcrire(muet, element, source, "modele-a", trouvee, True)
+        meme = reprise_de("modele-a")
+        element2 = traitement.Element(identifiant="c2", chemin=str(source), nom=source.name, taille=5)
+        cli._reprise_de_transcrire(muet, element2, source, "modele-a", None, True)
+        verifier(reprise.a_garder(autre) and reprise.a_garder(meme) and element.recommencer and element2.recommencer,
+                 "--recommencer : la reprise d'un autre modèle reste ; la sienne n'est remplacée qu'au départ")
+        # File sur le modèle A, reprise rattachée faite avec B : pas poursuivie avec A.
+        element3 = traitement.Element(identifiant="c3", chemin=str(source), nom=source.name, taille=5, reprise=autre)
+        fausse = types.SimpleNamespace()
+        traitement.FileTraitement._rattacher(fausse, element3, {"sauvegarde_progressive": True},
+                                             {"reglages": {"modele": "modele-a"}}, muet)
+        verifier(element3.reprise == meme and reprise.a_garder(autre),
+                 "reprise d'un autre modèle rattachée : laissée telle quelle, celle du modèle de la file poursuivie",
+                 element3.reprise)
+        reprise.oublier(meme)
+        # Plantages répétés, état en retard sur ses segments : rien d'effacé.
+        retard = reprise_de("modele-c", segments=2)
+        etat = json.loads((rep / f"{retard}.etat").read_text(encoding="utf-8"))
+        etat.update({"position": 0.0, "nb_segments": 0})
+        (rep / f"{retard}.etat").write_text(json.dumps(etat), encoding="utf-8")
+        element4 = traitement.Element(identifiant="c4", chemin=str(source), nom=source.name, taille=5)
+        rappels = types.SimpleNamespace(etat=lambda *a, **k: None, journal_ui=lambda *a, **k: None,
+                                        termine=lambda *a, **k: None)
+        superviseur.Superviseur._echec_definitif(None, element4, rappels, retard, "essai")
+        verifier((rep / f"{retard}.jsonl").is_file() and element4.reprise == retard,
+                 "deux plantages, état en retard sur 2 segments valides : reprise gardée et proposée",
+                 str(sorted(f.name for f in rep.glob(f"{retard}*"))))
+        # Nom provisoire des sorties : court, quel que soit le nom final.
+        vus = []
+        remplacer = os.replace
+        os.replace = lambda a, b: (vus.append(Path(a).name), remplacer(a, b))[1]
+        try:
+            (base / "sorties-longues").mkdir()
+            sorties.ecrire_sur_disque(base / "sorties-longues" / ("x" * 150 + ".txt"), "texte")
+        finally:
+            os.replace = remplacer
+        verifier(vus and len(vus[0]) <= 24, "sortie au nom long : nom provisoire court (limite des 260 caractères)",
+                 str(vus))
+        # Le dossier à notre nom qui a déjà des données sans réglages : il sert.
+        nouveau = base / "en-service" / "Scribouille"
+        (nouveau / "reprises").mkdir(parents=True)
+        verifier(chemins._nouveau_deja_en_service(nouveau),
+                 "Scribouille avec nos données mais sans config.json : tenu pour en service")
+        # Dossier partagé : nos états .json d'avant le 15/11 mis à l'abri de la purge de la 2.x.
+        local = base / "abri-local"
+        donnees = local / "WhiScribe"
+        (donnees / "reprises").mkdir(parents=True)
+        chemins.RACINE = donnees
+        os.environ["LOCALAPPDATA"] = str(local)
+        os.environ["SCRIBOUILLE_ESSAI_REGISTRE"] = json.dumps([{"ruche": "HKCU", "version": "2.3.3",
+                                                                 "dossier": str(local / "P" / "WhiScribe")}])
+        (donnees / "reprises" / "1111111111111111.json").write_text(json.dumps(
+            {"auteur": reprise.AUTEUR, "source": str(source), "modele": "tiny", "nb_segments": 1}), encoding="utf-8")
+        (donnees / "reprises" / "2222222222222222.json").write_text(json.dumps(
+            {"source": str(source), "modele": "tiny", "nb_segments": 1}), encoding="utf-8")
+        faits = reprise._abriter_anciens_etats()
+        verifier(faits == 1 and (donnees / "reprises" / "1111111111111111.etat").is_file()
+                 and (donnees / "reprises" / "2222222222222222.json").is_file(),
+                 "dossier partagé : nos états .json renommés en .etat, ceux de la 2.x jamais touchés")
+        # Simulation du registre : jamais sur un autre nom du « vrai » LOCALAPPDATA
+        # (ici un dossier d'essai tenu pour le vrai ; le vrai n'est jamais visé).
+        faux_reel = base / "faux-reel-local"
+        faux_reel.mkdir()
+        alias = base / "alias-local"
+        lire_reel = chemins._localappdata_reel
+        try:
+            chemins._localappdata_reel = lambda: str(faux_reel)
+            if sys.platform == "win32":
+                subprocess.run(["cmd", "/c", "mklink", "/J", str(alias), str(faux_reel)], capture_output=True,
+                               creationflags=SANS_FENETRE)
+            if alias.is_dir():
+                os.environ["LOCALAPPDATA"] = str(alias)
+                permis = chemins._essai_registre_permis()
+                os.environ["LOCALAPPDATA"] = str(local)
+                verifier(not permis and chemins._essai_registre_permis(),
+                         "LOCALAPPDATA par une jonction vers le vrai : simulation du registre refusée")
+            else:
+                print("  (jonction impossible ici : contrôle de l'alias sauté)")
+        finally:
+            chemins._localappdata_reel = lire_reel
+            if alias.is_dir():
+                os.rmdir(alias)   # la jonction seule
+    finally:
+        chemins.RACINE = racine
+        _rendre_environnement(reels)
+
+
 def essai_verrou_et_ecritures(base: Path) -> None:
     """Revue du 15/11 (S7 à S9, M1 à M3, M5, M6) : verrou, sorties, réglages, petits fichiers."""
     import json
@@ -968,7 +1408,8 @@ def essai_verrou_et_ecritures(base: Path) -> None:
         finally:
             os.fsync = vrai_fsync
         verifier(len(produits) == 3 and len(vides) >= 4
-                 and not list((chemins.RACINE / "sorties").glob("*scribouille-tmp")),
+                 and not list((chemins.RACINE / "sorties").glob("*scribouille-tmp"))
+                 and not list((chemins.RACINE / "sorties").glob("~scb*.tmp")),
                  "sorties (texte, compagnon, sous-titres) vidées sur le disque puis renommées",
                  f"{len(produits)} sorties, {len(vides)} fsync")
         traitement_source = (RACINE / "app" / "traitement.py").read_text(encoding="utf-8")
@@ -1133,7 +1574,9 @@ def principal() -> int:
         essai_repetitions()
         essai_migration(base)
         essai_instances(base)
-        for essai in (essai_version_2x, essai_reprise_tolerante, essai_verrou_et_ecritures):
+        for essai in (essai_version_2x, essai_reprise_tolerante, essai_verrou_et_ecritures, essai_classement_2x,
+                      essai_cache_openvino, essai_reprise_reconstruite, essai_migration_provisoire,
+                      essai_relecture_8b5eae8):
             # Une section qui lève est un échec, et les suivantes passent quand même.
             try:
                 essai(base)

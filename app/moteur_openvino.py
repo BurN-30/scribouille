@@ -359,6 +359,9 @@ class MoteurOpenVINO:
         #: de la puce graphique, fils du processeur : voir `app/rythme.py`).
         #: Refusées par le pilote, elles sont abandonnées et le journal le dit.
         self.proprietes: dict = {}
+        #: (clé, description, instantané d'avant l'ouverture) du réglage
+        #: ouvert : ce qu'il écrit dans le cache lui est rattaché.
+        self._suivi_cache: tuple[str, dict, dict] | None = None
 
     @property
     def peripherique(self) -> str:
@@ -401,11 +404,17 @@ class MoteurOpenVINO:
                 peripherique=nom_peripherique(self.peripherique_ov)))
         journal.info("Chargement OpenVINO %s sur %s (%s)", depot, self.peripherique_ov, dossier)
         base = {"CACHE_DIR": str(cache)}
-        from . import temoin_puce
+        from . import cache_openvino, temoin_puce
 
         sur_puce = self.temoin and self.peripherique_ov != "CPU"
         marque = temoin_puce.poser_chargement(self.peripherique_ov) if sur_puce else None
         essais = [{**base, **self.proprietes}, base] if self.proprietes else [base]
+        # Ce que l'ouverture (puis le calcul) écrit dans le cache est rattaché
+        # à ce réglage, pour que la purge sache ce qui sert encore
+        # (`app/cache_openvino.py`) ; la marque d'usage la tient à l'écart.
+        cache_openvino.poser_usage()
+        avant = cache_openvino.instantane()
+        appliquees = {}
         try:
             # Point d'essai (SCRIBOUILLE_ESSAI_PUCE) : échec simulé de la puce,
             # sans effet en usage normal.
@@ -413,6 +422,7 @@ class MoteurOpenVINO:
             for rang, proprietes in enumerate(essais):
                 try:
                     self._ouvrir(ov_genai, str(dossier), proprietes)
+                    appliquees = proprietes
                     if self.proprietes:
                         journal.info("OpenVINO : propriétés du rythme %s",
                                      "appliquées" if rang == 0 else "refusées, ouverture sans elles")
@@ -422,8 +432,23 @@ class MoteurOpenVINO:
                         raise
                     journal.attention("OpenVINO refuse les propriétés du rythme (%s) : %s",
                                       ", ".join(sorted(self.proprietes)), exc)
+        except BaseException:
+            # Ouverture en échec : ce qu'elle a pu écrire est quand même noté
+            # (écrit par la 3.x), puis la marque d'usage est levée.
+            try:
+                cle, infos = cache_openvino.cle_reglage(depot, self.peripherique_ov, self.proprietes, version(),
+                                                        "", self._mots)
+                cache_openvino.noter_usage(cle, infos, avant)
+            except Exception:
+                pass
+            cache_openvino.lever_usage()
+            raise
         finally:
             temoin_puce.lever_chargement(marque)
+        self._suivi_cache = (*cache_openvino.cle_reglage(
+            depot, self.peripherique_ov, appliquees, version(),
+            temoin_puce._pilote_graphique() if self.peripherique_ov != "CPU" else "", self._mots), avant)
+        self._noter_cache()
         try:
             from tokenizers import Tokenizer
 
@@ -452,6 +477,16 @@ class MoteurOpenVINO:
             self._autre.liberer()
             self._autre = None
 
+    def _noter_cache(self) -> None:
+        if self._suivi_cache is None:
+            return
+        from . import cache_openvino
+
+        try:
+            cache_openvino.noter_usage(*self._suivi_cache)
+        except Exception as exc:  # un cache : jamais bloquant
+            journal.debug("Usage du cache OpenVINO non noté : %s", exc)
+
     def liberer(self) -> None:
         self._liberer_autre()
         if self._pipeline is None:
@@ -461,6 +496,13 @@ class MoteurOpenVINO:
         self._tokeniseur = None
         self._nom_modele = ""
         gc.collect()
+        # Les noyaux compilés pendant le calcul (formes nouvelles du décodeur)
+        # vont avec ce réglage ; puis le cache n'est plus en usage ici.
+        self._noter_cache()
+        self._suivi_cache = None
+        from . import cache_openvino
+
+        cache_openvino.lever_usage()
 
     def _config(self, langue: str | None, faisceau: int, amorce: str, temperature: float = 0.0):
         config = self._pipeline.get_generation_config()

@@ -890,9 +890,12 @@ def _renommer(produits: list[str], noms: dict[str, str]) -> list[str]:
 def _executer_file(sortie: Sortie, elements: list, config: dict, telecharger: bool,
                    noms: dict[str, str] | None = None) -> dict:
     """Une file de fichiers dans le processus moteur, avec progression et Ctrl+C."""
-    from . import presets, superviseur, traitement
+    from . import cache_openvino, presets, superviseur, traitement
     from .materiel import detecter_au_demarrage
 
+    # Cache de compilation d'OpenVINO borné avant le calcul, comme à
+    # l'ouverture de la fenêtre (rien si un autre calcul s'en sert).
+    cache_openvino.purger()
     mat, _ = detecter_au_demarrage()
     distant = superviseur.Superviseur(telecharger=telecharger)
     file = traitement.FileTraitement(mat, distant=distant)
@@ -1114,14 +1117,17 @@ def _reprise_de_transcrire(sortie: Sortie, element, source: Path, modele: str, t
     meme = reprise_module.cle(source, modele)
     garder_meme = reprise_module.a_garder(meme)
     if recommencer:
-        abandonnees = [c for c in {meme if garder_meme else "", (trouvee or {}).get("cle", "")} if c]
-        for c in abandonnees:
-            reprise_module.oublier(c)
+        # Rien n'est effacé ici : la sauvegarde de ce fichier avec ce modèle
+        # est remplacée au départ de la transcription, sous le verrou du
+        # fichier (si un autre processus le transcrit, rien n'est touché). Une
+        # reprise d'un autre modèle, ou d'un état antérieur du fichier, reste.
         element.recommencer = True
-        if abandonnees:
-            sortie.evenement("reprise_abandonnee", fichier=str(source), cles=sorted(abandonnees))
+        if garder_meme:
+            sortie.evenement("reprise_abandonnee", fichier=str(source), cles=[meme])
             sortie.dire(f"{source.name} : transcription interrompue abandonnée (--recommencer), départ du début.",
                         erreur=True)
+        if trouvee and trouvee.get("cle") != meme:
+            sortie.dire(_phrase_autre_reprise(source, modele, trouvee), erreur=True)
         return
     if garder_meme:
         etat = reprise_module.lire_etat(meme) or {}
@@ -1135,9 +1141,17 @@ def _reprise_de_transcrire(sortie: Sortie, element, source: Path, modele: str, t
     if trouvee:
         sortie.evenement("reprise_trouvee", fichier=str(source), cle=trouvee["cle"], poursuivie=False,
                          modele=trouvee.get("modele_demande") or trouvee.get("modele"))
-        sortie.dire(f"{source.name} : une transcription interrompue avec un autre modèle "
-                    f"({trouvee.get('modele_demande') or trouvee.get('modele')}) est gardée telle quelle "
-                    f"(« scribouille reprendre {trouvee['cle']} » la poursuit) ; celle-ci part du début.", erreur=True)
+        sortie.dire(_phrase_autre_reprise(source, modele, trouvee) + " ; celle-ci part du début.", erreur=True)
+
+
+def _phrase_autre_reprise(source: Path, modele: str, trouvee: dict) -> str:
+    """Une reprise de ce chemin sous une autre clé : autre modèle, ou fichier changé depuis (taille, date)."""
+    autre = trouvee.get("modele_demande") or trouvee.get("modele") or "?"
+    if autre == modele:
+        return (f"{source.name} : une transcription interrompue d'une version antérieure de ce fichier "
+                f"(taille ou date différentes) est gardée telle quelle (scribouille etat)")
+    return (f"{source.name} : une transcription interrompue avec un autre modèle ({autre}) est gardée telle quelle "
+            f"(« scribouille reprendre {trouvee['cle']} » la poursuit)")
 
 
 def cmd_transcrire(options, sortie: Sortie) -> int:
@@ -1200,14 +1214,50 @@ def cmd_transcrire(options, sortie: Sortie) -> int:
     return code
 
 
+def _refus_sans_source(cible: str = "") -> None:
+    """
+    Rien à reprendre, mais des transcriptions interrompues gardées faute de
+    source (lecteur qui ne répond pas, fichier déplacé) : le dire, avec où la
+    source était attendue et quoi faire, au lieu d'un « rien à reprendre ».
+    """
+    from . import reprise
+
+    def vise(o: dict) -> bool:
+        if not cible:
+            return True
+        if o.get("cle") == cible:
+            return True
+        try:
+            return str(Path(str(o.get("source") or "")).resolve()).lower() == \
+                str(Path(cible).expanduser().resolve()).lower()
+        except OSError:
+            return False
+
+    gardees = [o for o in reprise.orphelines() if o.get("raison") in ("source_injoignable", "source_absente")
+               and o.get("cle") and vise(o)]
+    if not gardees:
+        return
+    details = []
+    for o in gardees:
+        source = str(o.get("source") or "")
+        if o["raison"] == "source_injoignable":
+            details.append(langues.t("cli.reprendre.gardee.injoignable", nom=_nom_orpheline(o),
+                                     dossier=str(Path(source).parent), reprise=o["cle"]))
+        else:
+            details.append(langues.t("cli.reprendre.gardee.absente", nom=_nom_orpheline(o), source=source, reprise=o["cle"]))
+    raise Echec("source_introuvable", langues.tn("cli.reprendre.gardees", len(gardees)), ARGUMENTS,
+                "\n  ".join(details))
+
+
 def cmd_reprendre(options, sortie: Sortie) -> int:
     from . import instance, presets, reprise, traitement
     from .materiel import detecter_au_demarrage
 
     reprises = reprise.lister()
-    if not reprises:
-        raise Echec("rien_a_reprendre", "aucune transcription interrompue", ARGUMENTS)
     cible = options.cible
+    if not reprises:
+        _refus_sans_source(cible)
+        raise Echec("rien_a_reprendre", "aucune transcription interrompue", ARGUMENTS)
     choisie = None
     if not cible:
         # Sans clé : la plus récente que personne ne transcrit en ce moment.
@@ -1221,6 +1271,7 @@ def cmd_reprendre(options, sortie: Sortie) -> int:
             if r["cle"] == cible or str(Path(r["chemin"]).resolve()).lower() == str(Path(cible).expanduser().resolve()).lower():
                 choisie = r
         if choisie is None:
+            _refus_sans_source(cible)
             raise Echec("introuvable", f"aucune reprise pour « {cible} » (scribouille etat)", ARGUMENTS)
     mat, _ = detecter_au_demarrage()
     etat = reprise.lire_etat(choisie["cle"]) or {}
@@ -1336,26 +1387,55 @@ def cmd_etat(options, sortie: Sortie) -> int:
               f"{t['pct']} % ({presets.formater_duree(t['position'])} sur {presets.formater_duree(t['duree_audio'])})")
         lignes.append(f"  {t['nom']} : {ou}, {t['etat']}, modèle {t['modele'] or '?'}"
                       + (f" ({t['calcul']})" if t.get("calcul") else "") + f", clé {t['cle']}")
+    # Ce qui sera effacé sur demande, et ce qui est gardé même alors (source
+    # sur un lecteur qui ne répond pas : peut-être passager), dit à part.
+    gardees = [o for o in orphelines if not o.get("effacable", True)]
     if options.nettoyer:
-        lignes.append(f"Sauvegardes orphelines effacées : {len(nettoyees)}")
+        lignes.append(langues.t("cli.etat.nettoyees", n=len(nettoyees)))
+        for o in nettoyees:
+            lignes.append(f"  {_nom_orpheline(o)} : {_raison_orpheline(o)}"
+                          + (langues.t("cli.etat.non_efface", fichiers=", ".join(o["restes"])) if o.get("restes") else ""))
     elif orphelines:
-        lignes.append(f"Sauvegardes orphelines : {len(orphelines)} (scribouille etat --nettoyer les efface)")
-    for o in (nettoyees if options.nettoyer else orphelines):
-        lignes.append(f"  {o['nom'] or o['cle'] or Path(o['fichiers'][0]).name} : "
-                      f"{RAISONS_ORPHELINE.get(o['raison'], o['raison'])}"
-                      + (f", non effacé : {', '.join(o['restes'])}" if o.get("restes") else ""))
-    # Gardées même sur demande : la source est sur un lecteur qui ne répond
-    # pas (peut-être passager), jamais effacée sur ce seul constat.
-    gardees = [o for o in orphelines if not o.get("effacable", True)] if options.nettoyer else []
+        lignes.append(langues.t("cli.etat.orphelines", n=len(orphelines), effacables=len(orphelines) - len(gardees),
+                                gardees=len(gardees)))
+        for o in orphelines:
+            if o.get("effacable", True):
+                lignes.append(f"  {_nom_orpheline(o)} : {_raison_orpheline(o)} ({langues.t('cli.etat.a_effacer')})"
+                              + _conseil_orpheline(o))
     for o in gardees:
-        lignes.append(f"  gardée : {o['nom'] or o['cle']} : {RAISONS_ORPHELINE.get(o['raison'], o['raison'])}")
+        lignes.append(f"  {_nom_orpheline(o)} : {_raison_orpheline(o)}, {_conseil_orpheline(o).strip(' ;')}")
     from . import temoin_puce
 
     puce = temoin_puce.etat()
     lignes.append(f"Puce graphique : {temoin_puce.resume(puce)}")
     sortie.donnees({"moteurs": moteurs, "taches": taches, "orphelines": gardees if options.nettoyer else orphelines,
-                    "nettoyees": nettoyees, "puce": puce}, "\n".join(lignes))
+                    "gardees": gardees, "nettoyees": nettoyees, "puce": puce}, "\n".join(lignes))
     return OK
+
+
+def _nom_orpheline(o: dict) -> str:
+    return o.get("nom") or o.get("cle") or Path(o["fichiers"][0]).name
+
+
+def _raison_orpheline(o: dict) -> str:
+    return langues.t(f"cli.etat.raison.{o['raison']}") if o.get("raison") in RAISONS_ORPHELINE else str(o.get("raison"))
+
+
+def _conseil_orpheline(o: dict) -> str:
+    """Quoi faire d'une sauvegarde orpheline qui garde du travail : où était la source, où est le texte."""
+    from . import reprise
+
+    raison = o.get("raison")
+    if raison == "source_injoignable":
+        return " ; " + langues.t("cli.etat.gardee.injoignable", segments=int(o.get("segments") or 0),
+                                 dossier=str(Path(str(o.get("source") or "")).parent), reprise=o.get("cle", ""))
+    if raison == "source_absente":
+        return " ; " + langues.t("cli.etat.gardee.absente", source=str(o.get("source") or ""), reprise=o.get("cle", ""),
+                                 jours=reprise.DELAI_ABSENCE_JOURS)
+    if raison in ("etat_illisible", "segments_sans_etat") and int(o.get("segments") or 0) > 0:
+        fichier = o.get("segments_fichier") or next((f for f in o.get("fichiers", []) if f.endswith(".jsonl")), "")
+        return " ; " + langues.t("cli.etat.segments_gardes", segments=int(o["segments"]), fichier=fichier)
+    return ""
 
 
 def cmd_exporter(options, sortie: Sortie) -> int:
@@ -1594,6 +1674,16 @@ def cmd_reglages(options, sortie: Sortie) -> int:
 # diagnostic, verifier, materiel
 # ---------------------------------------------------------------------------
 
+def _ligne_cache(cache: dict) -> str:
+    """Le cache de compilation d'OpenVINO en une ligne : taille, entrées, ce qui est à nous, bornes."""
+    texte = langues.t("cli.cache_openvino", taille=langues.octets(cache["octets"]), nombre=cache["nombre"],
+                      compiles=cache["compiles"], jours=cache["delai_jours"],
+                      plafond=langues.octets(cache["plafond_octets"]))
+    if cache["non_reconnues_octets"]:
+        texte += langues.t("cli.cache_openvino.non_reconnues", taille=langues.octets(cache["non_reconnues_octets"]))
+    return "  " + texte
+
+
 def cmd_diagnostic(options, sortie: Sortie) -> int:
     import importlib.util
 
@@ -1630,6 +1720,9 @@ def cmd_diagnostic(options, sortie: Sortie) -> int:
         avertissements.append("séparation des voix cochée dans les réglages mais non installée : texte sans voix "
                               "(installer l'extension, ou « scribouille reglages definir diarisation=false »)")
     partage = chemins.donnees_partagees_ancienne_version()
+    from . import cache_openvino
+
+    cache = cache_openvino.resume()
     verdict = None
     fichier_verdict = chemins.RACINE / "campagnes" / "verdict.json"
     try:
@@ -1667,6 +1760,7 @@ def cmd_diagnostic(options, sortie: Sortie) -> int:
         "verdict_campagne": verdict,
         "puce": puce,
         "donnees_partagees": str(partage or ""),
+        "cache_openvino": cache,
         "pret": not raisons,
         "raisons": raisons,
         "avertissements": avertissements,
@@ -1684,6 +1778,7 @@ def cmd_diagnostic(options, sortie: Sortie) -> int:
               f"  Une heure d'audio : environ {resultat['pour_une_heure']}",
               f"  Locuteurs : {'disponibles' if resultat['locuteurs']['disponibles'] else 'non installés'}",
               f"  Puce      : {temoin_puce.resume(puce)}",
+              *([_ligne_cache(cache)] if cache["nombre"] else []),
               *([f"  Partage   : données lues aussi par la version installée {partage} : "
                  "ses réglages ne sont pas modifiés"] if partage else []),
               *(f"  Attention : {a}" for a in avertissements),

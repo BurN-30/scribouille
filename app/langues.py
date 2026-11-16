@@ -232,7 +232,28 @@ _FR: dict[str, str] = {
     "inv.locuteurs.libelle": "Séparation des locuteurs",
     "inv.locuteurs.description": "Extension optionnelle (PyTorch). Se réinstalle depuis les réglages.",
     "inv.cache_openvino.libelle": "Cache d'OpenVINO",
-    "inv.cache_openvino.description": "Modèles compilés pour ce poste. Refaits au prochain chargement (40 s à 2 min sur la puce graphique).",
+    "inv.cache_openvino.description": "Modèles compilés pour ce poste. Refaits au prochain chargement (40 s à 2 min sur la puce graphique). Borné tout seul : ce qui n'a pas servi depuis 30 jours part, et au-delà de 4 Go le moins utile.",
+    "inv.cache_openvino.en_usage": "Cache d'OpenVINO laissé : une transcription s'en sert en ce moment. À libérer une fois le calcul terminé.",
+    "cli.cache_openvino": "Cache OpenVINO : {taille} (fichiers : {nombre}, modèles compilés : {compiles}) ; borné à {jours} jours sans usage et {plafond} ; libérer : scribouille effacer cache_openvino",
+    "cli.cache_openvino.non_reconnues": " ; {taille} écrits peut-être par la 2.x installée, laissés",
+    "cli.etat.orphelines": "Sauvegardes orphelines : {n} ; effacées par « scribouille etat --nettoyer » : {effacables} ; gardées : {gardees}",
+    "cli.etat.nettoyees": "Sauvegardes orphelines effacées : {n}",
+    "cli.etat.non_efface": ", non effacé : {fichiers}",
+    "cli.etat.a_effacer": "effacée par --nettoyer",
+    "cli.etat.raison.source_absente": "fichier source déplacé ou effacé",
+    "cli.etat.raison.source_injoignable": "source sur un lecteur ou un dossier qui ne répond pas",
+    "cli.etat.raison.etat_illisible": "état illisible",
+    "cli.etat.raison.segments_sans_etat": "segments sans état",
+    "cli.etat.raison.trop_vieille": "plus de 30 jours",
+    "cli.etat.raison.verrou_mort": "verrou d'un processus disparu",
+    "cli.etat.raison.provisoire": "écriture coupée net",
+    "cli.etat.gardee.injoignable": "gardée (segments : {segments}) : source attendue dans « {dossier} », qui ne répond pas (lecteur réseau ou amovible débranché ?). Le rebrancher, puis « scribouille reprendre {reprise} ».",
+    "cli.etat.gardee.absente": "source introuvable : « {source} ». Remettre le fichier à cet endroit, puis « scribouille reprendre {reprise} » ; sans retour, la purge l'efface {jours} jours après le premier constat.",
+    "cli.etat.segments_gardes": "gardée (segments : {segments}) dans « {fichier} », sans état lisible : redéposer le même fichier avec le même modèle les poursuit ; le texte déjà transcrit y est aussi (une ligne JSON par segment). Laissée par « scribouille etat --nettoyer » ; la purge l'efface après 30 jours, « scribouille effacer reprises » sur demande.",
+    "cli.reprendre.gardees.un": "aucune transcription reprenable maintenant : une transcription interrompue est gardée, mais sa source est introuvable",
+    "cli.reprendre.gardees.autres": "aucune transcription reprenable maintenant : {n} transcriptions interrompues sont gardées, mais leur source est introuvable",
+    "cli.reprendre.gardee.injoignable": "{nom} : attendue dans « {dossier} », qui ne répond pas (lecteur réseau ou amovible débranché ?). Le rebrancher, puis « scribouille reprendre {reprise} ».",
+    "cli.reprendre.gardee.absente": "{nom} : attendue à « {source} », introuvable (fichier déplacé ou effacé). Le remettre à cet endroit, puis « scribouille reprendre {reprise} ».",
     "inv.cache_pip.libelle": "Cache des téléchargements",
     "inv.cache_pip.description": "Paquets téléchargés pendant l'installation des extensions.",
     "inv.paquets_hors_ligne.libelle": "Paquets hors ligne",
@@ -1000,6 +1021,10 @@ _FR: dict[str, str] = {
     "trait.reprise_trouvee": (
         "« {nom} » avait une transcription interrompue : elle est poursuivie là où elle s'était arrêtée."
     ),
+    "trait.reprise_autre_modele": (
+        "La transcription interrompue de « {nom} » a été faite avec le modèle {modele} : elle est gardée telle "
+        "quelle (pour la poursuivre, choisir ce modèle puis « Reprendre ») ; ce fichier part du début."
+    ),
     "trait.reprise_illisible.titre": "Reprise illisible pour l'instant",
     "trait.reprise_illisible.msg": (
         "La sauvegarde de « {nom} » ne se lit pas en ce moment (disque ou antivirus) : elle est gardée "
@@ -1662,7 +1687,28 @@ _EN: dict[str, str] = {
     "inv.locuteurs.libelle": "Speaker separation",
     "inv.locuteurs.description": "Optional extension (PyTorch). Can be reinstalled from the settings.",
     "inv.cache_openvino.libelle": "OpenVINO cache",
-    "inv.cache_openvino.description": "Models compiled for this computer. Rebuilt at the next load (40 s to 2 min on the graphics chip).",
+    "inv.cache_openvino.description": "Models compiled for this computer. Rebuilt at the next load (40 s to 2 min on the graphics chip). Kept in check automatically: what has not been used for 30 days goes, and beyond 4 GB the least useful.",
+    "inv.cache_openvino.en_usage": "OpenVINO cache left as is: a transcription is using it right now. Free it once the computation is over.",
+    "cli.cache_openvino": "OpenVINO cache: {taille} (files: {nombre}, compiled models: {compiles}); kept to {jours} days without use and {plafond}; to free it: scribouille effacer cache_openvino",
+    "cli.cache_openvino.non_reconnues": "; {taille} possibly written by the installed 2.x, left as is",
+    "cli.etat.orphelines": "Orphaned backups: {n}; erased by “scribouille etat --nettoyer”: {effacables}; kept: {gardees}",
+    "cli.etat.nettoyees": "Orphaned backups erased: {n}",
+    "cli.etat.non_efface": ", not erased: {fichiers}",
+    "cli.etat.a_effacer": "erased by --nettoyer",
+    "cli.etat.raison.source_absente": "source file moved or deleted",
+    "cli.etat.raison.source_injoignable": "source on a drive or folder that does not respond",
+    "cli.etat.raison.etat_illisible": "unreadable state",
+    "cli.etat.raison.segments_sans_etat": "segments without a state",
+    "cli.etat.raison.trop_vieille": "older than 30 days",
+    "cli.etat.raison.verrou_mort": "lock of a process that is gone",
+    "cli.etat.raison.provisoire": "write cut short",
+    "cli.etat.gardee.injoignable": "kept (segments: {segments}): source expected in “{dossier}”, which does not respond (network or removable drive unplugged?). Plug it back in, then “scribouille reprendre {reprise}”.",
+    "cli.etat.gardee.absente": "source not found: “{source}”. Put the file back there, then “scribouille reprendre {reprise}”; if it does not come back, the clean-up erases it {jours} days after it was first noticed.",
+    "cli.etat.segments_gardes": "kept (segments: {segments}) in “{fichier}”, with no readable state: dropping the same file again with the same model carries on from them; the text already transcribed is also there (one JSON line per segment). Left by “scribouille etat --nettoyer”; the clean-up erases it after 30 days, “scribouille effacer reprises” on request.",
+    "cli.reprendre.gardees.un": "nothing can be resumed right now: one interrupted transcription is kept, but its source cannot be found",
+    "cli.reprendre.gardees.autres": "nothing can be resumed right now: {n} interrupted transcriptions are kept, but their source cannot be found",
+    "cli.reprendre.gardee.injoignable": "{nom}: expected in “{dossier}”, which does not respond (network or removable drive unplugged?). Plug it back in, then “scribouille reprendre {reprise}”.",
+    "cli.reprendre.gardee.absente": "{nom}: expected at “{source}”, not found (file moved or deleted). Put it back there, then “scribouille reprendre {reprise}”.",
     "inv.cache_pip.libelle": "Download cache",
     "inv.cache_pip.description": "Packages downloaded while installing the extensions.",
     "inv.paquets_hors_ligne.libelle": "Offline packages",
@@ -2408,6 +2454,10 @@ _EN: dict[str, str] = {
     ),
     "trait.reprise_trouvee": (
         "\"{nom}\" had an interrupted transcription: it carries on where it stopped."
+    ),
+    "trait.reprise_autre_modele": (
+        "The interrupted transcription of \"{nom}\" was made with the {modele} model: it is kept as is "
+        "(to carry on with it, choose that model, then \"Resume\"); this file starts from the beginning."
     ),
     "trait.reprise_illisible.titre": "Saved progress unreadable for now",
     "trait.reprise_illisible.msg": (

@@ -537,10 +537,15 @@ class Superviseur:
         # « Reprenable » seulement si un segment au moins est gardé : sinon,
         # rien à reprendre, la ligne propose « Relancer » (comme `etat`).
         etat = reprise_module.lire_etat(cle) if cle else None
-        if not (etat and float(etat.get("position") or 0) > 0):
+        reprenable = bool(etat) and (float(etat.get("position") or 0) > 0
+                                     or reprise_module.compter_segments(cle) > 0)
+        if not reprenable:
             # Sauvegarde ouverte mais vide (plantages pendant la lecture ou le
             # chargement) : effacée, `etat` ne la propose donc pas non plus.
-            if etat and not int(etat.get("nb_segments") or 0):
+            # Jugée sur ce qui est gardé (`a_garder` : segments valides, ou
+            # illisibles pour l'instant), jamais sur un état en retard sur ses
+            # segments (écriture de l'état refusée, plantage entre les deux).
+            if etat and not reprise_module.a_garder(cle):
                 reprise_module.oublier(cle)
             cle = ""
         element.reprise = cle

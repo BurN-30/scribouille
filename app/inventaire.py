@@ -15,9 +15,12 @@ part (`transcriptions_octets`) et ne sont effacées qu'avec un drapeau explicite
 Dossier de données partagé avec une WhiScribe 2.x installée
 (`chemins.donnees_partagees_ancienne_version`) : ce qu'elle écrit aussi
 (`migration.FICHIERS_2X`, `DOSSIERS_2X` : réglages, glossaire, modèles,
-extensions...) est montré à part (`partages`) et jamais libéré ni effacé ;
-dans `logs` et `reprises`, seuls nos fichiers à nous restent effaçables
-(`chemins.DOSSIER_LOGS`, `reprise.fichiers_a_nous`).
+extensions... ; ce que seule la 2.4 ajoute, cache et moteur OpenVINO,
+mesures de durée, seulement si la 2.x installée peut être une 2.4) est
+montré à part (`partages`) et jamais libéré ni effacé ; dans `logs`,
+`reprises` et `cache-openvino`, seuls nos fichiers à nous restent
+effaçables (`chemins.DOSSIER_LOGS`, `reprise.fichiers_a_nous`,
+`cache_openvino.fichiers_a_nous`).
 
 Postes (clé : contenu) :
     programme            le programme (version installée ou portable, ou les sources)
@@ -70,6 +73,7 @@ VALIDITE_APERCU_S = 15 * 60
 _GROUPES = {
     "reglages": ("config.json", "dossier-modeles.txt", "jeton_hf.txt", "gabarit-ia.txt", "maj-etat.json",
                  "surveillance-vus.json", "materiel.json", "materiel.json.tmp", migration.NOM_JOURNAL,
+                 migration.NOM_JOURNAL + ".*.tmp", migration.NOM_JOURNAL + ".tmp",
                  "openvino-chargement-en-cours.txt", "openvino-chargement-en-cours.txt.*.tmp", "config.json.tmp",
                  "config-scribouille.json", "config-scribouille.json.tmp", "config.json.*.tmp",
                  "config-scribouille.json.*.tmp", "calibration.json.*.tmp", "surveillance-vus.json.*.tmp"),
@@ -332,12 +336,13 @@ def partages(config: dict | None = None) -> list[Path]:
         return [garde] if garde is not None else []
     trouves: list[Path] = []
     racine = chemins.RACINE
+    etendu = migration.etendu_2x()
     try:
         entrees = sorted(racine.iterdir())
     except OSError:
         entrees = []
     for entree in entrees:
-        if migration.est_partage_2x(entree.name, entree.is_dir()):
+        if migration.est_partage_2x(entree.name, entree.is_dir(), etendu):
             trouves.append(entree)
     modeles = Path(chemins.DOSSIER_MODELES)
     if modeles.is_dir() and not _dans(modeles, racine):
@@ -360,6 +365,9 @@ def postes(config: dict | None = None, mesurer: bool = True) -> tuple[list[Poste
     par_cle: dict[str, Poste] = {}
     inconnus: list[Path] = []
     commun = partage_2x() is not None
+    # Une 2.x qui peut être une 2.4 écrit aussi le cache d'OpenVINO, ses
+    # mesures... ; une 2.3.3 sûre, non (`migration.FICHIERS_2X_24`).
+    etendu = migration.etendu_2x() if commun else True
 
     def ajouter(cle: str, chemin: Path, liberable: bool = False) -> None:
         poste = par_cle.setdefault(cle, Poste(cle=cle, liberable=liberable))
@@ -385,9 +393,10 @@ def postes(config: dict | None = None, mesurer: bool = True) -> tuple[list[Poste
                 continue  # compté modèle par modèle plus bas
             if str(entree.resolve()).lower() in livres:
                 continue  # exemple livré avec les sources (glossaire, corrections)
-            if commun and migration.est_partage_2x(entree.name, dossier):
+            if commun and migration.est_partage_2x(entree.name, dossier, etendu):
                 # À la 2.x autant qu'à nous : hors des postes. Seuls nos
-                # journaux et nos reprises, reconnaissables, en sortent.
+                # journaux, nos reprises et les entrées du cache d'OpenVINO
+                # que notre index reconnaît en sortent.
                 if entree.name.lower() == "logs" and chemins.DOSSIER_LOGS.is_dir():
                     ajouter("journaux", chemins.DOSSIER_LOGS, True)
                 elif entree.name.lower() == "reprises":
@@ -395,6 +404,11 @@ def postes(config: dict | None = None, mesurer: bool = True) -> tuple[list[Poste
 
                     for fichier in reprise.fichiers_a_nous():
                         ajouter("reprises", fichier)
+                elif entree.name.lower() == "cache-openvino":
+                    from . import cache_openvino
+
+                    for fichier in cache_openvino.fichiers_a_nous():
+                        ajouter("cache_openvino", fichier, True)
                 continue
             groupe = _groupe_de(entree.name, dossier)
             if groupe:
@@ -605,6 +619,15 @@ def liberer(cles: list[str], config: dict | None = None) -> dict:
         if poste is None:
             bilan["inconnus"].append(cle)
             continue
+        if cle == "cache_openvino":
+            from . import cache_openvino
+
+            if cache_openvino.moteurs_vivants():
+                # Jamais pendant un calcul : un autre processus compile ou
+                # calcule avec ce cache en ce moment.
+                bilan["restes"].append(langues.t("inv.cache_openvino.en_usage"))
+                bilan["liberes"].append({"cle": cle, "octets": 0})
+                continue
         octets = 0
         for chemin in _a_liberer(poste):
             liberes, erreur = _supprimer(chemin, permises)

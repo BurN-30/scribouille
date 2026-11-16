@@ -144,7 +144,16 @@ def _essai_registre_permis() -> bool:
     reel = _localappdata_reel()
     if not base or not reel:
         return False
-    return os.path.normcase(os.path.abspath(base)).rstrip("\\/") != os.path.normcase(os.path.abspath(reel)).rstrip("\\/")
+    if os.path.normcase(os.path.abspath(base)).rstrip("\\/") == os.path.normcase(os.path.abspath(reel)).rstrip("\\/"):
+        return False
+    # Un autre nom du même dossier (nom court 8.3, jonction, lecteur `subst`)
+    # n'est pas un dossier d'essai ; dans le doute (erreur), non plus.
+    try:
+        return not os.path.samefile(base, reel)
+    except FileNotFoundError:
+        return not Path(base).exists()
+    except OSError:
+        return False
 
 
 def _cles_desinstallation() -> list[dict]:
@@ -252,6 +261,49 @@ def etat_version_2x() -> dict:
     return {"presente": False, "sure": True, "exe": None, "par": "", "version": "", "detail": ""}
 
 
+#: Dernière WhiScribe publiée sans moteur OpenVINO. Vérifié dans l'historique
+#: du dépôt : aucun commit ancêtre de v2.3.3 n'écrit `cache-openvino`,
+#: `extensions-openvino`, `calibration.json`, le témoin de chargement, ni
+#: `config.json.tmp` (ils arrivent avec la 2.4.0, qui s'appelle Scribouille).
+DERNIERE_2X_SANS_OPENVINO = (2, 3, 3)
+
+
+def _triplet(version: str) -> tuple[int, int, int] | None:
+    morceaux = str(version or "").strip().split(".")
+    try:
+        nombres = [int(m) for m in morceaux[:3]]
+    except ValueError:
+        return None
+    if not nombres or len(morceaux) > 3:
+        return None
+    return tuple(nombres + [0] * (3 - len(nombres)))  # type: ignore[return-value]
+
+
+def version_2x_sans_openvino(etat: dict | None = None) -> bool:
+    """
+    La 2.x détectée est-elle SÛREMENT antérieure à la 2.4 (donc sans moteur
+    OpenVINO, sans cache de compilation ni mesures de durée) ? Oui seulement
+    si sa clé de désinstallation se lit, donne une version de 2.0 à 2.3.3, et
+    que son dossier d'installation n'a pas de `Scribouille.exe` (nom de la
+    2.4). Détection par le dossier seul, version illisible, registre en échec,
+    2.4 ou plus : non (dans le doute, ses fichiers sont tenus pour les siens).
+    """
+    etat = etat_version_2x() if etat is None else etat
+    if not etat.get("presente") or not etat.get("sure") or etat.get("par") != "registre":
+        return False
+    triplet = _triplet(etat.get("version", ""))
+    if triplet is None or triplet[0] != 2 or triplet > DERNIERE_2X_SANS_OPENVINO:
+        return False
+    exe = etat.get("exe")
+    if exe:
+        try:
+            if (Path(exe).parent / f"{NOM_DOSSIER_UTILISATEUR}.exe").exists():
+                return False
+        except OSError:
+            return False
+    return True
+
+
 def ancienne_version_installee() -> Path | None:
     """
     L'exécutable d'une version 2.x installée (WhiScribe), encore là, ou None
@@ -313,9 +365,19 @@ LECTURE_SEULE = commande_de_lecture()
 
 
 def _nouveau_deja_en_service(nouveau: Path) -> bool:
-    """Le dossier à notre nom a-t-il déjà nos données (réglages, ou une reprise de l'ancien commencée) ?"""
+    """
+    Le dossier à notre nom a-t-il déjà nos données (réglages, une reprise de
+    l'ancien commencée, ou tout autre fichier que nous y écrivons : reprises,
+    vocabulaire, journaux...) ? Illisible : oui, on y reste.
+    """
     try:
-        return (nouveau / "config.json").exists() or (nouveau / "migration-whiscribe.json").exists()
+        if (nouveau / "config.json").exists() or (nouveau / "migration-whiscribe.json").exists():
+            return True
+        if not nouveau.is_dir():
+            return False
+        from . import migration
+
+        return bool(migration.entrees_a_nous(nouveau))
     except OSError:
         return True
 

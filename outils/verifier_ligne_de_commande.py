@@ -1153,13 +1153,23 @@ s = r.Session(cle, active=True)
 s.ouvrir(source, modele, 60.0, nouvelle=True)
 s.ajouter(Segment(debut=0.0, fin=1.0, texte="Gardé", mots=[]), 1.0)
 s.fermer()
+# Une reprise d'un autre modèle sur un second fichier : jamais poursuivie au redépôt.
+autre = Path(os.environ["ESSAI_SOURCE_2"])
+cle_autre = r.cle(autre, "un-autre-modele")
+s = r.Session(cle_autre, active=True)
+s.ouvrir(autre, "un-autre-modele", 60.0, nouvelle=True)
+s.ajouter(Segment(debut=0.0, fin=1.0, texte="Autre modèle", mots=[]), 1.0)
+s.fermer()
 appels = []
 p._js = appels.append
 p.file.mesurer_durees = lambda rappel: None   # pas de moteur à lancer ici
-p._enregistrer_fichiers([str(source)])
+p._enregistrer_fichiers([str(source), str(autre)])
 el = p.file.elements[0]
+el2 = p.file.elements[1]
 avant = {"reprise": el.reprise, "propose": any(a.startswith("onReprisesTrouvees(") and cle in a for a in appels),
-         "segments": len(r.lire_segments(cle))}
+         "segments": len(r.lire_segments(cle)), "autre_rattachee": el2.reprise,
+         "autre_proposee": any(cle_autre in a for a in appels if a.startswith("onReprisesTrouvees(")),
+         "autre_gardee": r.a_garder(cle_autre)}
 retour = getattr(p, "recommencer", lambda i: {"ok": False})(el.identifiant)
 apres = {"ok": retour.get("ok"), "reprise": el.reprise, "recommencer": getattr(el, "recommencer", None),
          "garde": r.a_garder(cle)}
@@ -1176,11 +1186,13 @@ def essai_redepot_fenetre() -> None:
         d.mkdir(parents=True, exist_ok=True)
     source = maison / "Documents" / "reunion longue.ogg"
     source.write_bytes((RACINE / "banc" / "extrait_fr.ogg").read_bytes())
+    source_2 = maison / "Documents" / "autre reunion.ogg"
+    source_2.write_bytes((RACINE / "banc" / "extrait_fr.ogg").read_bytes())
     (donnees / "config.json").write_text(json.dumps({"dossier_sortie": str(maison / "sorties"),
                                                      "langue_interface": "fr"}), encoding="utf-8")
     env = {**os.environ, "SCRIBOUILLE_DONNEES": str(donnees), "LOCALAPPDATA": str(maison / "AppData" / "Local"),
            "USERPROFILE": str(maison), "HOME": str(maison), "APPDATA": str(maison / "AppData" / "Roaming"),
-           "ESSAI_SOURCE": str(source), "PYTHONIOENCODING": "utf-8"}
+           "ESSAI_SOURCE": str(source), "ESSAI_SOURCE_2": str(source_2), "PYTHONIOENCODING": "utf-8"}
     env.pop("SCRIBOUILLE_MOTEUR_ESSAI", None)
     p = subprocess.run([PYTHON, "-c", _REDEPOT_FENETRE, str(RACINE / "transcriber.pyw")], capture_output=True,
                        timeout=180, cwd=str(TEMPORAIRE), env=env, creationflags=SANS_FENETRE)
@@ -1190,14 +1202,81 @@ def essai_redepot_fenetre() -> None:
     verifier(avant.get("reprise") == cle and avant.get("propose") and avant.get("segments") == 1,
              "redéposé : la reprise est rattachée (rien d'effacé), la fenêtre propose de recommencer",
              f"{avant} {p.stderr.decode('utf-8', 'replace')[-300:]}")
+    verifier(avant.get("autre_rattachee") == "" and not avant.get("autre_proposee") and avant.get("autre_gardee"),
+             "redéposé avec une reprise d'un autre modèle : ni rattachée ni poursuivie, gardée telle quelle", str(avant))
     verifier(apres.get("ok") and apres.get("reprise") == "" and apres.get("recommencer") is True
-             and apres.get("garde") is False,
-             "« Recommencer du début » : la reprise est abandonnée, à la demande seulement", str(apres))
+             and apres.get("garde") is True,
+             "« Recommencer du début » : repart de zéro, mais rien n'est effacé avant le départ (sous verrou)",
+             str(apres))
     page = (RACINE / "web" / "app.js").read_text(encoding="utf-8")
     html = (RACINE / "web" / "index.html").read_text(encoding="utf-8")
     verifier("window.onReprisesTrouvees" in page and "pywebview.api.recommencer(" in page
              and 'id="modale-reprise-trouvee"' in html and 'id="btn-recommencer-reprise"' in html,
              "la modale « Transcription interrompue » est branchée (Reprendre, Recommencer du début)")
+
+
+def essai_reprises_gardees() -> None:
+    """16/11 (point 1) : une reprise gardée faute de source est dite comme telle, avec où la source était attendue."""
+    titre("13. Reprise gardée faute de source : etat et reprendre le disent, avec quoi faire")
+    maison = TEMPORAIRE / "gardees"
+    donnees = maison / "donnees"
+    reprises = donnees / "reprises"
+    for d in (reprises, maison / "Documents", maison / "AppData" / "Local", maison / "AppData" / "Roaming"):
+        d.mkdir(parents=True, exist_ok=True)
+    (donnees / "config.json").write_text(json.dumps({"dossier_sortie": str(maison / "sorties"),
+                                                     "langue_interface": "fr"}), encoding="utf-8")
+    segment = json.dumps({"d": 0.0, "f": 10.0, "t": "Texte gardé.", "m": []}) + "\n"
+    debranche = maison / "lecteur-debranche" / "reunions"
+    for cle, source in (("a1a1a1a1a1a1a1a1", debranche / "conseil.ogg"),
+                        ("b2b2b2b2b2b2b2b2", maison / "Documents" / "disparue.ogg")):
+        (reprises / f"{cle}.etat").write_text(json.dumps({
+            "version": 1, "auteur": "scribouille-3", "source": str(source), "nom": source.name, "modele": "large-v3",
+            "duree_audio": 60.0, "position": 10.0, "nb_segments": 1, "ecoule": 5.0}), encoding="utf-8")
+        (reprises / f"{cle}.jsonl").write_text(segment, encoding="utf-8")
+    (reprises / "c3c3c3c3c3c3c3c3.etat").write_bytes(b"")
+    (reprises / "c3c3c3c3c3c3c3c3.jsonl").write_text(segment, encoding="utf-8")
+    vieux = time.time() - 3600
+    for f in reprises.iterdir():
+        os.utime(f, (vieux, vieux))
+    (donnees / "cache-openvino").mkdir()
+    (donnees / "cache-openvino" / "12345678901234567890.blob").write_bytes(b"b" * 2048)
+    env = {**os.environ, "SCRIBOUILLE_DONNEES": str(donnees), "LOCALAPPDATA": str(maison / "AppData" / "Local"),
+           "USERPROFILE": str(maison), "HOME": str(maison), "APPDATA": str(maison / "AppData" / "Roaming")}
+    env.pop("SCRIBOUILLE_MOTEUR_ESSAI", None)
+    code, sortie, erreur = lancer_dans(env, "etat")
+    verifier(code == 0 and "effacées par « scribouille etat --nettoyer » : 1 ; gardées : 2" in sortie,
+             "etat : ce qui sera effacé et ce qui est gardé, comptés à part", sortie[-600:] + erreur[-200:])
+    verifier(f"source attendue dans « {debranche} », qui ne répond pas" in sortie
+             and "scribouille reprendre a1a1a1a1a1a1a1a1" in sortie,
+             "etat : la reprise gardée dit où sa source était attendue et quoi faire", sortie[-600:])
+    verifier(str(maison / "Documents" / "disparue.ogg") in sortie and "c3c3c3c3c3c3c3c3.jsonl" in sortie
+             and "redéposer le même fichier avec le même modèle les poursuit" in sortie,
+             "etat : source déplacée (chemin attendu) et segments sans état (gardés, fichier du texte) expliqués",
+             sortie[-800:])
+    code, sortie, erreur = lancer_dans(env, "reprendre")
+    verifier(code == 2 and "2 transcriptions interrompues sont gardées, mais leur source est introuvable" in erreur
+             and "aucune transcription interrompue\n" not in erreur and str(debranche) in erreur
+             and str(maison / "Documents" / "disparue.ogg") in erreur and "reprendre b2b2b2b2b2b2b2b2" in erreur,
+             "reprendre : « gardée, source introuvable », avec le dossier attendu (plus « aucune transcription »)",
+             erreur[-600:])
+    code, sortie, erreur = lancer_dans(env, "reprendre", "a1a1a1a1a1a1a1a1", "--json")
+    enveloppe = (_json(sortie) or [{}])[-1].get("erreur", {})
+    verifier(code == 2 and enveloppe.get("code") == "source_introuvable" and str(debranche) in enveloppe.get("suggestion", ""),
+             "reprendre CLE --json : erreur « source_introuvable », où la source était attendue", str(enveloppe)[:300])
+    code, sortie, erreur = lancer_dans(env, "etat", "--nettoyer")
+    verifier(code == 0 and (reprises / "a1a1a1a1a1a1a1a1.jsonl").is_file()
+             and (reprises / "c3c3c3c3c3c3c3c3.jsonl").is_file()
+             and not (reprises / "b2b2b2b2b2b2b2b2.jsonl").exists() and "qui ne répond pas" in sortie,
+             "etat --nettoyer : les gardées restent et le disent (source injoignable, segments reprenables), "
+             "le reste est effacé", sortie[-400:])
+    code, sortie, erreur = lancer_dans(env, "diagnostic")
+    verifier("Cache OpenVINO : 2,0 Ko (fichiers : 1, modèles compilés : 1)" in sortie
+             and "scribouille effacer cache_openvino" in sortie,
+             "diagnostic : le cache OpenVINO avec sa taille, ses bornes, et comment le libérer", sortie[-500:])
+    code, sortie, _ = lancer_dans(env, "diagnostic", "--json")
+    cache = (_json(sortie) or [{}])[-1].get("donnees", {}).get("cache_openvino", {})
+    verifier(cache.get("octets") == 2048 and cache.get("compiles") == 1 and cache.get("reconnues") == 1,
+             "diagnostic --json : taille, compilés, entrées reconnues", str(cache)[:300])
 
 
 def principal() -> int:
@@ -1215,6 +1294,7 @@ def principal() -> int:
         essai_lecture_sans_ecriture()
         essai_dossier_partage_intact()
         essai_redepot_fenetre()
+        essai_reprises_gardees()
     finally:
         import shutil
 

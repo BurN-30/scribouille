@@ -2157,17 +2157,27 @@ class Passerelle:
         repartir de zéro et d'effacer la sauvegarde : c'est fait tout de suite,
         et l'interface propose « Recommencer du début » à la place.
         """
-        from app import instance
+        from app import config as config_module, instance
 
         if not ajoutes:
             return ajoutes
         try:
-            connues = reprise.reprises_par_fichier()
-        except OSError:
+            # Seulement la reprise de CE fichier (même taille, même date) avec
+            # le modèle que la file va charger : une reprise d'un autre modèle,
+            # ou d'un enregistrement remplacé sous le même nom, n'est jamais
+            # poursuivie ici (le texte mêlerait deux modèles ou deux audios) ;
+            # elle reste telle quelle, proposée dans « Transcriptions interrompues ».
+            modele = config_module.reglages_effectifs(self.config)["modele"]
+            par_cle = {r["cle"]: r for r in reprise.lister()}
+        except Exception:
             return ajoutes
         resultat = []
         for item in ajoutes:
-            trouvee = None if item.get("reprise") else connues.get(reprise._cle_chemin(item["chemin"]))
+            trouvee = None
+            if not item.get("reprise"):
+                cle = reprise.cle(item["chemin"], modele)
+                if cle in par_cle and reprise.a_garder(cle):
+                    trouvee = par_cle[cle]
             if trouvee and not instance.occupant(trouvee["chemin"]):
                 remis = self.file.ajouter_pour_reprise(item["chemin"], trouvee["cle"])
                 if remis:
@@ -2795,6 +2805,11 @@ def _au_demarrage(passerelle: Passerelle, fenetre) -> None:
     # Traces de reprise devenues sans objet : fichier source disparu, ou plus
     # vieilles que la rétention. Rien de visible, juste du ménage.
     passerelle._fond(reprise.purger)
+    # Cache de compilation d'OpenVINO borné (délai, plafond), jamais pendant
+    # un calcul ni sur ce que la 3.x n'a pas écrit : app/cache_openvino.py.
+    from app import cache_openvino
+
+    passerelle._fond(cache_openvino.purger)
 
     # Barre de progression de l'icône : la fenêtre existe maintenant, elle se
     # retrouve par son titre. Sans elle, le module reste simplement inerte.

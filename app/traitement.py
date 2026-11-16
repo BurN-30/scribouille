@@ -223,16 +223,18 @@ class FileTraitement:
     def recommencer(self, identifiant: str) -> dict | None:
         """
         « Recommencer du début » sur un fichier en attente auquel une reprise
-        a été rattachée : la reprise est abandonnée à la demande (c'est noté),
-        la transcription repart de zéro. Refusé s'il a déjà commencé.
+        a été rattachée : la transcription repart de zéro. Rien n'est effacé
+        ici : la sauvegarde de ce fichier avec ce modèle n'est remplacée qu'au
+        départ de la transcription, sous le verrou du fichier (un fichier
+        retiré de la file avant garde donc sa reprise ; une reprise d'un autre
+        modèle n'est jamais touchée). Refusé s'il a déjà commencé.
         """
         with self._verrou:
             for element in self.elements:
                 if element.identifiant == identifiant and element.etat == "attente":
                     if element.reprise:
-                        journal.info("Reprise %s abandonnée à la demande : %s recommencé du début",
+                        journal.info("Reprise %s laissée de côté à la demande : %s recommencé du début",
                                      element.reprise, element.nom)
-                        reprise_module.oublier(element.reprise)
                     element.reprise = ""
                     element.recommencer = True
                     return element.en_dict()
@@ -500,21 +502,27 @@ class FileTraitement:
         return {"reglages": reglages, "instance": instance, "regulateur": regulateur,
                 "choisi": choisi, "sans_veille": sans_veille}
 
-    def traiter_element(self, element: Element, config: dict, contexte: dict, rappels: Rappels) -> str:
+    def _rattacher(self, element: Element, config: dict, contexte: dict, rappels: Rappels) -> dict:
         """
-        Un fichier de la file, erreurs comprises. Renvoie « reussi »,
-        « sans_voix » (réussi, voix demandées mais non séparées), « annule »
-        ou « erreur ».
+        Une reprise de ce fichier avec ce modèle a gardé du travail : elle est
+        poursuivie, jamais effacée en silence par une nouvelle transcription
+        (fichier redéposé, relancé, ligne de commande). Seul « recommencer »,
+        demandé explicitement, repart de zéro. Une reprise rattachée faite avec
+        un AUTRE modèle n'est pas poursuivie avec celui de la file (le texte
+        mêlerait deux modèles) : elle reste telle quelle, et c'est dit.
+        Rend la configuration de ce fichier (demande de départ rétablie).
         """
-        instance = contexte["instance"]
-        if element.sortie:
-            config = {**config, "dossier_sortie": element.sortie}
+        modele = contexte["reglages"]["modele"]
+        if element.reprise:
+            autre = str((reprise_module.lire_etat(element.reprise) or {}).get("modele") or "")
+            if autre and autre != modele:
+                journal.attention("Reprise %s faite avec %s, file sur %s : gardée telle quelle, %s part du début",
+                                  element.reprise, autre, modele, element.nom)
+                rappels.journal_ui("attention", langues.t("trait.reprise_autre_modele", nom=element.nom,
+                                                          modele=moteur.nom_court(autre)))
+                element.reprise = ""
         if not element.reprise and not element.recommencer and config.get("sauvegarde_progressive", True):
-            # Une reprise de ce fichier avec ce modèle a gardé du travail : elle
-            # est poursuivie, jamais effacée en silence par une nouvelle
-            # transcription (fichier redéposé, relancé, ligne de commande).
-            # Seul « recommencer », demandé explicitement, repart de zéro.
-            trouvee = reprise_module.cle(element.chemin, contexte["reglages"]["modele"])
+            trouvee = reprise_module.cle(element.chemin, modele)
             if reprise_module.a_garder(trouvee):
                 element.reprise = trouvee
                 journal.info("Reprise %s trouvée pour %s : poursuivie", trouvee, element.nom)
@@ -524,6 +532,17 @@ class FileTraitement:
             # (formats, langue, vocabulaire, voix), pas les réglages du moment.
             demande = (reprise_module.lire_etat(element.reprise) or {}).get("demande") or {}
             config = {**config, **{c: v for c, v in demande.items() if c in reprise_module.CLES_PAR_FICHIER}}
+        return config
+
+    def traiter_element(self, element: Element, config: dict, contexte: dict, rappels: Rappels) -> str:
+        """
+        Un fichier de la file, erreurs comprises. Renvoie « reussi »,
+        « sans_voix » (réussi, voix demandées mais non séparées), « annule »
+        ou « erreur ».
+        """
+        instance = contexte["instance"]
+        if element.sortie:
+            config = {**config, "dossier_sortie": element.sortie}
         echec = True
         statut = "erreur"
         verrou = False
@@ -539,6 +558,9 @@ class FileTraitement:
                 raise ErreurLisible(langues.t("inst.fichier_occupe.titre"),
                                     langues.t("inst.fichier_occupe.msg", pid=occupant))
             verrou = True
+            # Sous le verrou seulement : ce qu'un autre processus a pu écrire
+            # juste avant de s'arrêter est vu ici, jamais vidé par le départ.
+            config = self._rattacher(element, config, contexte, rappels)
             sans_voix = self._traiter(element, config, contexte["reglages"], instance, rappels)
             statut = "sans_voix" if sans_voix else "reussi"
             echec = False

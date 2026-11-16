@@ -32,6 +32,7 @@ from __future__ import annotations
 import fnmatch
 import json
 import os
+import secrets
 from datetime import datetime
 from pathlib import Path
 
@@ -68,27 +69,59 @@ DOSSIERS = (
 )
 
 
-#: Ce qu'une WhiScribe 2.x (2.0 à 2.4) écrit elle aussi dans le dossier de
-#: données. Tant qu'elle est installée et lit le même dossier
+#: Ce qu'une WhiScribe 2.x écrit elle aussi dans le dossier de données. Tant
+#: qu'elle est installée et lit le même dossier
 #: (`chemins.donnees_partagees_ancienne_version`), ces entrées sont les
 #: siennes autant que les nôtres : l'inventaire les montre à part et rien ne
 #: les efface (`inventaire`). Dans `logs` et `reprises`, seuls nos propres
 #: fichiers restent effaçables (`chemins.DOSSIER_LOGS`, `reprise.fichiers_a_nous`).
-FICHIERS_2X = (
-    "config.json", "config.json.tmp", "vocabulaire.txt", "corrections.txt", "jeton_hf.txt", "gabarit-ia.txt",
-    NOM_CHOIX_MODELES, "calibration.json", "maj-etat.json", "surveillance-vus.json",
-    "openvino-chargement-en-cours.txt",
+#:
+#: Deux listes, vérifiées dans l'historique (`git grep` sur les étiquettes) :
+#: ce que toute 2.x écrit (2.0 à 2.3.3), et ce que la 2.4.0 y ajoute (moteur
+#: OpenVINO, mesures de durée, banc). La seconde ne compte que si la 2.x
+#: installée peut être une 2.4 (`chemins.version_2x_sans_openvino` faux :
+#: 2.4 ou plus, version illisible, détection incertaine) ; avec une 2.3.3
+#: sûre, ces entrées ne sont écrites que par la 3.x et restent les siennes.
+FICHIERS_2X_BASE = (
+    "config.json", "vocabulaire.txt", "corrections.txt", "jeton_hf.txt", "gabarit-ia.txt",
+    NOM_CHOIX_MODELES, "maj-etat.json", "surveillance-vus.json",
 )
-MOTIFS_2X = ("whiscribe-donnees-avant-import-*.zip", "scribouille-donnees-avant-import-*.zip")
-DOSSIERS_2X = ("logs", "modeles", "reprises", "extensions", "cache-pip", "extensions-openvino", "cache-openvino",
-               "paquets-hors-ligne", "rapports-banc")
+MOTIFS_2X_BASE = ("whiscribe-donnees-avant-import-*.zip",)
+DOSSIERS_2X_BASE = ("logs", "modeles", "reprises", "extensions", "cache-pip")
+FICHIERS_2X_24 = ("config.json.tmp", "calibration.json", "openvino-chargement-en-cours.txt")
+MOTIFS_2X_24 = ("scribouille-donnees-avant-import-*.zip",)
+DOSSIERS_2X_24 = ("extensions-openvino", "cache-openvino", "paquets-hors-ligne", "rapports-banc")
+#: Les deux réunies : ce qui est protégé dans le doute.
+FICHIERS_2X = FICHIERS_2X_BASE + FICHIERS_2X_24
+MOTIFS_2X = MOTIFS_2X_BASE + MOTIFS_2X_24
+DOSSIERS_2X = DOSSIERS_2X_BASE + DOSSIERS_2X_24
 
 
-def est_partage_2x(nom: str, dossier: bool) -> bool:
-    """Une entrée qu'une WhiScribe 2.x écrit aussi (voir `FICHIERS_2X`)."""
+def etendu_2x() -> bool:
+    """La 2.x installée peut-elle être une 2.4 (et écrire aussi `FICHIERS_2X_24`) ? Vrai dans le doute."""
+    from . import chemins
+
+    try:
+        return not chemins.version_2x_sans_openvino()
+    except Exception:
+        return True
+
+
+def est_partage_2x(nom: str, dossier: bool, etendu: bool | None = None) -> bool:
+    """
+    Une entrée qu'une WhiScribe 2.x écrit aussi (voir `FICHIERS_2X`).
+    `etendu` : la 2.x peut être une 2.4 (`etendu_2x`, calculé si absent).
+    """
+    nom = nom.lower()
     if dossier:
-        return nom.lower() in DOSSIERS_2X
-    return nom.lower() in {f.lower() for f in FICHIERS_2X} or any(fnmatch.fnmatch(nom.lower(), m) for m in MOTIFS_2X)
+        if nom in DOSSIERS_2X_BASE:
+            return True
+        return nom in DOSSIERS_2X_24 and (etendu_2x() if etendu is None else etendu)
+    if nom in {f.lower() for f in FICHIERS_2X_BASE} or any(fnmatch.fnmatch(nom, m) for m in MOTIFS_2X_BASE):
+        return True
+    if nom in {f.lower() for f in FICHIERS_2X_24} or any(fnmatch.fnmatch(nom, m) for m in MOTIFS_2X_24):
+        return etendu_2x() if etendu is None else etendu
+    return False
 
 
 def est_a_nous(nom: str, dossier: bool) -> bool:
@@ -114,9 +147,18 @@ def _lire_journal(nouveau: Path) -> dict:
 
 def _ecrire_journal(nouveau: Path, journal: dict) -> None:
     cible = nouveau / NOM_JOURNAL
-    provisoire = cible.with_name(cible.name + ".tmp")
-    provisoire.write_text(json.dumps(journal, ensure_ascii=False, indent=1), encoding="utf-8")
-    os.replace(provisoire, cible)
+    # Nom provisoire propre à ce processus et à cette écriture : deux
+    # lancements qui migrent au même instant ne se marchent pas dessus.
+    provisoire = cible.with_name(f"{cible.name}.{os.getpid()}-{secrets.token_hex(3)}.tmp")
+    try:
+        provisoire.write_text(json.dumps(journal, ensure_ascii=False, indent=1), encoding="utf-8")
+        os.replace(provisoire, cible)
+    except OSError:
+        try:
+            provisoire.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
 
 
 def _deplacer(source: Path, cible: Path, rangement_doublons: Path, journal: dict, relatif: str) -> None:

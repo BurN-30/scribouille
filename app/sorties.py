@@ -14,6 +14,7 @@ relire les en-têtes des deux langues (voir `app/lecture.py`).
 from __future__ import annotations
 
 import os
+import secrets
 from datetime import datetime
 from pathlib import Path
 
@@ -200,7 +201,9 @@ def ecrire_sur_disque(chemin: Path, texte: str) -> None:
     une coupure de courant juste après la fin ne laisse jamais un texte vide
     ou rempli de zéros sans sa reprise.
     """
-    provisoire = chemin.with_name(f"{chemin.name}.{os.getpid()}.scribouille-tmp")
+    # Nom provisoire court, indépendant du nom final : un chemin proche de la
+    # limite de Windows (260 caractères) ne devient pas impossible à écrire.
+    provisoire = chemin.with_name(f"~scb{os.getpid()}{secrets.token_hex(2)}.tmp")
     try:
         with open(provisoire, "w", encoding="utf-8") as flux:
             flux.write(texte)

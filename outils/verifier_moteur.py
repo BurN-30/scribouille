@@ -894,7 +894,7 @@ def essai_coupure_avant_premier_segment(dossier: Path) -> None:
     # vont avec elles : PC du travail, 15/11) ; les autres sont effacés.
     des_reprenables = {instance_module._fichier_verrou(t["chemin"]).name.lower()
                        for t in reprise_module.lister()}
-    verifier(code == 0 and restants == ["0000reprenable001.etat", "0000reprenable001.jsonl"]
+    verifier(code == 0 and restants == ["0000reprenable001.depart", "0000reprenable001.etat", "0000reprenable001.jsonl"]
              and {v.name.lower() for v in rep_.glob("*.en-cours")} <= des_reprenables
              and len((lignes[-1]["donnees"] if lignes else {}).get("nettoyees", [])) >= 2,
              "etat --nettoyer : les orphelines effacées, la reprise valable gardée",
