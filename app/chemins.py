@@ -328,7 +328,7 @@ def commande_de_lecture(arguments: list[str] | None = None) -> bool:
     """
     Ces arguments sont-ils une commande qui ne fait que lire ? `version`,
     `aide`, `diagnostic`, `verifier` (et `--verifier`), `lire`, `espace`,
-    `etat` sans `--nettoyer`, `agent afficher`, `reglages liste|lire`,
+    `etat` sans `--nettoyer`, `agent afficher`, `reglages liste|lire|decrire`,
     `vocabulaire etat`, `materiel` sans `--appliquer` ni `--lever`, toute
     demande d'aide. (`diagnostic --materiel` et `materiel detecter` relancent
     la détection : le cache du matériel n'est réécrit que s'il a changé.)
@@ -352,7 +352,7 @@ def commande_de_lecture(arguments: list[str] | None = None) -> bool:
     if commande == "agent":
         return action in ("", "afficher")
     if commande == "reglages":
-        return action in ("", "liste", "lire")
+        return action in ("", "liste", "lire", "decrire")
     if commande == "vocabulaire":
         return action in ("", "etat")
     if commande == "materiel":

@@ -305,14 +305,21 @@ function dessinerMateriel(mat) {
 function dessinerPresets() {
   $('#presets').setAttribute('role', 'radiogroup');
   $('#presets').setAttribute('aria-label', t('ui.section.qualite'));
+  // Chaque carte a son bouton d'information, a cote du choix (pas dedans :
+  // un bouton ne se met pas dans un autre).
   $('#presets').innerHTML = etat.presets.map((p) => `
-    <button class="preset" role="radio" data-preset="${ech(p.cle)}" aria-checked="false">
-      <span class="titre"><span class="marqueur"></span>${ech(p.nom)}</span>
-      <span class="desc">${ech(p.resume)}</span>
-      <span class="chiffres">${ech(t('ui.preset.chiffres', {
-        modele: p.modele, duree: p.pour_une_heure, poids: p.telechargement,
-      }))}</span>
-    </button>`).join('');
+    <div class="preset-ligne">
+      <button class="preset" role="radio" data-preset="${ech(p.cle)}" aria-checked="false">
+        <span class="titre"><span class="marqueur"></span>${ech(p.nom)}</span>
+        <span class="desc">${ech(p.resume)}</span>
+        <span class="chiffres">${ech(t('ui.preset.chiffres', {
+          modele: p.modele, duree: p.pour_une_heure, poids: p.telechargement,
+        }))}</span>
+      </button>
+      <button type="button" class="bouton-info preset-info" data-fiche-sujet="preset" data-fiche-valeur="${ech(p.cle)}"
+              aria-haspopup="dialog" aria-label="${ech(t('ui.fiche.ouvrir', { nom: p.nom }))}"
+              title="${ech(t('ui.fiche.ouvrir', { nom: p.nom }))}">${icone('i-info', 'icone-s')}</button>
+    </div>`).join('');
   $('#segments-qualite').innerHTML = etat.presets.map((p) => `
     <button class="segment" role="radio" data-preset="${ech(p.cle)}" aria-checked="false">${ech(p.nom)}</button>`).join('');
 
@@ -338,6 +345,103 @@ function majPresetActif() {
     b.setAttribute('aria-checked', choisi ? 'true' : 'false');
     b.tabIndex = choisi ? 0 : -1;
   });
+  majBoutonsInfo();
+}
+
+/* ------------------------------------------- Fiche « ce que ca change »
+
+   Un bouton d'information a cote de chaque choix ouvre la fiche : ce que la
+   transcription appliquerait reellement sur ce poste (modele, moteur,
+   peripherique, precision, faisceau, lots, fils, priorite, duree, memoire,
+   justesse mesuree). Les lignes viennent toutes de Python
+   (app/description_reglage.py, passerelle decrire_reglage) : rien n'est
+   ecrit ici, et la fiche ne peut pas dire autre chose que la file. Les
+   boutons d'un groupe (qualite, rythme) decrivent le choix en service ; la
+   fiche permet ensuite de passer aux autres choix du groupe. */
+
+const fiche = { sujet: '', valeur: null, demande: 0 };
+
+function nomSujetFiche(sujet, valeur) {
+  if (sujet === 'preset') {
+    const p = (etat.presets || []).find((x) => x.cle === valeur);
+    return p ? p.nom : t('ui.fiche.nom.preset');
+  }
+  if (sujet === 'rythme') return valeur ? t('ui.rythme.' + valeur) : t('ui.fiche.nom.rythme');
+  if (sujet === 'auto') return t('ui.rythme.auto');
+  return t('ui.fiche.nom.' + sujet);
+}
+
+function majBoutonsInfo() {
+  const r = etat.rythme || {};
+  $$('[data-fiche-groupe]').forEach((b) => {
+    b.dataset.ficheValeur = b.dataset.ficheGroupe === 'preset' ? (etat.config.preset || 'qualite')
+      : (r.choisi || 'vitesse');
+  });
+  $$('.bouton-info[data-fiche-sujet]').forEach((b) => {
+    const nom = nomSujetFiche(b.dataset.ficheSujet, b.dataset.ficheValeur || null);
+    b.setAttribute('aria-label', t('ui.fiche.ouvrir', { nom }));
+    b.title = t('ui.fiche.ouvrir', { nom });
+  });
+}
+
+async function ouvrirFiche(sujet, valeur) {
+  const numero = ++fiche.demande;
+  fiche.sujet = sujet;
+  fiche.valeur = valeur || null;
+  const voile = $('#modale-fiche');
+  if (!voile.classList.contains('ouvert')) {
+    $('#fiche-titre').textContent = t('ui.fiche.ouvrir', { nom: nomSujetFiche(sujet, valeur) });
+    $('#fiche-contexte').textContent = t('ui.fiche.chargement');
+    $('#fiche-autres').innerHTML = '';
+    $('#fiche-verdict').textContent = '';
+    $('#fiche-sections').innerHTML = '';
+    ouvrirModale('#modale-fiche');
+  }
+  $('#fiche-corps').setAttribute('aria-busy', 'true');
+  let d = null;
+  try {
+    d = await appelPasserelle('decrire_reglage', { sujet, valeur: valeur || null });
+  } catch (e) {
+    console.error(e);
+  }
+  if (numero !== fiche.demande) return;
+  dessinerFiche(d);
+}
+
+function dessinerFiche(d) {
+  $('#fiche-corps').removeAttribute('aria-busy');
+  const focusAutre = document.activeElement && document.activeElement.closest('#fiche-autres')
+    ? document.activeElement.dataset : null;
+  if (!d || !d.ok) {
+    $('#fiche-titre').textContent = t('ui.fiche.titre');
+    $('#fiche-contexte').textContent = '';
+    $('#fiche-autres').innerHTML = '';
+    $('#fiche-verdict').textContent = '';
+    $('#fiche-sections').innerHTML = encartAttention((d && d.message) || t('ui.fiche.erreur'));
+    return;
+  }
+  $('#fiche-titre').textContent = d.titre_fiche || t('ui.fiche.titre');
+  $('#fiche-contexte').textContent = d.contexte || '';
+  const autres = d.autres || [];
+  $('#fiche-autres').hidden = !autres.length;
+  $('#fiche-autres').innerHTML = autres.map((a) => {
+    const actif = a.sujet === d.sujet && String(a.valeur || '') === String(d.valeur || '');
+    return `<button type="button" class="fiche-autre" data-fiche-sujet="${ech(a.sujet)}"
+      data-fiche-valeur="${ech(a.valeur || '')}" aria-pressed="${actif ? 'true' : 'false'}">${ech(a.nom)}</button>`;
+  }).join('');
+  $('#fiche-verdict').textContent = d.verdict || '';
+  $('#fiche-sections').innerHTML = (d.sections || []).map((s) => `
+    <section class="fiche-section" aria-labelledby="fiche-s-${ech(s.cle)}">
+      <h3 id="fiche-s-${ech(s.cle)}">${ech(s.titre)}</h3>
+      <ul class="fiche-lignes">${(s.lignes || []).map((l) => `
+        <li><span class="fiche-libelle">${ech(l.libelle)}</span><span class="fiche-valeur">${ech(l.valeur)}</span></li>`).join('')}
+      </ul>
+    </section>`).join('');
+  if (focusAutre) {
+    const meme = $$('#fiche-autres .fiche-autre').find((b) => b.dataset.ficheSujet === focusAutre.ficheSujet
+      && b.dataset.ficheValeur === focusAutre.ficheValeur);
+    if (meme) meme.focus({ preventScroll: true });
+  }
 }
 
 /* Groupe de boutons radio : fleches pour passer d'un choix a l'autre. */
@@ -732,6 +836,7 @@ function majVitesse() {
   $('#btn-lancer-banc').style.display = banc ? 'none' : '';
   $('#btn-reglage-auto').style.display =
     (v.reglage && Object.keys(v.reglage).length) ? '' : 'none';
+  $('#info-reglage-auto').style.display = $('#btn-reglage-auto').style.display;
   if (v.conseil && Object.keys(v.conseil).length && !banc) {
     $('#banc-resultat').style.display = 'block';
     $('#banc-conseil').textContent = t('ui.banc.conseil', { reglage: v.resume_conseil || '--' });
@@ -920,6 +1025,7 @@ function majRythme() {
   if (etat.enCours) notes.push(encartInfo(t('ui.rythme.prochaine')));
   $('#rythme-retour').innerHTML = notes.join('');
   majLancement();
+  majBoutonsInfo();
 }
 
 /* Preset ou rythme change : toutes les durees affichees en dependent (cartes,
@@ -3048,6 +3154,13 @@ document.addEventListener('DOMContentLoaded', () => {
     pywebview.api.arreter();
     $('#btn-arreter').disabled = true;
     setEtat(t('ui.etat.arret'), '');
+  });
+
+  // Fiches « ce que ca change » : un seul ecouteur pour tous les boutons
+  // d'information, ceux des cartes redessinees comme ceux de la fiche.
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-fiche-sujet]');
+    if (b) ouvrirFiche(b.dataset.ficheSujet, b.dataset.ficheValeur || null);
   });
 
   // Modales : fermeture

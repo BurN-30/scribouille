@@ -115,6 +115,8 @@
         <div class="choix">
           <span class="choix-libelle" id="lbl-qualite" data-i18n="ui.lance.qualite"></span>
           <div class="segments" id="segments-qualite" role="radiogroup" aria-labelledby="lbl-qualite"></div>
+          <button type="button" class="bouton-info" data-fiche-groupe="preset" data-fiche-sujet="preset" aria-haspopup="dialog">
+            <svg class="icone-s icone"><use href="#i-info"></use></svg></button>
         </div>
         <div class="choix">
           <span class="choix-libelle" id="lbl-rythme" data-i18n="ui.lance.rythme"></span>
@@ -123,6 +125,8 @@
             <button class="segment" role="radio" data-rythme="equilibre" aria-checked="false" data-i18n="ui.rythme.equilibre"></button>
             <button class="segment" role="radio" data-rythme="discret" aria-checked="false" data-i18n="ui.rythme.discret"></button>
           </div>
+          <button type="button" class="bouton-info" data-fiche-groupe="rythme" data-fiche-sujet="rythme" aria-haspopup="dialog">
+            <svg class="icone-s icone"><use href="#i-info"></use></svg></button>
         </div>
         <div class="choix" id="choix-voix" hidden>
           <span class="choix-libelle" id="lbl-voix" data-i18n="ui.lance.voix"></span>
@@ -325,15 +329,23 @@
             <button class="rythme" data-rythme="discret" role="radio" aria-checked="false">
               <span data-i18n="ui.rythme.discret"></span></button>
           </div>
-          <div class="rythme-desc" id="rythme-desc">--</div>
-          <label class="bascule">
-            <input type="checkbox" id="opt-rythme-auto">
-            <span class="piste"></span>
-            <span>
-              <span class="libelle" data-i18n="ui.rythme.auto"></span><br>
-              <span class="sous-libelle" id="rythme-auto-aide"></span>
-            </span>
-          </label>
+          <div class="ligne-info">
+            <div class="rythme-desc" id="rythme-desc">--</div>
+            <button type="button" class="bouton-info" data-fiche-groupe="rythme" data-fiche-sujet="rythme" aria-haspopup="dialog">
+              <svg class="icone-s icone"><use href="#i-info"></use></svg></button>
+          </div>
+          <div class="ligne-info">
+            <label class="bascule">
+              <input type="checkbox" id="opt-rythme-auto">
+              <span class="piste"></span>
+              <span>
+                <span class="libelle" data-i18n="ui.rythme.auto"></span><br>
+                <span class="sous-libelle" id="rythme-auto-aide"></span>
+              </span>
+            </label>
+            <button type="button" class="bouton-info" data-fiche-sujet="auto" aria-haspopup="dialog">
+              <svg class="icone-s icone"><use href="#i-info"></use></svg></button>
+          </div>
           <div id="rythme-retour"></div>
         </div>
 
@@ -645,14 +657,18 @@
         </div>
 
         <div class="bloc-reglage">
-          <label class="bascule">
-            <input type="checkbox" id="opt-avance">
-            <span class="piste"></span>
-            <span>
-              <span class="libelle" data-i18n="ui.avance.bascule"></span><br>
-              <span class="sous-libelle" data-i18n="ui.avance.bascule_aide"></span>
-            </span>
-          </label>
+          <div class="ligne-info">
+            <label class="bascule">
+              <input type="checkbox" id="opt-avance">
+              <span class="piste"></span>
+              <span>
+                <span class="libelle" data-i18n="ui.avance.bascule"></span><br>
+                <span class="sous-libelle" data-i18n="ui.avance.bascule_aide"></span>
+              </span>
+            </label>
+            <button type="button" class="bouton-info" data-fiche-sujet="avance" aria-haspopup="dialog">
+              <svg class="icone-s icone"><use href="#i-info"></use></svg></button>
+          </div>
           <div id="bloc-avance" style="display:none">
             <div class="champ">
               <label for="modele-avance" data-i18n="ui.avance.modele"></label>
@@ -683,14 +699,18 @@
                 <span class="sous-libelle" data-i18n="ui.avance.salle_aide"></span>
               </span>
             </label>
-            <label class="bascule">
-              <input type="checkbox" id="opt-processeur">
-              <span class="piste"></span>
-              <span>
-                <span class="libelle" data-i18n="ui.avance.processeur"></span><br>
-                <span class="sous-libelle" data-i18n="ui.avance.processeur_aide"></span>
-              </span>
-            </label>
+            <div class="ligne-info">
+              <label class="bascule">
+                <input type="checkbox" id="opt-processeur">
+                <span class="piste"></span>
+                <span>
+                  <span class="libelle" data-i18n="ui.avance.processeur"></span><br>
+                  <span class="sous-libelle" data-i18n="ui.avance.processeur_aide"></span>
+                </span>
+              </label>
+              <button type="button" class="bouton-info" data-fiche-sujet="forcer" aria-haspopup="dialog">
+                <svg class="icone-s icone"><use href="#i-info"></use></svg></button>
+            </div>
           </div>
         </div>
       </section>
@@ -739,12 +759,18 @@
         </div>
         <div class="bloc-reglage" id="bloc-vitesse">
           <span class="titre-section" data-i18n="ui.section.vitesse"></span>
-          <div class="sous-libelle" id="vitesse-reglage">--</div>
+          <div class="ligne-info">
+            <div class="sous-libelle" id="vitesse-reglage">--</div>
+            <button type="button" class="bouton-info" data-fiche-sujet="actuel" aria-haspopup="dialog">
+              <svg class="icone-s icone"><use href="#i-info"></use></svg></button>
+          </div>
           <div id="vitesse-alerte"></div>
           <div class="proposition" id="bloc-proposition" hidden>
             <div class="proposition-titre">
               <svg class="icone-s icone"><use href="#i-etincelle"></use></svg>
               <span data-i18n="ui.proposition.titre"></span>
+              <button type="button" class="bouton-info" data-fiche-sujet="proposition" aria-haspopup="dialog">
+                <svg class="icone-s icone"><use href="#i-info"></use></svg></button>
             </div>
             <p class="proposition-phrase" id="proposition-phrase"></p>
             <p class="sous-libelle" id="proposition-rythme"></p>
@@ -768,6 +794,9 @@
               <svg class="icone-s icone"><use href="#i-reprise"></use></svg>
               <span data-i18n="ui.vitesse.auto"></span>
             </button>
+            <button type="button" class="bouton-info" id="info-reglage-auto" data-fiche-sujet="automatique"
+                    aria-haspopup="dialog" style="display:none">
+              <svg class="icone-s icone"><use href="#i-info"></use></svg></button>
           </div>
         </div>
       </section>
@@ -806,7 +835,11 @@
             </button>
           </div>
           <div id="banc-resultat" class="etape-extension" style="display:none">
-            <div class="sous-libelle" id="banc-conseil">--</div>
+            <div class="ligne-info">
+              <div class="sous-libelle" id="banc-conseil">--</div>
+              <button type="button" class="bouton-info" data-fiche-sujet="banc" aria-haspopup="dialog">
+                <svg class="icone-s icone"><use href="#i-info"></use></svg></button>
+            </div>
             <textarea id="banc-rapport" readonly spellcheck="false" rows="9" data-i18n-aria="ui.banc.rapport"></textarea>
             <div class="rangee-boutons">
               <button class="bouton bouton-accent" id="btn-appliquer-banc">
@@ -1052,6 +1085,28 @@
 <!-- ================================ Modales =========================== -->
 
 <!-- Premier lancement : ce que fait l'application, le reglage propose, lancer. -->
+<!-- Fiche « ce que ça change » d'un choix : lignes fournies par Python
+     (app/description_reglage.py), jamais ecrites ici. -->
+<div class="voile" id="modale-fiche">
+  <div class="modale modale-fiche" aria-describedby="fiche-contexte">
+    <div class="modale-entete">
+      <svg class="icone"><use href="#i-info"></use></svg>
+      <h2 id="fiche-titre" data-i18n="ui.fiche.titre"></h2>
+      <button class="bouton-icone" data-fermer><svg class="icone"><use href="#i-croix"></use></svg></button>
+    </div>
+    <div class="modale-corps" id="fiche-corps" aria-live="polite">
+      <p class="fiche-contexte" id="fiche-contexte"></p>
+      <div class="fiche-autres" id="fiche-autres" role="group" data-i18n-aria="ui.fiche.voir"></div>
+      <p class="fiche-verdict" id="fiche-verdict"></p>
+      <div id="fiche-sections"></div>
+    </div>
+    <div class="modale-pied">
+      <span class="pousse"></span>
+      <button class="bouton" data-fermer data-i18n="ui.bouton.fermer"></button>
+    </div>
+  </div>
+</div>
+
 <div class="voile" id="modale-accueil">
   <div class="modale modale-accueil">
     <div class="modale-entete">

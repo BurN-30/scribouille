@@ -82,6 +82,10 @@ jobs:
         shell: pwsh
         run: python outils/verifier_ligne_de_commande.py
 
+      - name: Fiches « ce que ça change » (fiche contre file réelle)
+        shell: pwsh
+        run: python outils/verifier_fiches.py
+
       # Le service de vérification est en anglais : les vérificateurs qui
       # comparent des messages repassent avec la langue du système forcée au
       # français (point d'essai de app/langues.py). Une langue choisie doit

@@ -546,6 +546,54 @@ p.aide { margin: 0 0 8px; }
 .preset .desc { display: block; font-size: 12.5px; color: var(--texte-doux); margin-top: 3px; padding-left: 22px; }
 .preset .chiffres { display: block; font-size: 12px; color: var(--texte-faible); margin-top: 4px; padding-left: 22px; font-variant-numeric: tabular-nums; }
 
+/* Bouton d'information « ce que ça change », à côté d'un choix. */
+.bouton-info {
+  flex: none; display: inline-grid; place-items: center;
+  width: 28px; height: 28px; padding: 0; border-radius: 50%;
+  border: 1px solid transparent; background: none; color: var(--texte-faible);
+  transition: background var(--vitesse) ease, color var(--vitesse) ease, border-color var(--vitesse) ease;
+}
+.bouton-info:hover { background: var(--carte-creuse); color: var(--accent); border-color: var(--bordure); }
+.bouton-info[aria-expanded="true"] { color: var(--accent); }
+.preset-ligne { position: relative; }
+.preset-ligne .preset { padding-right: 46px; }
+.preset-ligne .preset-info { position: absolute; top: 7px; right: 8px; }
+.ligne-info { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.ligne-info > :first-child { flex: 1 1 auto; min-width: 0; }
+.proposition-titre .bouton-info { margin-left: auto; }
+
+/* La fiche elle-même : des lignes courtes, libellé puis valeur. */
+.modale-fiche { max-width: 680px; }
+.modale-corps .fiche-contexte { color: var(--texte-faible); margin-bottom: 8px; }
+.fiche-autres { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; }
+.fiche-autre {
+  border: 1px solid var(--bordure-forte); background: var(--carte-creuse); color: var(--texte-doux);
+  border-radius: 999px; padding: 3px 11px; min-height: 28px; font-size: 12.5px; font-weight: 600;
+}
+.fiche-autre:hover { color: var(--texte); background: var(--carte); }
+.fiche-autre[aria-pressed="true"] { background: var(--accent-doux); color: var(--accent); border-color: var(--accent); }
+.modale-corps .fiche-verdict {
+  color: var(--texte); font-size: 13.5px; margin-bottom: 4px;
+  padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--carte-creuse);
+  border-radius: 0 var(--rayon-petit) var(--rayon-petit) 0;
+}
+.modale-corps p.fiche-verdict { max-width: none; }
+.fiche-section { margin-top: 20px; }
+#fiche-verdict:empty + #fiche-sections .fiche-section:first-child { margin-top: 4px; }
+.modale-corps ul.fiche-lignes { list-style: none; margin: 0; padding: 0; }
+.modale-corps .fiche-lignes li {
+  display: grid; grid-template-columns: minmax(120px, 34%) 1fr; gap: 2px 12px;
+  margin: 0; padding: 5px 0; border-bottom: 1px solid var(--bordure);
+  font-size: 13px; line-height: 1.45; color: var(--texte);
+}
+.modale-corps .fiche-lignes li:last-child { border-bottom: none; }
+.fiche-libelle { color: var(--texte-faible); font-weight: 600; }
+.fiche-valeur { min-width: 0; overflow-wrap: anywhere; }
+/* Fenêtre étroite : le libellé passe au-dessus de sa valeur. */
+@media (max-width: 560px) {
+  .modale-corps .fiche-lignes li { grid-template-columns: 1fr; }
+}
+
 /* Rythme : trois positions côte à côte, une seule active. */
 .rythmes {
   display: grid; grid-template-columns: repeat(3, 1fr);

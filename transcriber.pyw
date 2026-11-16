@@ -495,6 +495,13 @@ class Passerelle:
         processeur_pct : part d'un cœur depuis l'appel précédent (null au
         premier appel) ; processeur_poste_pct : part du poste entier.
         « affichage » : les processus WebView2 de la fenêtre.
+
+    decrire_reglage({sujet, valeur}) -> {ok, titre_fiche, contexte, autres,
+        verdict, sections: [{cle, titre, lignes: [{cle, libelle, valeur}]}],
+        et le plan structuré (modele, moteur, peripherique, faisceau, lots,
+        rythme, cout...)}
+        Fiche « ce que ça change » d'un choix (`app/description_reglage.py`),
+        sans rien appliquer.
     """
 
     def __init__(self):
@@ -941,6 +948,33 @@ class Passerelle:
         self._enregistrer_config()
         self._effet_reglage = reglage_machine.appliquer_au_materiel(self.config, self.materiel)
         return {"ok": True, "message": langues.t("adapt.applique", phrase=proposition["phrase"])}
+
+    def decrire_reglage(self, demande: dict | None = None) -> dict:
+        """
+        Fiche « ce que ça change » d'un choix (bouton d'information) : ce que
+        la file appliquerait réellement sur ce poste, en lignes courtes
+        (`app/description_reglage.py`, la même source que `scribouille
+        reglages decrire`). Rien n'est appliqué ni enregistré.
+
+        demande : {sujet, valeur} ; sujet parmi actuel, preset, rythme, auto,
+        proposition, banc, automatique, forcer, avance.
+        """
+        from app import description_reglage as fiche
+
+        demande = demande if isinstance(demande, dict) else {}
+        sujet = str(demande.get("sujet") or "actuel")
+        valeur = demande.get("valeur")
+        try:
+            proposition = None
+            if sujet == "proposition":
+                proposition = {k: v for k, v in (self._proposition or {}).items() if k != "_vue"} or None
+            choix, contexte, autres = fiche.choix_du_sujet(self.config, self.materiel, sujet, valeur, proposition)
+            resultat = fiche.decrire(self.config, self.materiel, choix, sujet)
+        except Exception as exc:
+            journal.exception("Fiche du réglage impossible", exc)
+            return {"ok": False, "message": langues.t("fiche.erreur")}
+        return {"ok": True, "sujet": sujet, "valeur": valeur, "titre_fiche": fiche.titre_sujet(sujet, valeur),
+                "contexte": contexte, "autres": autres, **resultat}
 
     def ecarter_proposition(self) -> dict:
         self.config["proposition_ecartee"] = __import__(

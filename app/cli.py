@@ -365,11 +365,18 @@ def _analyseur() -> argparse.ArgumentParser:
     choix.add_argument("--nouveau", action="store_true", help="Écrit toujours une variante numérotée (-2.md).")
     x.add_argument("--json", action="store_true")
 
-    g = commande("reglages", "[liste|lire CLE|definir CLE=VALEUR...|defaut CLE...]", "lire et changer les réglages",
-                 "Chaque réglage, sa valeur par défaut et son effet : docs/reglages.md.")
-    _ajouter(g, "action", nargs="?", default="liste", choices=("liste", "lire", "definir", "defaut"),
-             metavar="liste|lire|definir|defaut", aide="Défaut : liste.")
-    _ajouter(g, "valeurs", nargs="*", metavar="CLE|CLE=VALEUR", aide="Clés, ou paires pour definir.")
+    g = commande("reglages", "[liste|lire CLE|definir CLE=VALEUR...|defaut CLE...|decrire [CLE=VALEUR...]]",
+                 "lire et changer les réglages, dire ce que change un réglage",
+                 "Chaque réglage, sa valeur par défaut et son effet : docs/reglages.md. decrire : ce que la "
+                 "transcription appliquerait réellement sur ce poste (modèle, moteur, périphérique, précision, "
+                 "faisceau, lots, fils, priorité, durée pour une heure, mémoire, justesse mesurée), pour le réglage "
+                 "en service ou pour celui que donneraient les paires CLE=VALEUR (preset, rythme, rythme_auto, "
+                 "moteur, peripherique, mode_avance, modele_avance, beam_size, forcer_processeur) ou les mots "
+                 "proposition, banc, automatique ; rien n'est enregistré.")
+    _ajouter(g, "action", nargs="?", default="liste", choices=("liste", "lire", "definir", "defaut", "decrire"),
+             metavar="liste|lire|definir|defaut|decrire", aide="Défaut : liste.")
+    _ajouter(g, "valeurs", nargs="*", metavar="CLE|CLE=VALEUR",
+             aide="Clés, ou paires pour definir et decrire ; decrire : aussi proposition, banc ou automatique.")
     g.add_argument("--json", action="store_true")
 
     d = commande("diagnostic", "[--materiel]", "prêt ou non, et pourquoi")
@@ -694,6 +701,15 @@ def _controler_options(commande: str, o) -> None:
             refuser("reglages lire CLE : une seule clé")
         if o.action in ("lire", "defaut") and any("=" in v for v in o.valeurs):
             refuser(f"reglages {o.action} CLE : la clé seule, sans « = »")
+        if o.action == "decrire":
+            mots = [v for v in o.valeurs if "=" not in v]
+            if len(mots) > 1 or any(m not in DECRIRE_MOTS for m in mots):
+                refuser(f"reglages decrire : paires CLE=VALEUR, ou un seul mot parmi {', '.join(DECRIRE_MOTS)}"
+                        f" (« {' '.join(mots)} »)")
+            for v in o.valeurs:
+                if "=" in v and v.partition("=")[0].strip() not in DECRIRE_CLES:
+                    refuser(f"reglages decrire : clé « {v.partition('=')[0].strip()} » non décrite ; clés : "
+                            + ", ".join(DECRIRE_CLES))
     elif commande == "effacer":
         if o.complet and (o.cles or o.liberable):
             refuser("--complet ne va ni avec --liberable ni avec des clés")
@@ -1571,12 +1587,68 @@ def _valider(cle: str, valeur) -> None:
         raise Echec("valeur", f"{cle} : parmi {', '.join(v or '(vide)' for v in fermes[cle])}", ARGUMENTS)
 
 
+#: `reglages decrire` : les mots (choix tout faits) et les clés qu'il accepte.
+DECRIRE_MOTS = ("proposition", "banc", "automatique")
+DECRIRE_CLES = ("preset", "rythme", "rythme_auto", "moteur", "peripherique", "mode_avance", "modele_avance",
+                "beam_size", "forcer_processeur", "condition_on_previous_text")
+
+
+def _reglages_decrire(options, sortie: Sortie, config: dict, mat) -> int:
+    """
+    Ce que change un réglage, sans rien enregistrer : les mêmes lignes que la
+    fiche de la fenêtre (`app/description_reglage.py`).
+    """
+    from . import config as config_module, description_reglage, reglage_machine
+
+    mots = [v for v in options.valeurs if "=" not in v]
+    sujet = mots[0] if mots else "actuel"
+    choix, contexte, _autres = description_reglage.choix_du_sujet(config, mat, sujet)
+    if sujet == "banc" and not choix:
+        raise Echec("sans_banc", contexte, ARGUMENTS, "scribouille mesurer banc")
+    paires = [v for v in options.valeurs if "=" in v]
+    machine = None
+    for brut in paires:
+        cle, _egal, texte = brut.partition("=")
+        cle, texte = cle.strip(), texte.strip()
+        if cle == "moteur":
+            if texte in ("", "auto"):
+                machine = {}
+                continue
+            if texte not in reglage_machine.MOTEURS:
+                raise Echec("valeur", "moteur : auto, ctranslate2 ou openvino", ARGUMENTS)
+            machine = dict(reglage_machine.lire(config, mat) if machine is None else machine)
+            machine["moteur"] = texte
+        elif cle == "peripherique":
+            if texte.upper() not in ("CPU", "GPU", "NPU", ""):
+                raise Echec("valeur", "peripherique : CPU, GPU ou NPU", ARGUMENTS)
+            machine = dict(reglage_machine.lire(config, mat) if machine is None else machine)
+            machine["peripherique"] = texte.upper() or "CPU"
+            machine.setdefault("moteur", "openvino")
+        else:
+            valeur = _convertir(cle, texte, config_module.DEFAUTS[cle])
+            _valider(cle, valeur)
+            choix[cle] = valeur
+    if machine is not None:
+        # Comme `reglages definir` : poser OpenVINO lève la suspension de la puce.
+        choix["reglage"] = machine
+        choix["leve_suspension"] = machine.get("moteur") == "openvino"
+    if paires:
+        contexte = langues.t("fiche.contexte.hypothese", paires=" ".join(paires))
+    fiche = description_reglage.decrire(config, mat, choix)
+    fiche["contexte"] = contexte
+    sortie.donnees({"fiche": fiche, "enregistre": False},
+                   description_reglage.texte(fiche, f"{fiche['titre']}\n  {contexte}"))
+    return OK
+
+
 def cmd_reglages(options, sortie: Sortie) -> int:
     from . import config as config_module, reglage_machine
     from .materiel import detecter_au_demarrage
 
     config = config_module.charger()
     mat, _ = detecter_au_demarrage()
+    if options.action == "decrire":
+        return _reglages_decrire(options, sortie, config, mat)
 
     def valeurs() -> list[dict]:
         machine = reglage_machine.lire(config, mat)
