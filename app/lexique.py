@@ -81,6 +81,60 @@ def est_courant(mot: str) -> bool:
     return len(morceaux) > 1 and all(m in courants or len(m) <= 2 for m in morceaux)
 
 
+#: Terminaisons qui font d'un mot une forme du français (participe, verbe
+#: conjugué, dérivé), même absente de la liste des 40 000 : « kiffé »,
+#: « galérait », « bidouillage ». Un nom de produit ou de personne mal entendu
+#: n'a presque jamais cette allure ; un mot familier ou fléchi, si.
+TERMINAISONS_FRANCAISES = (
+    "é", "ée", "és", "ées", "ait", "aient", "èrent", "erait", "eraient", "ement", "ements",
+    "ation", "ations", "ition", "itions", "age", "ages", "euse", "euses", "ité", "ités",
+    "isme", "iste", "istes", "ique", "iques",
+)
+#: Flexions retirées pour retrouver un mot de la liste : « consos » (conso),
+#: « taffé » (taffe), « galéré » (galère), « checké » (check).
+_FLEXIONS = (
+    "s", "x", "e", "es", "er", "ez", "é", "ée", "és", "ées", "ais", "ait", "aient", "ant", "ent",
+    "ons", "ions", "iez", "eur", "eurs", "ette", "ettes", "ment",
+)
+_FINS_RADICAL = ("", "e", "er", "re", "ir", "s")
+
+
+def forme_francaise(mot: str) -> bool:
+    """
+    Le mot a-t-il l'allure d'un mot du français, même absent de la liste des
+    mots courants ? Oui s'il y figure, s'il porte une terminaison de participe,
+    de verbe conjugué ou de dérivé (`TERMINAISONS_FRANCAISES`), ou s'il est une
+    flexion d'un mot de la liste (pluriel, féminin, conjugaison, participe :
+    « consos », « taffé », « galéré »). Garde-fou du rapprochement
+    phonétique : un tel mot n'est jamais remplacé par un terme qui lui
+    ressemble à l'oreille (dans le doute, on ne corrige pas). Sans lexique :
+    oui, par prudence.
+    """
+    forme = forme_comparable(mot)
+    if not forme or est_courant(forme):
+        return True
+    courants = mots_courants()
+    for fin in TERMINAISONS_FRANCAISES:
+        if forme.endswith(fin) and len(forme) >= len(fin) + 2:
+            return True
+    for flexion in _FLEXIONS:
+        if not forme.endswith(flexion):
+            continue
+        radical = forme[:-len(flexion)]
+        if len(radical) < 3:
+            continue
+        radicaux = {radical}
+        position = radical.rfind("é")
+        if position >= 0:
+            radicaux.add(radical[:position] + "è" + radical[position + 1:])
+        for r in radicaux:
+            for fin in _FINS_RADICAL:
+                candidat = r + fin
+                if candidat != forme and candidat in courants:
+                    return True
+    return False
+
+
 #: Civilités : un mot courant qui les suit est un nom (« madame Vallée »).
 CIVILITES = frozenset({"m", "mme", "mlle", "monsieur", "madame", "mademoiselle", "dr", "docteur",
                        "maître", "me"})
@@ -215,6 +269,11 @@ def distance(a: str, b: str, plafond: int | None = None) -> int:
 
 #: Sous cette longueur de clé, aucun rapprochement : trop de mots sonnent pareil.
 CLE_MIN_RAPPROCHEMENT = 4
+#: Sous cette longueur de clé (ce qui a été écrit), le rapprochement n'admet
+#: aucun écart : un mot court qui sonne À PEU PRÈS comme un terme est trop
+#: souvent un mot familier ou abrégé (« docu », « prelot », « consos » sur des
+#: réunions réelles), seule une forme qui sonne EXACTEMENT comme lui l'est.
+CLE_COURTE_EXACTE = 6
 
 
 def tolerance(cle: str) -> int:

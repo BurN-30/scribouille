@@ -1,0 +1,47 @@
+# Versions exactes de la construction publiée (.github/actions/construire).
+#
+#   pip install -r requirements.txt -r requirements-build.txt -c packaging/contraintes-construction.txt
+#
+# requirements.txt fixe les bibliothèques de Scribouille ; leurs dépendances
+# (numpy, onnxruntime, le client HTTP de huggingface_hub...) restaient libres,
+# et l'exécuteur prenait la dernière version parue le jour de la publication.
+# La 3.0.0 essayée sur un vrai portable a été construite avec celles-ci (Python
+# 3.12.8) : la version publiée est construite avec les mêmes, pour que ce qui
+# est livré soit ce qui a été essayé. À relever à la main, puis à réessayer,
+# quand on veut des versions plus récentes.
+
+pip==26.3
+pyinstaller==6.22.3
+pyinstaller-hooks-contrib==2026.10
+altgraph==0.17.5
+pefile==2024.8.26
+pywin32-ctypes==0.2.3
+packaging==26.3
+setuptools==84.2.1
+
+numpy==2.5.4
+onnxruntime==1.31.1
+flatbuffers==25.12.19
+protobuf==7.36.2
+tokenizers==0.23.3
+huggingface_hub==2.4.0
+hf-xet==1.8.0
+httpx2==2.16.0
+httpcore2==2.16.0
+anyio==4.16.0
+h11==0.16.0
+idna==3.20
+truststore==0.10.5
+click==8.5.1
+filelock==4.2.10
+fsspec==2026.9.0
+tqdm==4.70.1
+colorama==0.4.6
+PyYAML==6.0.3
+pythonnet==3.2.1
+clr_loader==0.3.1
+cffi==2.1.1
+pycparser==3.12
+bottle==0.13.4
+proxy_tools==0.1.0
+typing_extensions==4.16.0

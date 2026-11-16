@@ -2,10 +2,14 @@
 #
 # Deux déclenchements :
 #   - un tag « vX.Y.Z » : construit, vérifie, et publie une Release avec le
-#     programme d'installation en pièce jointe ;
-#   - « Run workflow » depuis l'onglet Actions : construit et vérifie tout,
-#     dépose les fichiers en artefacts, mais ne publie rien. C'est ce qui
-#     permet d'essayer la chaîne sans poser de tag.
+#     programme d'installation, le paquet portable et leurs empreintes SHA-256 ;
+#   - « Run workflow » depuis l'onglet Actions (seulement quand ce fichier est
+#     sur la branche par défaut) : construit et vérifie tout, dépose les
+#     fichiers en artefacts, mais ne publie rien.
+#
+# La construction elle-même est dans .github/actions/construire : la même que
+# celle de l'essai de l'installateur (essai-installateur.yml), qui installe,
+# met à jour et désinstalle pour de vrai le programme construit, sans tag.
 #
 # MARQUEUR [reinstallation-requise]
 # ---------------------------------
@@ -27,11 +31,6 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
-    inputs:
-      version:
-        description: "Version à construire pour l'essai, sans le v (défaut : celle de app/__init__.py)"
-        required: false
-        default: ""
 
 permissions:
   contents: write
@@ -40,109 +39,48 @@ jobs:
   construire:
     name: Construire et publier
     runs-on: windows-latest
+    timeout-minutes: 60
 
     steps:
       - name: Récupérer les sources
         uses: actions/checkout@v4
 
-      - name: Installer Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Déterminer la version
-        id: version
-        shell: pwsh
-        run: |
-          # La version de l'application fait foi. Un tag qui ne lui correspond
-          # pas est une erreur : mieux vaut arrêter que publier un numéro faux.
-          $source = (Select-String -Path app/__init__.py -Pattern '^VERSION\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
-          Write-Host "Version de l'application : $source"
-
-          if ($env:GITHUB_REF -like 'refs/tags/v*') {
-            $tag = $env:GITHUB_REF -replace '^refs/tags/v', ''
-            if ($tag -ne $source) {
-              Write-Error "Le tag v$tag ne correspond pas a VERSION = $source dans app/__init__.py."
-              exit 1
-            }
-            "publier=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          } else {
-            "publier=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          }
-          "version=$source" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-
-      - name: Installer les dépendances
-        shell: pwsh
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt -r requirements-build.txt
-
-      - name: Construire l'application
-        shell: pwsh
-        run: pyinstaller --noconfirm --clean --distpath dist --workpath build packaging/scribouille.spec
-
-      - name: Vérifier l'exécutable construit
-        shell: pwsh
-        run: |
-          # Le mode « --verifier » contrôle les imports, FFmpeg et l'écriture des
-          # dossiers de travail. Son code de retour arrête la chaîne si quelque
-          # chose manque, avant que le programme d'installation ne soit fabriqué.
-          & .\dist\Scribouille\scribouille.com --verifier
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "La verification de l'executable a echoue."
-            exit 1
-          }
-
-      - name: Installer Inno Setup
-        shell: pwsh
-        run: choco install innosetup --no-progress --yes
-
-      - name: Fabriquer le programme d'installation
-        shell: pwsh
-        run: |
-          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-          & $iscc "/DVersionApp=${{ steps.version.outputs.version }}" packaging\setup.iss
-          if ($LASTEXITCODE -ne 0) { exit 1 }
-          Get-ChildItem packaging\sortie
+      - name: Construire
+        id: construire
+        uses: ./.github/actions/construire
 
       - name: Préparer les notes de version
-        id: notes
         shell: pwsh
         run: |
-          # Les notes sont la section du CHANGELOG portant le numéro publié :
-          # une seule source, pas de texte recopié à la main dans la Release.
-          $version = "${{ steps.version.outputs.version }}"
-          $lignes = Get-Content CHANGELOG.md
-          $debut = -1
-          $fin = $lignes.Count
-          for ($i = 0; $i -lt $lignes.Count; $i++) {
-            if ($lignes[$i] -match "^##\s+$([regex]::Escape($version))\s*$") { $debut = $i + 1; continue }
-            if ($debut -ge 0 -and $lignes[$i] -match '^##\s+') { $fin = $i; break }
-          }
-          if ($debut -lt 0) {
-            $corps = "Voir CHANGELOG.md."
-          } else {
-            $corps = ($lignes[$debut..($fin - 1)] -join "`n").Trim()
-          }
-          $corps | Out-File -FilePath notes-version.md -Encoding utf8
-          Get-Content notes-version.md
+          # Les notes sont la section du CHANGELOG portant le numéro publié,
+          # suivies des empreintes : une seule source, rien de recopié à la main.
+          # Sur un tag, une section absente ou encore « non publiée » arrête tout.
+          $publication = @()
+          if ($env:GITHUB_REF -like 'refs/tags/v*') { $publication = @('--publication') }
+          python packaging/notes_version.py "${{ steps.construire.outputs.version }}" --empreintes packaging/sortie/SHA256SUMS.txt --sortie notes-version.md @publication
+          if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: Déposer les fichiers construits
         uses: actions/upload-artifact@v4
         with:
-          name: Scribouille-${{ steps.version.outputs.version }}
+          name: Scribouille-${{ steps.construire.outputs.version }}
           path: |
             packaging/sortie/*.exe
+            packaging/sortie/*.zip
+            packaging/sortie/SHA256SUMS.txt
             notes-version.md
           retention-days: 14
 
       - name: Publier la Release
-        if: steps.version.outputs.publier == 'true'
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          name: Scribouille ${{ steps.version.outputs.version }}
+          name: Scribouille ${{ steps.construire.outputs.version }}
           body_path: notes-version.md
           draft: false
           prerelease: false
-          files: packaging/sortie/Scribouille-Setup-${{ steps.version.outputs.version }}.exe
+          fail_on_unmatched_files: true
+          files: |
+            packaging/sortie/Scribouille-Setup-${{ steps.construire.outputs.version }}.exe
+            packaging/sortie/Scribouille-${{ steps.construire.outputs.version }}-portable.zip
+            packaging/sortie/SHA256SUMS.txt

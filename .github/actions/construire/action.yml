@@ -1,0 +1,91 @@
+# Construction de Scribouille, la même pour la publication (release.yml) et
+# pour l'essai de l'installateur (essai-installateur.yml) : ce qui est essayé
+# est exactement ce qui serait publié. Ne publie rien.
+#
+# Produit, dans packaging/sortie :
+#   Scribouille-Setup-<version>.exe     programme d'installation (Inno Setup)
+#   Scribouille-<version>-portable.zip  le même programme, à décompresser
+#   SHA256SUMS.txt                      empreintes des deux
+#
+# Les sources doivent avoir été récupérées avant (actions/checkout).
+name: Construire Scribouille
+description: Programme gelé, vérification, programme d'installation, paquet portable et empreintes.
+
+outputs:
+  version:
+    description: Version construite, lue dans app/__init__.py.
+    value: ${{ steps.version.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Installer Python
+      uses: actions/setup-python@v5
+      with:
+        # Celle de la construction essayée sur un vrai portable (voir
+        # packaging/contraintes-construction.txt).
+        python-version: "3.12.8"
+        cache: pip
+
+    - name: Déterminer la version
+      id: version
+      shell: pwsh
+      run: |
+        # La version de l'application fait foi. Un tag qui ne lui correspond
+        # pas est une erreur : mieux vaut arrêter que publier un numéro faux.
+        $source = (Select-String -Path app/__init__.py -Pattern '^VERSION\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+        Write-Host "Version de l'application : $source"
+        if ($env:GITHUB_REF -like 'refs/tags/v*') {
+          $tag = $env:GITHUB_REF -replace '^refs/tags/v', ''
+          if ($tag -ne $source) {
+            Write-Error "Le tag v$tag ne correspond pas a VERSION = $source dans app/__init__.py."
+            exit 1
+          }
+        }
+        "version=$source" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+    - name: Installer les dépendances
+      shell: pwsh
+      run: |
+        # Versions exactes : ce qui est publié est ce qui a été essayé.
+        python -m pip install -c packaging/contraintes-construction.txt pip
+        pip install -r requirements.txt -r requirements-build.txt -c packaging/contraintes-construction.txt
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+        python --version
+        pip freeze
+
+    - name: Construire l'application
+      shell: pwsh
+      run: pyinstaller --noconfirm --clean --distpath dist --workpath build packaging/scribouille.spec
+
+    - name: Vérifier l'exécutable construit
+      shell: pwsh
+      run: |
+        # Le mode « --verifier » contrôle les imports, FFmpeg et l'écriture des
+        # dossiers de travail. Son code de retour arrête la chaîne si quelque
+        # chose manque, avant que le programme d'installation ne soit fabriqué.
+        & .\dist\Scribouille\scribouille.com --verifier
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "La verification de l'executable a echoue."
+          exit 1
+        }
+
+    - name: Installer Inno Setup
+      shell: pwsh
+      run: choco install innosetup --no-progress --yes
+
+    - name: Fabriquer le programme d'installation
+      shell: pwsh
+      run: |
+        $iscc = (Get-ChildItem "C:\Program Files (x86)\Inno Setup *\ISCC.exe", "C:\Program Files\Inno Setup *\ISCC.exe" -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
+        if (-not $iscc) { Write-Error "ISCC.exe introuvable apres l'installation d'Inno Setup."; exit 1 }
+        Write-Host "Compilateur : $iscc ($((Get-Item $iscc).VersionInfo.ProductVersion))"
+        & $iscc "/DVersionApp=${{ steps.version.outputs.version }}" packaging\setup.iss
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+
+    - name: Paquet portable et empreintes
+      shell: pwsh
+      run: |
+        python packaging/empaqueter.py --source dist/Scribouille --sortie packaging/sortie
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+        Get-ChildItem packaging\sortie | Format-Table Name, Length

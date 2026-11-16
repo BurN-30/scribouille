@@ -23,8 +23,13 @@ Le vocabulaire au travail : trois étages, mesurables séparément.
     (« rgpd » vers « RGPD »), puis rapprochement phonétique borné. Garde-fous :
     une suite de mots courants n'est jamais remplacée sans contexte (sauf faute
     explicitement forcée), un terme de moins de quatre sons n'est jamais
-    rapproché, une forme déjà juste ou appartenant à un autre terme n'est pas
-    touchée, une égalité entre deux termes ne tranche rien. Chaque
+    rapproché, un mot qui a l'allure du français (familier, fléchi, participe,
+    absent de la liste des mots courants : `lexique.forme_francaise`) non
+    plus, une forme écrite de moins de six sons ne l'est que si elle sonne
+    exactement comme le terme, une forme déjà juste ou appartenant à un autre
+    terme n'est pas touchée, une égalité entre deux termes ne tranche rien.
+    Dans le doute, rien n'est corrigé : un terme manqué plutôt qu'un mot juste
+    abîmé. Chaque
     remplacement est noté (segment, position, avant, après, règle) pour être
     montré et annulé dans la vue de relecture.
 
@@ -356,15 +361,23 @@ class Correcteur:
                         continue
                     if lexique.tous_courants(morceau):
                         continue
-                    k = lexique.cle_phonetique(" ".join(morceau))
-                    if len(k) < 4:
+                    # Un mot qui a l'allure du français (familier, fléchi,
+                    # participe : « kiffé », « consos ») n'est jamais pris pour
+                    # un terme mal entendu : dans le doute, on ne corrige pas.
+                    if any(not lexique.est_courant(m) and lexique.forme_francaise(m) for m in morceau):
                         continue
+                    k = lexique.cle_phonetique(" ".join(morceau))
+                    if len(k) < lexique.CLE_MIN_RAPPROCHEMENT:
+                        continue
+                    # Forme courte : seulement ce qui sonne exactement pareil.
+                    court = len(k) < lexique.CLE_COURTE_EXACTE
                     meilleurs: list[tuple[int, Entree]] = []
                     par_taille = index[longueur_terme]
                     for taille in range(len(k) - 4, len(k) + 5):
                         for p in par_taille.get(taille, ()):
-                            d = lexique.distance(k, p.cle, p.tolerance)
-                            if d <= p.tolerance:
+                            plafond = 0 if court else p.tolerance
+                            d = lexique.distance(k, p.cle, plafond)
+                            if d <= plafond:
                                 meilleurs.append((d, p.entree))
                     if not meilleurs:
                         continue

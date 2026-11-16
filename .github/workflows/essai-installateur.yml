@@ -1,0 +1,94 @@
+# Essai réel du programme d'installation, sans rien publier.
+#
+# Construit exactement ce que la publication construirait (même action
+# .github/actions/construire), puis, sur des exécuteurs Windows jetables,
+# installe, met à jour par-dessus les versions publiées, lance et désinstalle
+# pour de vrai (packaging/essai_installateur.ps1). Un contrôle qui tombe fait
+# échouer le scénario.
+#
+# Ne publie rien : aucun tag, aucune Release, droits en lecture seule. Ne se
+# déclenche jamais sur un tag (seulement sur ces branches, ou à la main une
+# fois ce fichier sur la branche par défaut).
+name: Essai de l'installateur
+
+on:
+  push:
+    branches: ["v2", "main", "essai-installateur"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: essai-installateur-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  construire:
+    name: Construire comme la publication
+    runs-on: windows-latest
+    timeout-minutes: 60
+    outputs:
+      version: ${{ steps.construire.outputs.version }}
+
+    steps:
+      - name: Récupérer les sources
+        uses: actions/checkout@v4
+
+      - name: Construire
+        id: construire
+        uses: ./.github/actions/construire
+
+      - name: Notes de version (comme la publication)
+        shell: pwsh
+        run: |
+          python packaging/notes_version.py "${{ steps.construire.outputs.version }}" --empreintes packaging/sortie/SHA256SUMS.txt --sortie notes-version.md
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Déposer les fichiers construits
+        uses: actions/upload-artifact@v4
+        with:
+          name: Scribouille-${{ steps.construire.outputs.version }}-essai
+          path: |
+            packaging/sortie/*.exe
+            packaging/sortie/*.zip
+            packaging/sortie/SHA256SUMS.txt
+            notes-version.md
+          retention-days: 7
+
+  scenario:
+    name: Scénario ${{ matrix.scenario }}
+    needs: construire
+    runs-on: windows-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: ["neuve", "depuis-2.3.3", "depuis-2.4.0", "cohabitation"]
+
+    steps:
+      - name: Récupérer les sources (script d'essai, extrait audio du banc)
+        uses: actions/checkout@v4
+
+      - name: Récupérer les fichiers construits
+        uses: actions/download-artifact@v4
+        with:
+          name: Scribouille-${{ needs.construire.outputs.version }}-essai
+          path: construit
+
+      - name: Jouer le scénario
+        shell: pwsh
+        run: |
+          $v = "${{ needs.construire.outputs.version }}"
+          ./packaging/essai_installateur.ps1 -Scenario "${{ matrix.scenario }}" `
+            -Installateur "construit/packaging/sortie/Scribouille-Setup-$v.exe" `
+            -Portable "construit/packaging/sortie/Scribouille-$v-portable.zip" `
+            -Rapport "essai-${{ matrix.scenario }}"
+
+      - name: Déposer le rapport du scénario
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: essai-${{ matrix.scenario }}
+          path: essai-${{ matrix.scenario }}
+          retention-days: 7

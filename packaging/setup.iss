@@ -16,7 +16,7 @@
 ;      configuration, ni le glossaire, ni les corrections, ni les modèles.
 ;
 ;  Compilation :
-;      iscc /DVersionApp=2.2.0 packaging\setup.iss
+;      iscc /DVersionApp=3.0.0 packaging\setup.iss
 ;
 ;  Le dossier « dist\Scribouille » doit exister au préalable.
 ; ===========================================================================
@@ -121,6 +121,10 @@ english.EspaceInsuffisant=Only about %1 GB is free on this drive.%n%nThe highest
 english.DossierModelesRefuse=This folder could not be created, or is not writable.%n%nPlease choose another location.
 english.DesinstallerModeles=Also delete the transcription models?%n%nThey take up %1 in:%n%2%n%nAnswer No to keep them: a reinstall will find them again and will have nothing to download.
 english.DesinstallerDonnees=Also delete your personal {#NomApp} data?%n%nThis would permanently erase your glossary, your correction rules, your settings, the logs and the speaker separation components (%2), in:%n%1%n%nAnswer No to keep them.
+english.UniteGo=GB
+english.UniteMo=MB
+english.UniteKo=KB
+english.SeparateurDecimal=.
 english.EffacementComplet=Erase every file {#NomApp} wrote on this computer?%n%n%1%nYour transcriptions are NOT touched. Files that do not belong to {#NomApp} are left in place.%n%nAnswer No to keep everything: a reinstall will find your settings and models again.
 
 french.PageModelesTitre=Emplacement des modèles de transcription
@@ -138,6 +142,10 @@ french.EspaceInsuffisant=Il ne reste qu'environ %1 Go de libre sur ce disque.%n%
 french.DossierModelesRefuse=Ce dossier n'a pas pu être créé, ou n'est pas accessible en écriture.%n%nChoisissez un autre emplacement.
 french.DesinstallerModeles=Supprimer aussi les modèles de transcription ?%n%nIls occupent %1 dans :%n%2%n%nRépondez Non pour les conserver : une réinstallation les retrouvera et n'aura rien à retélécharger.
 french.DesinstallerDonnees=Supprimer aussi vos données personnelles de {#NomApp} ?%n%nCela effacerait définitivement votre glossaire, vos règles de correction, vos réglages, les journaux et les composants de séparation des locuteurs (%2), dans :%n%1%n%nRépondez Non pour les conserver.
+french.UniteGo=Go
+french.UniteMo=Mo
+french.UniteKo=Ko
+french.SeparateurDecimal=,
 french.EffacementComplet=Effacer tous les fichiers que {#NomApp} a écrits sur ce poste ?%n%n%1%nVos transcriptions ne sont PAS touchées. Les fichiers qui ne sont pas à {#NomApp} restent en place.%n%nRépondez Non pour tout garder : une réinstallation retrouvera vos réglages et vos modèles.
 
 [Tasks]
@@ -155,6 +163,23 @@ Name: "{autodesktop}\{#NomApp}"; Filename: "{app}\{#ExeApp}"; WorkingDir: "{app}
 [Run]
 Filename: "{app}\{#ExeApp}"; Description: "{cm:LancerApp}"; Flags: nowait postinstall skipifsilent
 
+[InstallDelete]
+; Mise à jour par-dessus une version antérieure : Inno ne retire jamais un
+; fichier que la nouvelle version ne livre plus. Sans ces lignes, une 2.x mise
+; à jour gardait « WhiScribe.exe » (lançable, qui lit l'ancien dossier de
+; données), son raccourci dans le menu Démarrer et sur le Bureau, et les
+; bibliothèques de l'ancienne version mêlées aux nouvelles dans « _internal ».
+; Rien d'autre que ce que nos versions ont posé : « _internal » est le dossier
+; de PyInstaller, les données de l'utilisateur n'y sont jamais.
+Type: filesandordirs; Name: "{app}\_internal"
+Type: files; Name: "{app}\WhiScribe.exe"
+Type: files; Name: "{app}\whiscribe-verifier.exe"
+Type: files; Name: "{app}\scribouille-verifier.exe"
+Type: files; Name: "{group}\WhiScribe.lnk"
+Type: files; Name: "{group}\Désinstaller WhiScribe.lnk"
+Type: files; Name: "{group}\Uninstall WhiScribe.lnk"
+Type: files; Name: "{autodesktop}\WhiScribe.lnk"
+
 [UninstallDelete]
 ; Fichier écrit après l'installation, donc inconnu de la liste [Files].
 Type: files; Name: "{app}\emplacement-modeles.txt"
@@ -167,6 +192,9 @@ var
   { Vrai quand la question de l'effacement complet a été posée par la ligne
     de commande de l'application (désinstallation). }
   EffacementTraite: Boolean;
+  { Installation seulement : une WhiScribe 2.x reste installée à côté (autre
+    ruche du registre), et l'application partagera son dossier de données. }
+  Cohabitation: Boolean;
 
 { --------------------------------------------------------------------------
   Emplacements partagés avec l'application, voir app/chemins.py
@@ -186,11 +214,63 @@ begin
   Result := ExpandConstant('{localappdata}') + '\WhiScribe';
 end;
 
+{ --------------------------------------------------------------------------
+  WhiScribe 2.x encore installée : même règle que chemins.etat_version_2x
+  -------------------------------------------------------------------------- }
+
+{ Clé de désinstallation de même identifiant dont la version est une 2.x.
+  Présente sans version lisible : tenue pour une 2.x (dans le doute, rien
+  n'est déplacé ni effacé). }
+function Cle2x(Racine: Integer): Boolean;
+var
+  Cle, Version: String;
+begin
+  Result := False;
+  Cle := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{4E1B7C86-8F2A-4B5D-9C31-6D0A4F7E2B93}_is1';
+  if not RegKeyExists(Racine, Cle) then
+    Exit;
+  if not RegQueryStringValue(Racine, Cle, 'DisplayVersion', Version) then
+  begin
+    Result := True;
+    Exit;
+  end;
+  Version := Trim(Version);
+  Result := StrToIntDef(Copy(Version, 1, Pos('.', Version + '.') - 1), -1) < 3;
+end;
+
+{ Une 2.x installée dans l'autre ruche que celle de cette installation : une
+  installation pour tous les utilisateurs quand celle-ci est personnelle, ou
+  l'inverse. La clé de notre propre ruche ne compte pas : c'est celle que cette
+  installation remplace (mise à jour par-dessus une 2.x). }
+function Version2xAilleurs(): Boolean;
+begin
+  if IsAdminInstallMode then
+    Result := Cle2x(HKCU)
+  else
+    Result := Cle2x(HKLM32) or (IsWin64 and Cle2x(HKLM64));
+end;
+
+{ Désinstallation : une 2.x installée n'importe où, ou « WhiScribe.exe » sans
+  « Scribouille.exe » à côté dans Programs\WhiScribe. Au moment où la question
+  se pose, la clé de la 3.x qu'on retire n'a plus d'importance : sa version
+  est une 3.x, elle ne compte pas. }
+function Version2xPresente(): Boolean;
+var
+  Programme: String;
+begin
+  Programme := ExpandConstant('{localappdata}') + '\Programs\WhiScribe';
+  Result := Cle2x(HKCU) or Cle2x(HKLM32) or (IsWin64 and Cle2x(HKLM64))
+    or (FileExists(Programme + '\WhiScribe.exe') and not FileExists(Programme + '\Scribouille.exe'));
+end;
+
 { Un chemin noté dans l'ancien dossier est lu comme il sera après la reprise :
-  « ...\WhiScribe\modeles » devient « ...\Scribouille\modeles ». }
+  « ...\WhiScribe\modeles » devient « ...\Scribouille\modeles ». Sauf quand une
+  2.x reste installée à côté : rien ne sera repris, le chemin reste tel quel. }
 function VersNouveauDossier(Chemin: String): String;
 begin
   Result := Chemin;
+  if Cohabitation then
+    Exit;
   if Pos(Lowercase(AncienDossierDonnees() + '\'), Lowercase(Chemin + '\')) = 1 then
     Result := DossierDonnees() + Copy(Chemin, Length(AncienDossierDonnees()) + 1, Length(Chemin));
 end;
@@ -200,9 +280,19 @@ begin
   Result := DossierDonnees() + '\dossier-modeles.txt';
 end;
 
+{ Le dossier de données que l'application utilisera : l'ancien quand une 2.x
+  reste installée à côté et que le nouveau ne sert pas encore (comme
+  chemins._garder_ancien_dossier), le nouveau sinon. }
+function DonneesEnService(): String;
+begin
+  Result := DossierDonnees();
+  if Cohabitation and (not DirExists(DossierDonnees())) and DirExists(AncienDossierDonnees()) then
+    Result := AncienDossierDonnees();
+end;
+
 function DossierModelesDefaut(): String;
 begin
-  Result := DossierDonnees() + '\modeles';
+  Result := DonneesEnService() + '\modeles';
 end;
 
 { Séparation des locuteurs installée depuis l'application (app/extensions.py).
@@ -278,13 +368,15 @@ end;
 function TailleLisible(Octets: Int64): String;
 begin
   if Octets >= 1073741824 then
-    Result := Format('%.1f Go', [Octets / 1073741824.0])
+    Result := Format('%.1f ', [Octets / 1073741824.0]) + ExpandConstant('{cm:UniteGo}')
   else if Octets >= 1048576 then
-    Result := Format('%.0f Mo', [Octets / 1048576.0])
+    Result := Format('%.0f ', [Octets / 1048576.0]) + ExpandConstant('{cm:UniteMo}')
   else
     { Toujours un flottant : Format n'accepte pas un Int64 sur « %d ». }
-    Result := Format('%.0f Ko', [Octets / 1024.0]);
-  StringChangeEx(Result, '.', ',', True);
+    Result := Format('%.0f ', [Octets / 1024.0]) + ExpandConstant('{cm:UniteKo}');
+  { Unités et séparateur décimal de la langue de l'assistant : « 1,5 Go »,
+    « 1.5 GB ». }
+  StringChangeEx(Result, '.', ExpandConstant('{cm:SeparateurDecimal}'), True);
 end;
 
 function EspaceLibreGo(Chemin: String): Extended;
@@ -337,6 +429,7 @@ end;
 
 procedure InitializeWizard();
 begin
+  Cohabitation := Version2xAilleurs();
   PageModeles := CreateInputDirPage(
     wpSelectDir,
     ExpandConstant('{cm:PageModelesTitre}'),
@@ -382,6 +475,7 @@ var
   Cible: String;
   Libre: Extended;
   Texte: String;
+  DonneesAbsentes, ModelesAbsents: Boolean;
 begin
   Result := True;
 
@@ -393,34 +487,46 @@ begin
       PageModeles.Values[0] := DossierModelesDefaut();
       Cible := PageModeles.Values[0];
     end;
+    { Mise à jour d'une 2.x : Scribouille ne doit pas exister avant que
+      l'application reprenne WhiScribe. Le dossier créé pour l'essai
+      d'écriture est retiré s'il est resté vide. }
+    DonneesAbsentes := not DirExists(DossierDonnees());
+    ModelesAbsents := not DirExists(Cible);
     if not ForceDirectories(Cible) then
     begin
-      MsgBox(ExpandConstant('{cm:DossierModelesRefuse}'), mbError, MB_OK);
+      SuppressibleMsgBox(ExpandConstant('{cm:DossierModelesRefuse}'), mbError, MB_OK, IDOK);
       Result := False;
       Exit;
     end;
     Libre := EspaceLibreGo(Cible);
+    if ModelesAbsents then
+      RemoveDir(Cible);
+    if DonneesAbsentes then
+      RemoveDir(DossierDonnees());
     if (Libre > 0) and (Libre < 4.0) then
     begin
       Texte := Format('%.1f', [Libre]);
-      StringChangeEx(Texte, '.', ',', True);
-      Result := MsgBox(FmtMessage(ExpandConstant('{cm:EspaceInsuffisant}'), [Texte]),
-                       mbConfirmation, MB_YESNO) = IDYES;
+      StringChangeEx(Texte, '.', ExpandConstant('{cm:SeparateurDecimal}'), True);
+      Result := SuppressibleMsgBox(FmtMessage(ExpandConstant('{cm:EspaceInsuffisant}'), [Texte]),
+                                   mbConfirmation, MB_YESNO, IDYES) = IDYES;
     end;
     Exit;
   end;
 
+  { En mode silencieux, ces questions ne bloquent pas une installation
+    déployée avec /SUPPRESSMSGBOXES : la réponse par défaut est Oui (WebView2
+    téléchargé depuis Microsoft et posé). }
   if CurPageID = wpReady then
   begin
     if not WebView2Present() then
     begin
-      if MsgBox(ExpandConstant('{cm:WebView2Manquant}'), mbConfirmation, MB_YESNO) = IDYES then
+      if SuppressibleMsgBox(ExpandConstant('{cm:WebView2Manquant}'), mbConfirmation, MB_YESNO, IDYES) = IDYES then
       begin
         if not InstallerWebView2() then
-          MsgBox(ExpandConstant('{cm:WebView2Echec}'), mbInformation, MB_OK);
+          SuppressibleMsgBox(ExpandConstant('{cm:WebView2Echec}'), mbInformation, MB_OK, IDOK);
       end
       else
-        MsgBox(ExpandConstant('{cm:WebView2Echec}'), mbInformation, MB_OK);
+        SuppressibleMsgBox(ExpandConstant('{cm:WebView2Echec}'), mbInformation, MB_OK, IDOK);
     end;
   end;
 end;
@@ -435,14 +541,35 @@ begin
   Cible := Trim(PageModeles.Values[0]);
   if Cible = '' then
     Cible := DossierModelesDefaut();
-  ForceDirectories(Cible);
-  ForceDirectories(DossierDonnees());
 
   { Deux traces du même choix, lues dans cet ordre par l'application :
     celle de l'espace utilisateur fait foi, celle du dossier de programme sert
     de secours si les données utilisateur sont effacées. }
-  SaveStringToFile(FichierChoixModeles(), Cible + #13#10, False);
   SaveStringToFile(ExpandConstant('{app}\emplacement-modeles.txt'), Cible + #13#10, False);
+
+  { Une 2.x installée à côté lit encore WhiScribe : l'application le partagera
+    tant que Scribouille n'existe pas. Le créer ici (même pour y noter le choix
+    des modèles) la ferait démarrer sur un dossier vide, sans les réglages ni
+    les modèles. Le fichier de la 2.x n'est pas réécrit non plus : c'est son
+    choix des modèles qui fait foi, un autre choisi ici ne sert que de
+    secours. }
+  if Lowercase(DonneesEnService()) <> Lowercase(DossierDonnees()) then
+  begin
+    ForceDirectories(Cible);
+    Exit;
+  end;
+
+  { Mise à jour d'une 2.x par-dessus : l'application reprendra WhiScribe à son
+    premier lancement, choix des modèles compris (réécrit vers Scribouille).
+    Tant que rien n'a été changé ici, ne rien poser dans Scribouille : sans
+    quoi le choix de la 2.x tomberait en doublon, rangé à part. }
+  if (not DirExists(DossierDonnees())) and DirExists(AncienDossierDonnees())
+     and (Lowercase(Cible) = Lowercase(DossierModelesEffectif())) then
+    Exit;
+
+  ForceDirectories(Cible);
+  ForceDirectories(DossierDonnees());
+  SaveStringToFile(FichierChoixModeles(), Cible + #13#10, False);
 end;
 
 { --------------------------------------------------------------------------
@@ -502,7 +629,9 @@ end;
 procedure SupprimerDonnees(PreserverModeles: Boolean);
 begin
   SupprimerEntrees(DossierDonnees(), PreserverModeles);
-  SupprimerEntrees(AncienDossierDonnees(), PreserverModeles);
+  { WhiScribe sert encore à une 2.x installée : jamais touché. }
+  if not Version2xPresente() then
+    SupprimerEntrees(AncienDossierDonnees(), PreserverModeles);
 end;
 
 { Effacement complet par la ligne de commande de l'application, AVANT que le
@@ -547,6 +676,7 @@ var
   ModelesGardes: Boolean;
   ModelesDansLesDonnees: Boolean;
   PoidsExtensions: Int64;
+  Ancienne2x: Boolean;
 begin
   { Une désinstallation silencieuse ne pose aucune question et ne détruit rien
     d'autre que le programme : c'est le comportement le moins surprenant. C'est
@@ -563,16 +693,23 @@ begin
   if EffacementTraite then
     Exit;
 
+  Ancienne2x := Version2xPresente();
   DossierModeles := DossierModelesEffectif();
   { Mise à jour jamais lancée : les modèles sont encore dans l'ancien dossier. }
-  if (not DirExists(DossierModeles)) and DirExists(AncienDossierDonnees() + '\modeles')
+  if (not Ancienne2x) and (not DirExists(DossierModeles)) and DirExists(AncienDossierDonnees() + '\modeles')
      and (Lowercase(DossierModeles) = Lowercase(DossierModelesDefaut())) then
     DossierModeles := AncienDossierDonnees() + '\modeles';
+  { Modèles rangés dans WhiScribe alors qu'une 2.x les lit encore : ils sont
+    à elle aussi, jamais proposés à l'effacement. }
+  if Ancienne2x and (Pos(Lowercase(AncienDossierDonnees() + '\'), Lowercase(DossierModeles + '\')) = 1) then
+    DossierModeles := '';
   ModelesDansLesDonnees := (Pos(Lowercase(DossierDonnees()), Lowercase(DossierModeles)) = 1)
     or (Pos(Lowercase(AncienDossierDonnees()), Lowercase(DossierModeles)) = 1);
   ModelesGardes := True;
 
-  Occupe := TailleDossier(DossierModeles);
+  Occupe := 0;
+  if DossierModeles <> '' then
+    Occupe := TailleDossier(DossierModeles);
   if Occupe > 0 then
   begin
     { Le crochet ne doit jamais ouvrir la ligne : Inno Setup y verrait un début de section, même dans [Code]. }
@@ -587,7 +724,9 @@ begin
   else
     ModelesGardes := False;
 
-  if DirExists(DossierDonnees()) or DirExists(AncienDossierDonnees()) then
+  { Rien à proposer quand seul WhiScribe existe et qu'une 2.x le lit encore :
+    la réponse n'effacerait rien. }
+  if DirExists(DossierDonnees()) or (DirExists(AncienDossierDonnees()) and not Ancienne2x) then
   begin
     PoidsExtensions := TailleDossier(DossierExtensions()) + TailleDossier(DossierCachePip())
       + TailleDossier(DossierDonnees() + '\extensions-openvino') + TailleDossier(DossierDonnees() + '\cache-openvino');

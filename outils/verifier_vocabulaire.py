@@ -308,9 +308,12 @@ def essai_correction() -> None:
     verifier(all(texte[x["o"]:x["o"] + len(x["b"])] == x["b"] for x in r), "positions justes dans le texte rendu")
     texte, r = c.corriger_texte("Martin a dit que le martin-pêcheur était là.")
     verifier(not r, "faute en contexte sans ses voisins : rien", texte)
-    texte, r = c.corriger_texte("Il est arrivé à Aokland avec Jamy Siminov.")
+    texte, r = c.corriger_texte("Il est arrivé à Okland avec Jamy Siminov.")
     verifier(texte == "Il est arrivé à Auckland avec Jamie Siminoff."
-             and {x["regle"] for x in r} == {"rapprochement"}, "rapprochement phonétique borné", texte)
+             and {x["regle"] for x in r} == {"rapprochement"},
+             "rapprochement phonétique borné (forme courte qui sonne pareil, forme longue à un son près)", texte)
+    texte, r = c.corriger_texte("Il est arrivé à Aokland.")
+    verifier(not r, "forme courte à un son près (« Aokland ») : plus rapprochée depuis la 3.0.0", texte)
     texte, r = c.corriger_texte("Je travaille pour mon entreprise depuis dix ans.")
     verifier(not r and c.ignorees_risquees >= 1,
              "faute faite de mots courants, sans contexte ni forçage : jamais appliquée")
@@ -322,9 +325,9 @@ def essai_correction() -> None:
     texte, r = c.corriger_texte("cubernetes tourne.")
     verifier(texte == "Kubernetes tourne." and r, "début de phrase")
     courts = v2.lire_texte('[[terme]]\nforme = "Odoo"\n[[terme]]\nforme = "Jira"\ncategorie = "produit"')[0]
-    texte, r = usage.Correcteur(courts).corriger_texte("On ouvre odou, le dodo et la djira.")
-    verifier(texte == "On ouvre odou, le dodo et la Jira.",
-             "moins de quatre sons : jamais rapproché ; quatre : un son d'écart", texte)
+    texte, r = usage.Correcteur(courts).corriger_texte("On ouvre odou, le dodo, la djira et la jirra.")
+    verifier(texte == "On ouvre odou, le dodo, la djira et la Jira.",
+             "moins de quatre sons : jamais rapproché ; forme courte : seulement si elle sonne pareil", texte)
     verifier(lexique.est_courant("jiro"), "« jiro » figure au lexique (sous-titres)")
     texte, r = usage.Correcteur(courts).corriger_texte("Le jiro du dimanche.")
     verifier(not r, "un mot du lexique n'est jamais rapproché, même d'un son", str(r))
@@ -350,6 +353,61 @@ def essai_correction() -> None:
     texte, r = epreuve.corriger_texte(ordinaire)
     verifier(not r, "vocabulaire fictif de 102 termes sur du français ordinaire : aucun remplacement",
              str([(x["a"], x["b"]) for x in r]))
+
+
+def essai_correction_prudente() -> None:
+    titre("5 bis. Rapprochement prudent : un mot juste n'est jamais abîmé")
+    # Textes inventés. Le cas vu sur une vraie réunion : un mot familier court,
+    # absent du lexique, remplacé par un nom de produit qui lui ressemble à
+    # l'oreille ; et sur des transcriptions humaines de réunions publiques
+    # (SUMM-RE) : « docu » vers Docker, « prelot » vers Trello, « consos »
+    # vers Qonto.
+    produits = v2.lire_texte('[[terme]]\nforme = "Kiffy"\ncategorie = "produit"\n'
+                             '[[terme]]\nforme = "Docker"\ncategorie = "produit"\n'
+                             '[[terme]]\nforme = "Trello"\ncategorie = "produit"\n'
+                             '[[terme]]\nforme = "Qonto"\ncategorie = "produit"\n'
+                             '[[terme]]\nforme = "Galerix"\ncategorie = "produit"\n'
+                             '[[terme]]\nforme = "Kubernetes"\ncategorie = "produit"\n'
+                             '[[terme]]\nforme = "Jamie Siminoff"\ncategorie = "personne"')[0]
+    c = usage.Correcteur(produits)
+    for phrase, ce_qui in (("Franchement j'ai kiffé la démo.", "participe familier « kiffé » (Kiffy)"),
+                           ("On a regardé un docu hier soir.", "abrégé familier « docu » (Docker)"),
+                           ("Il a mis le prelot dans le tableau.", "mot court inconnu « prelot » (Trello)"),
+                           ("Les consos du mois sont en baisse.", "pluriel familier « consos » (Qonto)"),
+                           ("On a galéré toute la matinée.", "participe « galéré » (Galerix)"),
+                           ("Ils ont checké les accès.", "anglicisme fléchi « checké »")):
+        texte, r = c.corriger_texte(phrase)
+        verifier(not r and texte == phrase, f"jamais remplacé : {ce_qui}", str([(x['a'], x['b']) for x in r]))
+    for mot in ("kiffé", "galéré", "taffé", "checké", "bidouillage", "matchés"):
+        verifier(lexique.forme_francaise(mot), f"allure du français reconnue : « {mot} »")
+    for mot in ("Siminov", "cubernetes", "Okland", "jirra"):
+        verifier(not lexique.forme_francaise(mot), f"pas l'allure du français : « {mot} »")
+    texte, r = c.corriger_texte("Le PDG, Jamy Siminov, déploie cubernetes.")
+    verifier(texte == "Le PDG, Jamie Siminoff, déploie Kubernetes." and {x["regle"] for x in r} == {"rapprochement"},
+             "un nom long mal écrit reste rapproché", texte)
+    explicites = v2.lire_texte('[[terme]]\nforme = "Docker"\ncategorie = "produit"\nfautes = ["docu"]\n'
+                               '[[terme]]\nforme = "Kiffy"\ncategorie = "produit"\nfautes = ["kiffé"]')[0]
+    texte, r = usage.Correcteur(explicites).corriger_texte("Un docu sur Docker, j'ai kiffé.")
+    verifier(texte == "Un Docker sur Docker, j'ai Kiffy." and [x["regle"] for x in r] == ["faute", "faute"],
+             "une faute associée explicite est toujours appliquée (choix de l'utilisateur)", texte)
+    # Traçabilité : chaque remplacement dit d'où il vient, où et quand.
+    segments = [{"d": 12.5, "f": 15.0, "t": "Le PDG, Jamy Siminov, a parlé."}]
+    journal_r = c.corriger_segments(segments)
+    verifier(len(journal_r) == 1 and {"a", "b", "regle", "o", "d", "s", "terme"} <= set(journal_r[0])
+             and journal_r[0]["a"] == "Jamy Siminov" and journal_r[0]["regle"] == "rapprochement"
+             and journal_r[0]["d"] == 12.5,
+             "chaque remplacement noté : avant, après, règle, position, heure", str(journal_r))
+    from app import compagnon, moteur
+
+    contenu = compagnon.construire(Path("reunion.wav"), [moteur.Segment(12.5, 15.0, segments[0]["t"])],
+                                   {"remplacements_vocabulaire": journal_r, "corrections_appliquees": 1})
+    verifier(contenu.get("vocabulaire", {}).get("remplacements", [{}])[0].get("regle") == "rapprochement",
+             "le compagnon JSON garde le détail de chaque remplacement, règle comprise")
+    ancien = {"segments": [{"d": 0, "f": 1, "t": "x"}], "transcription": {"corrections_appliquees": 2}}
+    verifier(compagnon.aligner_segments(ancien) >= 0, "compagnon sans détail (versions antérieures) : lu sans erreur")
+    js = (RACINE / "web" / "relecture.js").read_text(encoding="utf-8")
+    verifier("ui.rl.point_remplacement_oreille" in js and "regle: r.regle" in js,
+             "relecture : un rapprochement à l'oreille est dit comme tel parmi les points à vérifier")
 
 
 # ---------------------------------------------------------------------------
@@ -880,6 +938,7 @@ def principal() -> int:
         essai_fusion()
         essai_amorce()
         essai_correction()
+        essai_correction_prudente()
         essai_apprentissage(base / "apprentissage")
         (base / "marques").mkdir()
         essai_apprentissage_marques(base / "marques")

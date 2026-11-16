@@ -519,7 +519,7 @@ function calculerPoints() {
       const e = Math.abs(mots[i].d - r.debut);
       if (e < ecart) { ecart = e; meilleur = i; }
     });
-    if (meilleur >= 0) listes.remplacement.push({ i: meilleur, rang: r.rang, avant: r.avant, apres: r.apres });
+    if (meilleur >= 0) listes.remplacement.push({ i: meilleur, rang: r.rang, avant: r.avant, apres: r.apres, regle: r.regle });
   });
   listes.remplacement.sort((a, b) => a.i - b.i);
   lect.points.listes = listes;
@@ -579,7 +579,9 @@ function allerPoint(pas) {
   if (lect.points.categorie === 'silence' || lect.points.categorie === 'long') {
     statutRelecture(t('ui.rl.point_duree', { duree: formaterDuree(point.duree) }));
   } else if (lect.points.categorie === 'remplacement') {
-    statutRelecture(t('ui.rl.point_remplacement', { avant: point.avant, apres: point.apres }));
+    // Rapproché à l'oreille, pas d'une faute listée : dit comme tel, à vérifier.
+    const cle = point.regle === 'rapprochement' ? 'ui.rl.point_remplacement_oreille' : 'ui.rl.point_remplacement';
+    statutRelecture(t(cle, { avant: point.avant, apres: point.apres }));
   } else {
     const p = lect.mots[point.i].p;
     statutRelecture(t('ui.lecture.confiance', { pct: Math.round((p || 0) * 100) }));
