@@ -20,9 +20,11 @@ Scribouille is a desktop app for Windows built on [faster-whisper](https://githu
 2. Run it.
 3. Start **Scribouille** from the Start menu.
 
+**Without installing**: `Scribouille-X.Y.Z-portable.zip`, on the same page, unzips anywhere (a USB stick included); run `Scribouille.exe`, or `scribouille.com` from the command line. It keeps its data in the same place as the installed version. The SHA-256 checksums of both files are in the release notes and in `SHA256SUMS.txt` (`Get-FileHash FILE -Algorithm SHA256` in PowerShell).
+
 Nothing else to install. The setup is per user, **no administrator rights**, and it installs into `%LOCALAPPDATA%\Programs\Scribouille`. Your settings, glossary and logs live in `%LOCALAPPDATA%\Scribouille`, never inside the program folder, so reinstalling a newer version over the old one loses nothing.
 
-> **The application was called WhiScribe up to 2.3.3.** The repository name has changed, the old addresses redirect. On a machine that already has it, the update installs over the existing setup, in its original folder `%LOCALAPPDATA%\Programs\WhiScribe`. Since 3.0, the data moves on first launch from `%LOCALAPPDATA%\WhiScribe` to `%LOCALAPPDATA%\Scribouille`, by a plain rename: nothing is lost, the models are not downloaded again, and only Scribouille's own files are moved (another program called "Whiscribe" keeps its models in the same place). To go back to an earlier version: `scribouille.com donnees revenir-whiscribe` in the program folder.
+> **The application was called WhiScribe up to 2.3.3.** The repository name has changed, the old addresses redirect. On a machine that already has it, the update installs over the existing setup, in its original folder `%LOCALAPPDATA%\Programs\WhiScribe`. Since 3.0, the data moves on first launch from `%LOCALAPPDATA%\WhiScribe` to `%LOCALAPPDATA%\Scribouille`, by a plain rename: nothing is lost, the models are not downloaded again, and only Scribouille's own files are moved (another program called "Whiscribe" keeps its models in the same place). The old `WhiScribe.exe` and its shortcuts are removed. A WhiScribe 2.x that stays installed alongside (portable version, another installation) keeps its folder: 3.0 shares it without changing anything it reads, and the move waits until it is gone. To go back to an earlier version: `scribouille.com donnees revenir-whiscribe` in the program folder.
 
 The setup asks **where to keep the transcription models**, 1.6 to 3.1 GB depending on the quality. The models are not bundled: they are downloaded once, on first use, and the app tells you the size before starting. After that it works offline.
 
@@ -37,7 +39,7 @@ The installer is not signed, so SmartScreen may warn on first run: "More info", 
 - **Drop and go.** Drop files or a folder, choose the quality, start. Files are processed one after another, a failure does not stop the queue.
 - **Formats in:** `m4a` (including phone recordings), `mp3`, `wav`, `ogg`, `flac`, `opus`, `webm`, `wma`, `aac`, `amr`, and the usual video containers (`mp4`, `mkv`, `mov`), whose audio track is extracted.
 - **Formats out:** `.txt` in paragraphs, each starting with its time (by default, to find a passage in the recording), with a short header (recording name, duration, date, speakers), plus optional `.srt` and `.vtt`. Output names follow a configurable pattern with `{nom}`, `{date}`, `{heure}` and `{modele}`.
-- **Two qualities.** *Highest quality* (`large-v3`) for anything that will be read back, *Fast* (`large-v3-turbo`) to get the gist. Other Whisper models are reachable in advanced mode.
+- **Two qualities.** *Highest quality* (`large-v3`) and *Fast* (`large-v3-turbo`). On first launch, the app suggests a setting for the machine (on the graphics chip of an Intel laptop: turbo, one hour in about 7 minutes), applied only after a click. Other Whisper models are reachable in advanced mode.
 - **Glossary and corrections.** A list of proper nouns primes the model before it transcribes, and a list of rewrite rules cleans up the recurring mistakes afterwards. See [the guide](docs/guide.md#vocabulary-and-corrections).
 - **Review in the app, while listening.** Clicking a word places playback there and the text follows it; doubtful words highlighted, search (`Ctrl` + `F`), points to check from the keyboard (`N`).
 - **Correct without leaving the review.** One place or all of them, a passage rewritten or deleted, a speaker renamed; `Ctrl` + `Z` undoes step by step, even after closing, and the original text stays available. The screen, the `.txt`, the `.json` companion and the subtitles always say the same thing: every write is checked. See [the guide](docs/guide.md#reading-back-a-transcript).
@@ -64,7 +66,7 @@ The installer is not signed, so SmartScreen may warn on first run: "More info", 
 
 ## Privacy
 
-**Nothing you transcribe leaves your computer.** No account, no API key, no upload to an online service, no telemetry. The audio is read from your disk, computed by your processor, and the text is written next to it.
+**Nothing you transcribe leaves your computer.** No account, no API key, no upload to an online service, no telemetry. The audio is read from your disk, computed on your machine, and the text is written next to it.
 
 Two things can use the network, both of them explicit:
 

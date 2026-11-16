@@ -20,9 +20,11 @@ Scribouille est une application de bureau Windows bâtie sur [faster-whisper](ht
 2. Lancez-le.
 3. Ouvrez **Scribouille** depuis le menu Démarrer.
 
+**Sans installation** : `Scribouille-X.Y.Z-portable.zip`, sur la même page, se décompresse où l'on veut (clé USB comprise) ; on lance `Scribouille.exe`, ou `scribouille.com` en ligne de commande. Il range ses données au même endroit que la version installée. Les empreintes SHA-256 des deux fichiers sont dans les notes de la version et dans `SHA256SUMS.txt` (`Get-FileHash FICHIER -Algorithm SHA256` dans PowerShell).
+
 Rien d'autre à installer. L'installation se fait par utilisateur, **sans droits administrateur**, dans `%LOCALAPPDATA%\Programs\Scribouille`. Vos réglages, votre glossaire et vos journaux vivent dans `%LOCALAPPDATA%\Scribouille`, jamais dans le dossier du programme : réinstaller une version plus récente par-dessus l'ancienne ne fait donc rien perdre.
 
-> **L'application s'appelait WhiScribe jusqu'à la 2.3.3.** Le nom du dépôt a changé, les anciennes adresses redirigent. Sur un poste déjà équipé, la mise à jour se pose par-dessus l'installation existante, dans son dossier d'origine `%LOCALAPPDATA%\Programs\WhiScribe`. Depuis la 3.0, les données passent au premier lancement de `%LOCALAPPDATA%\WhiScribe` à `%LOCALAPPDATA%\Scribouille`, par simple renommage : rien n'est perdu, les modèles ne sont pas retéléchargés, et seuls les fichiers de Scribouille sont déplacés (un autre logiciel nommé « Whiscribe » range ses modèles au même endroit). Pour revenir à une version antérieure : `scribouille.com donnees revenir-whiscribe` dans le dossier du programme.
+> **L'application s'appelait WhiScribe jusqu'à la 2.3.3.** Le nom du dépôt a changé, les anciennes adresses redirigent. Sur un poste déjà équipé, la mise à jour se pose par-dessus l'installation existante, dans son dossier d'origine `%LOCALAPPDATA%\Programs\WhiScribe`. Depuis la 3.0, les données passent au premier lancement de `%LOCALAPPDATA%\WhiScribe` à `%LOCALAPPDATA%\Scribouille`, par simple renommage : rien n'est perdu, les modèles ne sont pas retéléchargés, et seuls les fichiers de Scribouille sont déplacés (un autre logiciel nommé « Whiscribe » range ses modèles au même endroit). L'ancien `WhiScribe.exe` et ses raccourcis sont retirés. Une WhiScribe 2.x qui reste installée à côté (version portable, autre installation) garde son dossier : la 3.0 le partage sans rien modifier de ce qu'elle lit, et la reprise attend son départ. Pour revenir à une version antérieure : `scribouille.com donnees revenir-whiscribe` dans le dossier du programme.
 
 L'assistant demande **où ranger les modèles de transcription**, de 1,6 à 3,1 Go selon la qualité. Les modèles ne sont pas embarqués : ils se téléchargent une seule fois, au premier usage, et l'application annonce la taille avant de commencer. Ensuite elle fonctionne hors connexion.
 
@@ -37,7 +39,7 @@ Le programme d'installation n'est pas signé, SmartScreen peut donc avertir au p
 - **Déposer, lancer.** Déposez des fichiers ou un dossier, choisissez la qualité, lancez. Les fichiers sont traités l'un après l'autre, et un échec n'interrompt pas la file.
 - **Formats acceptés :** `m4a` (dont les enregistrements de smartphone), `mp3`, `wav`, `ogg`, `flac`, `opus`, `webm`, `wma`, `aac`, `amr`, et les vidéos courantes (`mp4`, `mkv`, `mov`), dont la piste audio est extraite.
 - **Formats produits :** `.txt` en paragraphes, l'heure en tête de chacun (par défaut, pour retrouver un passage dans l'enregistrement), avec un en-tête court (nom de l'enregistrement, durée, date, voix), plus `.srt` et `.vtt` en option. Le nom des fichiers suit un motif configurable avec `{nom}`, `{date}`, `{heure}` et `{modele}`.
-- **Deux qualités.** *Qualité maximale* (`large-v3`) pour tout ce qui sera relu, *Rapide* (`large-v3-turbo`) pour dégrossir. Les autres modèles Whisper restent accessibles en mode avancé.
+- **Deux qualités.** *Qualité maximale* (`large-v3`) et *Rapide* (`large-v3-turbo`). Au premier lancement, l'application propose un réglage selon le poste (sur la puce graphique d'un portable Intel : turbo, une heure en 7 minutes environ), appliqué seulement après un clic. Les autres modèles Whisper restent accessibles en mode avancé.
 - **Glossaire et corrections.** Une liste de noms propres oriente le modèle avant qu'il transcrive, une liste de règles nettoie les massacres récurrents après. Voir [Vocabulaire](docs/guide.fr.md#vocabulaire-et-corrections).
 - **Relecture dans l'application, en écoutant.** Un clic sur un mot y place l'écoute, le texte suit la lecture ; mots douteux surlignés, recherche (`Ctrl` + `F`), points à vérifier au clavier (`N`).
 - **Corriger sans quitter la relecture.** Un endroit ou tous, un passage réécrit ou supprimé, un locuteur renommé ; `Ctrl` + `Z` annule cran par cran, même après fermeture, et le texte d'origine reste disponible. L'écran, le `.txt`, le compagnon `.json` et les sous-titres disent toujours la même chose : chaque écriture est contrôlée. Voir [Relire une transcription](docs/guide.fr.md#relire-une-transcription).
@@ -64,7 +66,7 @@ Le programme d'installation n'est pas signé, SmartScreen peut donc avertir au p
 
 ## Vie privée
 
-**Rien de ce que vous transcrivez ne quitte votre ordinateur.** Pas de compte, pas de clé d'API, pas d'envoi vers un service en ligne, pas de télémétrie. L'audio est lu depuis votre disque, calculé par votre processeur, et le texte est écrit à côté.
+**Rien de ce que vous transcrivez ne quitte votre ordinateur.** Pas de compte, pas de clé d'API, pas d'envoi vers un service en ligne, pas de télémétrie. L'audio est lu depuis votre disque, calculé sur votre machine, et le texte est écrit à côté.
 
 Deux choses peuvent passer par le réseau, toutes deux explicites :
 

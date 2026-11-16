@@ -8,428 +8,98 @@ version : la chaîne de publication en extrait la section correspondant au tag.
 
 ## 3.0.0
 
-*12 novembre 2026, non publiée.*
+*Publiée le 16 novembre 2026.*
 
-Le calcul quitte la fenêtre, tout se fait aussi sans fenêtre, et la relecture
-devient un outil de travail. Le texte produit ne change pas : identique au
-caractère près sur les réglages de la campagne de mesure.
+La puce graphique des portables Intel est proposée d'office, le calcul quitte
+la fenêtre et se fait aussi sans elle, une coupure ne coûte plus que le
+segment en cours, et la relecture devient un outil de travail.
 
-**Depuis la 2.4.** Au premier lancement, les données passent de
-`%LOCALAPPDATA%\WhiScribe` à `%LOCALAPPDATA%\Scribouille`, par renommage :
-réglages, vocabulaire et modèles suivent, rien n'est retéléchargé, et seuls les
-fichiers de Scribouille sont déplacés (un logiciel homonyme range ses modèles
-au même endroit). Retour à une version antérieure : `scribouille donnees
-revenir-whiscribe`. `scribouille-verifier.exe` devient `scribouille.com` (tapé
-`scribouille`), ses anciennes options marchent toujours. La séparation des
-locuteurs est désormais décochée tant qu'elle n'est pas installée, et l'en-tête
-du `.txt` ne garde que le titre, la durée, la date et les voix.
+### Avant, après
 
-Le calcul
+Mesuré sur un portable Intel Core Ultra 5 à puce graphique intégrée, 32 Go,
+avec de vraies réunions. Le moteur OpenVINO, qui fait calculer la puce, est
+arrivé en 2.4.0 ; la 2.3.3 calcule sur le processeur seul.
 
-- **Moteur dans son propre processus**, surveillé : la fenêtre ne charge plus
-  aucune bibliothèque de calcul et revient à sa mémoire de repos après une
-  file. « Arrêter » est immédiat, pendant un chargement compris. Un plantage
-  du moteur (pilote graphique, mémoire) ne ferme plus la fenêtre : le fichier
-  reprend au segment près, sans la puce graphique ; un second plantage le
-  laisse « Reprendre ». Aucun processus orphelin, retour de veille reconnu.
-  L'état du moteur s'affiche au pied de la fenêtre.
-- **Démarrage** : interface prête en 1,3 s au lieu de 2,2 s, 72 Mo de mémoire
-  privée au repos au lieu de 612 Mo, et la fenêtre y revient après une file ;
-  une seule FFmpeg (celle de PyAV), paquet allégé de 84 Mo.
-- **Rythmes** : Vitesse maximale, Équilibré ou Discret, et adaptation
-  automatique (pleine vitesse quand le poste est libre).
-- **Réglage proposé pour le poste** au premier lancement (moteur, qualité,
-  rythme, durée pour une heure, ce que l'on y perd), rien d'appliqué sans un
-  clic.
-- **Progression réelle** du moteur habituel lot par lot ; durées annoncées
-  recalculées après chaque fichier, sans qu'une mesure courte les déplace
-  toutes.
+| | WhiScribe 2.3.3 | Scribouille 3.0.0 |
+|---|---|---|
+| Une heure d'audio, réglage proposé | pas chronométrée sur les mêmes enregistrements ; estimation de l'application : environ 1 h 24 (large-v3, processeur) | **7 min** environ (turbo sur la puce), 80 % du processeur libre |
+| Une heure, qualité maximale | | **18 min** environ (large-v3 sur la puce) |
+| Une heure, processeur seul | | **20 min** environ (turbo, CTranslate2), processeur occupé à 80 % |
+| Fidélité (trois réunions de 10 min à 1 h 30, texte relu par un humain) | | qualité maximale : 0,5 à 1,8 point au-dessus du réglage proposé, pour 3,2 à 3,5 fois le temps |
+| Vocabulaire de 14 termes | | termes bien écrits : **11 → 95 sur 154**, sans perte ailleurs ni temps en plus (réunions qui ont servi à choisir les termes) |
+| Fiabilité | | endurance 10 sur 10 ; coupure puis reprise : même texte qu'un passage complet ; plantage du pilote graphique simulé : fichier fini sur le processeur, fenêtre ouverte ; source débranchée : reprise gardée ; aucune alerte antivirus |
+| Fenêtre au repos | 612 Mo (poste de développement, où la 3.0.0 en prend 72) | **75 Mo**, interface prête en 1,8 à 3,1 s |
+| Programme installé | 349 Mo | **258 Mo** (portable : 105,5 Mo) |
+| Modèle téléchargé | large-v3 CTranslate2 : 2 948 Mo | turbo OpenVINO : 790 Mo (large-v3 OpenVINO : 1 496 Mo) |
+| Cache de compilation d'OpenVINO | | borné à 4 Go (6,1 Go ramenés à 3,9 Go) |
 
-L'écran
+Proposé au premier lancement, appliqué seulement après un clic (OpenVINO,
+90 Mo, s'installe aussi d'un clic) : puce graphique Intel, turbo sur la puce ;
+carte NVIDIA, large-v3 sur la carte ; processeur seul, large-v3 sur un
+processeur de bureau (12 fils et 10 Go au moins, sans OpenVINO), turbo
+ailleurs (sur OpenVINO s'il est installé).
 
-- **Écran des réunions** : dépôt, file et transcriptions ; qualité, rythme et
-  une seule durée au-dessus. Une transcription finie rejoint « Transcriptions »
-  en tête (« Terminé à l'instant », Relire, Exporter) ; la liste dit la date de
-  l'enregistrement et où la relecture s'est arrêtée.
-- **Relecture plein cadre** : écoute synchronisée, recherche, points à
-  vérifier, correction d'un endroit ou de plusieurs, passage réécrit ou
-  supprimé, renommage des voix, cinquante niveaux d'annulation gardés après
-  fermeture et retour au texte d'origine, position retrouvée, tout au clavier.
-  L'écran, le `.txt`, le compagnon et les sous-titres restent égaux après
-  chaque écriture ; un fichier retouché dans un éditeur est relu et recalé.
-- **Exports** : un export Markdown intact est remplacé par le suivant ; retouché
-  à la main, il est gardé et l'export part dans une variante numérotée.
-- **Prévenir à la fin** (allumé par défaut) : fin de file, fenêtre en
-  arrière-plan, l'icône clignote et une notification Windows sans son
-  s'affiche.
-- **Réglages** rangés en trois familles ; **Vocabulaire** sur son propre
-  écran ; accessibilité vérifiée (clavier, contrastes, fenêtre étroite).
+### Mise à jour depuis la 2.x
 
-Sans fenêtre
+- Installée par-dessus WhiScribe 2.x ou Scribouille 2.4 : une seule entrée
+  dans les programmes installés ; l'ancien exécutable, ses raccourcis et ses
+  bibliothèques sont retirés.
+- Au premier lancement, les données passent de `%LOCALAPPDATA%\WhiScribe` à
+  `%LOCALAPPDATA%\Scribouille`, par renommage : réglages, vocabulaire,
+  modèles et reprises suivent, rien n'est retéléchargé, rien d'étranger à
+  Scribouille n'est déplacé. Retour arrière : `scribouille donnees
+  revenir-whiscribe`.
+- Une WhiScribe 2.x encore installée à côté (autre installation, version
+  portable) garde son dossier : la 3.0.0 le partage sans rien modifier de ce
+  que la 2.x lit, met ses réglages dans `config-scribouille.json`, et ni son
+  effacement complet ni son désinstalleur n'y touchent. La reprise se fait
+  après le départ de la 2.x.
+- `scribouille-verifier.exe` devient `scribouille.com` (tapé `scribouille`),
+  anciennes options comprises.
 
-- **Ligne de commande** `scribouille` : `transcrire`, `reprendre`, `etat`,
-  `lire`, `exporter`, `reglages`, `diagnostic`, `espace`, `effacer`,
-  `vocabulaire`, `agent`, `mesurer`. Sortie JSON versionnée, codes de retour 0
-  à 6, aucun téléchargement, écrasement ni effacement sans drapeau. Par SSH, en
-  tâche planifiée, par un agent de code (fiche pour Claude Code et Codex).
-- **Plusieurs Scribouille en même temps** : une seule fenêtre par dossier de
-  données, la ligne de commande reste libre ; un même enregistrement n'est
-  transcrit que par un processus à la fois ; la fenêtre ne remplace plus un
-  réglage posé en ligne de commande.
+### Le reste
 
-Le disque
+- Moteur dans son propre processus : « Arrêter » immédiat, un plantage ne
+  ferme plus la fenêtre.
+- Reprise au segment près après une coupure, même avec un état abîmé.
+- Relecture plein cadre : écoute synchronisée, points à vérifier, corrections
+  en série, voix renommées, annulation gardée après fermeture.
+- Ligne de commande complète (`scribouille transcrire`, `reprendre`, `etat`,
+  `diagnostic`, `espace`, `effacer`...), sortie JSON, rien d'effacé ni de
+  téléchargé sans drapeau.
+- Vocabulaire `vocabulaire.toml` : termes, fautes connues, propositions
+  apprises des transcriptions relues ; chaque correction est notée dans le
+  compagnon `.json` (avant, après, règle, heure) et annulable.
+- Correction à l'oreille plus prudente : plus rien de remplacé qui a l'allure
+  d'un mot français (« kiffé », « consos »), ni une forme courte qui ne sonne
+  pas exactement comme le terme (« docu » n'est plus pris pour Docker). Sur
+  46 833 mots de réunions publiques transcrites à la main, avec 40 noms de
+  produits au vocabulaire : 4 remplacements à tort avant, aucun après. Les
+  fautes associées à un terme s'appliquent comme avant.
+- Fiche « ce que ça change » à côté de chaque choix ; durées annoncées
+  toujours celles de ce qui calculera vraiment.
+- Espace disque par poste et effacement complet qui montre la liste d'abord,
+  sans toucher aux transcriptions ; proposé aussi par le désinstalleur.
+- Paquet portable à côté du programme d'installation, empreintes SHA-256 des
+  deux.
 
-- **Espace occupé et effacement complet** : poids par poste (programme, chaque
-  modèle, moteurs optionnels, caches, journaux, mesures, vocabulaire,
-  relecture), ce qui se libère sans rien perdre, et un effacement complet qui
-  montre la liste et les tailles d'abord, ne touche jamais aux transcriptions
-  sans demande, ni à ce qui n'est pas à Scribouille. Proposé aussi par le
-  désinstalleur.
+### Limites connues
 
-La justesse
-
-- **Vocabulaire, format 2** (`vocabulaire.toml`) : termes, fautes connues,
-  catégories, propositions apprises des transcriptions relues, validées une à
-  une ; amorce choisie dans la limite du modèle ; correction après coup
-  journalisée et annulable.
-- **Campagne de mesure** sur des réunions publiques transcrites à la main, et
-  **comparaison** des deux moteurs sur ses propres enregistrements : le réglage
-  se choisit sur des chiffres.
-- **Garde-fou des répétitions** renforcé ; OpenVINO se relance seul après un
-  raté avant de passer la main à CTranslate2.
-
-Corrigé après la recette
-
-- **Ligne de commande** : une faute de frappe, une option inconnue ou `--aide`
-  ne lancent plus jamais la fenêtre (message, code 2) ; aide par commande ;
-  une option impossible (voix sans l'extension, OpenVINO absent, `--noms` sans
-  voix) rend son code au lieu d'être ignorée ; `--json` tenu partout ;
-  Ctrl+Pause vaut Ctrl+C (code 5) ; aucune fenêtre de console, jamais.
-- **Reprise** : toute la demande de départ est rétablie (formats, langue,
-  vocabulaire, voix et noms, rythme, dossier).
-- **Données** : l'export emporte le vocabulaire et les propositions, et
-  l'import les rétablit à l'identique.
-- **Relecture** : les mots du compagnon redisent toujours le texte ; Entrée
-  pressée vite dans « Corriger » valide ; heure en marge comme le fichier.
-- **Divers** : sortie par défaut dans le dossier imposé par
-  `SCRIBOUILLE_DONNEES` ; mémoire montrée réelle ; langue de l'interface
-  suivie par les textes de Python ; téléchargement d'un modèle demandé au
-  clic ; documentation livrée à côté de l'exécutable et accordée au
-  comportement par un contrôle automatique.
-
-Avant l'essai sur le PC du travail
-
-- **Langue** : lire la configuration ne change plus la langue de l'interface ;
-  une langue choisie l'emporte toujours sur celle du système (un Windows en
-  anglais faisait passer en anglais des messages attendus en français, d'où
-  l'échec de la vérification sur GitHub).
-- **Reprise après un arrêt brutal** : une transcription coupée avant son
-  premier segment (lecture de l'audio, chargement du modèle) est reprenable,
-  du début, avec la demande de départ ; `reprendre` ne répond plus « aucune
-  transcription interrompue ». Un échec avant le premier segment (audio
-  illisible, deux plantages du moteur) ne laisse rien à reprendre ; refaire un
-  fichier qui avait une reprise ne double plus son texte. `scribouille etat`
-  dit qui transcrit quoi (`en_cours` et son PID) et les sauvegardes qui ne
-  peuvent plus servir, avec leur raison ; `etat --nettoyer` les efface.
-- **Exemples des anciennes versions** : le retrait des exemples fictifs de
-  `vocabulaire.txt` et `corrections.txt` (versions 1.x à 2.3) est annoncé à
-  l'ouverture, avec une copie et « Remettre » ; en ligne de commande,
-  `vocabulaire retirer-exemples` et `remettre-exemples`. Quand WhiScribe 2.x,
-  encore installé, lit le même dossier, il est seulement proposé.
-- **WhiScribe 2.x encore installé** : ses données restent dans
-  `%LOCALAPPDATA%\WhiScribe`, partagées, au lieu d'être déplacées (il aurait
-  perdu réglages et modèles) ; la reprise se fait après sa désinstallation
-  ou sa mise à jour.
-- **Rythme par défaut selon le moteur** : vitesse maximale quand la puce
-  graphique ou une carte NVIDIA calcule (une heure en 5 min 06 avec 92 % du
-  processeur libre sur un Core Ultra 5 225U), équilibré sur le processeur
-  seul. Un rythme choisi reste choisi.
-- **Distillation française** de large-v3 (`bofenghuang`) proposée en mode
-  avancé, jamais par défaut : son avance sur turbo n'est pas démontrée
-  (32,2 % d'erreur contre 33,3 %). Sans version OpenVINO, elle calcule sur
-  le processeur.
-- **Démarrage** : ce que la page attend de lent (taille du dossier des
-  modèles, mode d'alimentation, pilote NVIDIA) est lu pendant que la fenêtre
-  s'ouvre, et le nom du système ne passe plus par WMI. Programme gelé, même
-  poste, séries alternées : interface prête en 1,04 à 1,12 s au lieu de 1,25
-  à 1,60 s.
-
-Après l'essai sur le PC du travail (Core Ultra 5 225U, WhiScribe 2.3.3 encore installée)
-
-- **Puce graphique suspendue pour toujours après une coupure** : une commande
-  tuée pendant le chargement du modèle laissait le témoin d'OpenVINO, et la
-  puce restait écartée sans plantage (facteur 0,74 sur le processeur au lieu
-  de 0,20). Le témoin dit désormais qui l'a posé et quand ; seul un plantage
-  constaté par le superviseur (code de plantage, ou ouverture de plus de
-  10 min) suspend la puce. Un arrêt venu de dehors (processus tué, console
-  fermée, poste éteint) ou un témoin d'avant (3 octets) la font seulement
-  réessayer, dans le processus moteur, sous garde. `diagnostic`, `etat` et la
-  fenêtre disent l'état ; `scribouille materiel puce --lever` et le bouton
-  « Réessayer la puce graphique » lèvent la suspension, et une mise à jour du
-  pilote graphique, d'OpenVINO ou de Scribouille la fait réessayer d'elle-même.
-- **Les commandes de lecture n'écrivent plus rien** : `verifier` réécrivait
-  `config.json` (clés ajoutées, `lecture_audio` de la 2.x retirée) et laissait
-  un journal ; `diagnostic`, `etat`, `lire`, `materiel proposer`, `version`...
-  ne touchent plus au dossier. Lire les réglages ne les réécrit jamais.
-- **WhiScribe 2.x lit le même dossier** : son `config.json` n'est plus jamais
-  modifié ; les réglages de la 3.x vont dans `config-scribouille.json`, et
-  rejoignent `config.json` une fois la 2.x partie. `materiel.json` n'est plus
-  réécrit à chaque lancement quand rien n'a changé.
-- **Bilan de `verifier`** : « 10 fils » devient « 14 fils logiques, 12 cœurs
-  (2 performants, 8 efficaces, 2 basse consommation) ; calcul sur processeur :
-  10 fils au plus ». Le nombre donné au moteur ne change pas : un fil par
-  cœur performant ou efficace, voulu (moins en rythme équilibré ou discret).
-- **Séparation des voix héritée de la 2.x** (cochée par défaut là-bas) : dite
-  une fois par la ligne de commande, puis seulement dans le JSON et dans
-  `diagnostic`, au lieu d'à chaque transcription.
-- **Journal** : la ligne « Données gardées dans … » paraît aussi dans celui de
-  la ligne de commande.
-- **Plus de processus de console à l'ouverture** : les deux vus au travail
-  étaient la détection du matériel en fond (`scribouille.com
-  --detecter-materiel`) et son hôte de console caché (`conhost.exe`), à chaque
-  ouverture de la fenêtre. Elle passe par l'exécutable fenêtré, sans journal
-  à elle (elle en ouvrait un de plus à chaque lancement).
-- **Démarrage** : la partie Windows de l'affichage (pythonnet, WinForms,
-  WebView2) se charge en fond pendant que le programme démarre. Programme
-  gelé, même poste, séries alternées : interface prête en 0,96 à 1,11 s au
-  lieu de 1,11 à 1,16 s. Le journal note désormais les jalons du démarrage
-  (page lue, passerelle prête, état reçu et dessiné) : sur un poste lent, on
-  voit ce qui sépare la fenêtre affichée de l'interface prête.
-- **Essai du repli sur une vraie machine** : `SCRIBOUILLE_ESSAI_PUCE=plantage`
-  (ou `erreur`, `blocage`) simule l'échec de la puce au moment de l'ouvrir ;
-  sans la variable, rien ne change.
-
-Après le second essai sur le PC du travail
-
-- **Journaux de la 2.x effacés à l'ouverture** : la fenêtre ne gardait que les
-  30 derniers fichiers de `logs\`, ceux d'une WhiScribe 2.x qui partage le
-  dossier compris (11 journaux du 12/11 effacés au premier lancement). Les
-  journaux de la 3.x vont désormais dans `logs\scribouille\`, le seul dossier
-  qu'elle purge, et doucement : rien de moins d'un mois, toujours les 50
-  derniers. Revue de tous les effacements : tant qu'une 2.x installée lit le
-  même dossier, ses reprises ne sont plus ni proposées ni prises pour des
-  orphelines (les états de la 3.x sont marqués, et leurs clés ne peuvent plus
-  tomber sur celles de la 2.x), ce qu'elle écrit aussi (réglages, glossaire,
-  jeton, modèles, extensions, caches) sort des postes de `espace` et
-  `effacer` (montré à part, jamais effacé), et le retrait des extensions est
-  refusé. Rapport d'endurance : la ligne « journal du processus tombé
-  introuvable » venait de là.
-- **Modèle annoncé sur la puce** : `etat` donnait le modèle du catalogue
-  (`deepdml/faster-whisper-large-v3-turbo-ct2`) pour une transcription sur
-  OpenVINO ; il donne le modèle chargé (`OpenVINO/whisper-large-v3-turbo-int8-ov`),
-  le calcul (`openvino-gpu`) et le modèle demandé. Les mesures de durée sont
-  rangées sous le modèle OpenVINO ; celles rangées sous l'ancienne clé restent
-  lues, puis reprises sous la nouvelle.
-- **Une coupure ne laisse plus d'« orpheline »** : le verrou d'une
-  transcription reprenable n'est plus compté à part (`verrou_mort`).
-- **Puce suspendue qui resservait** : le superviseur notait le plantage sur
-  « OPENVINO-GPU » (le nom du calcul), que le réglage « GPU » ne reconnaissait
-  pas ; la puce restait dite suspendue mais servait encore. Les noms sont
-  ramenés à « GPU » (témoins déjà écrits compris). `--moteur openvino
-  --peripherique GPU` nommés dans la commande valent demande de réessai, sous
-  garde, et c'est dit sur la sortie, en JSON et au journal ; le réglage
-  automatique, lui, ne la retente pas.
-- **Syntaxe d'avant la 3.0 dans les textes** : `materiel proposer` finissait
-  par « scribouille.com --reconnaitre --appliquer » ; de même le rapport de
-  campagne, les usages de `mesurer`, les guides. Tout donne la commande
-  d'aujourd'hui (les anciennes formes marchent toujours).
-- **Rythme proposé** : « qui s'adapte tout seul » était annoncé, et appliqué
-  sans adaptation, sur la puce graphique ; la phrase dit maintenant « fixe »
-  là, « qui s'adapte tout seul » sur le processeur (fenêtre comprise).
-- **Séparation des voix cochée, non installée** : dite une fois pour de bon,
-  plus aucun avis ensuite (ni en JSON) ; `diagnostic` le garde, et
-  l'événement `debut` porte `locuteurs`.
-- **« Données gardées dans … »** : dans `diagnostic` et `verifier`, là où on
-  le cherche (et `donnees_raison` en JSON).
-- **Une seule ligne « Chargement du modèle »** quand l'ouverture sur la puce
-  échoue : le second essai ne la redit pas, et celle du repli dit qu'on
-  repart sur le processeur.
-- **Épreuve d'endurance** : le diagnostic de l'échec du 12/11 (deux passages
-  en plus, et la lecture des journaux) est retiré.
-
-Après la revue de code du 15/11
-
-- **WhiScribe 2.x reconnue où qu'elle soit installée** : par sa clé de
-  désinstallation (HKCU ou HKLM), plus seulement par
-  `Programs\WhiScribe`. Tant qu'elle est là, rien n'est repris de
-  `WhiScribe` ni effacé par `effacer --complet`, même quand la 3.x travaille
-  déjà dans `Scribouille` ; un registre illisible vaut présence.
-- **Redéposer un fichier interrompu ne perd plus le travail fait** : la
-  transcription reprend là où elle s'était arrêtée ; la fenêtre propose
-  « Recommencer du début » à la place. En ligne de commande, `transcrire`
-  poursuit et le dit ; `--recommencer` repart du début.
-- **Reprise après une coupure** : une ligne abîmée dans la sauvegarde ne fait
-  plus repartir de zéro (elle seule est écartée, et notée) ; une dernière ligne
-  coupée est retirée avant d'écrire la suite ; une sauvegarde illisible pour
-  l'instant n'est jamais tronquée. Les sorties sont sur le disque avant que la
-  sauvegarde ne s'efface.
-- **Rien d'effacé sur une absence passagère** : une reprise dont la source est
-  sur un lecteur qui ne répond pas, ou l'historique de relecture d'une
-  transcription sur une clé débranchée, restent ; une source vraiment absente
-  n'est effacée qu'après sept jours.
-- **Puce graphique** : le téléchargement du modèle n'entre plus dans la garde
-  de dix minutes ; un plantage noté n'est plus effacé par une ouverture
-  ailleurs.
-- **Verrou d'un fichier en cours** : un PID réattribué après un redémarrage
-  ne bloque plus la reprise.
-- **Réglages illisibles** : jamais remplacés par les valeurs par défaut ; un
-  fichier abîmé est gardé sous un autre nom.
-- **Divers** : les reprises de la 3.x ne sont plus visibles (ni purgeables)
-  par une WhiScribe 2.3.3 qui partage le dossier ; un fichier du dossier
-  surveillé n'est « vu » qu'une fois transcrit ; mesures de durée et mémoire
-  du dossier surveillé écrites sans risque de troncature ; `mesurer endurance
-  --recommencer` garde les anciens rapports ; après un repli dû à un
-  plantage, « Chargement du modèle » dit « sur le processeur ».
-
-Après le troisième essai sur le PC du travail (16/11)
-
-- **Cache d'OpenVINO borné** : il avait atteint 6 Go sur le portable
-  d'essai (dix modèles compilés de 165 Mo à 1,3 Go, un par réglage essayé :
-  campagne, propriétés, deux modèles ; OpenVINO n'en efface aucun). Chaque
-  ouverture note désormais ce qu'elle y écrit et pour quel réglage ; à
-  l'ouverture de la fenêtre et avant une transcription en ligne de commande,
-  ce qui n'a pas servi depuis 30 jours part, et au-delà de 4 Go le moins utile
-  (jamais le réglage en service, jamais pendant un calcul, jamais une entrée
-  écrite dans la journée). Les entrées d'avant ce suivi partent 30 jours
-  après avoir été vues. `diagnostic` montre le cache, sa taille et ses
-  bornes ; `scribouille effacer cache_openvino` le libère tout de suite. Avec
-  une WhiScribe 2.3.3, qui n'a pas de moteur OpenVINO, le cache n'est plus
-  rangé parmi ses fichiers ; avec une 2.4 (ou dans le doute), seules les
-  entrées notées par la 3.x sont touchées.
-- **Reprise gardée faute de source, dite comme telle** : `etat` sépare ce
-  que `--nettoyer` efface de ce qui est gardé, et dit pour chaque reprise
-  gardée où sa source était attendue et quoi faire ; `reprendre` ne répond
-  plus « aucune transcription interrompue » quand une reprise attend un
-  lecteur débranché : il le dit, avec le dossier attendu.
-- **Coupure de courant pendant la réécriture de l'état d'une reprise** : la
-  demande de départ est écrite une fois pour toutes, vidée sur le disque, et
-  la reprise se reconstruit avec elle et les segments gardés : elle reste
-  proposée, au segment près. Des segments sans état lisible ne sont plus
-  effacés par `etat --nettoyer` (redéposer le fichier les poursuit) ni sur
-  une lecture refusée un instant.
-- **Reprise d'un autre modèle** : redéposer un fichier ne poursuit plus une
-  reprise faite avec un autre modèle, ou d'un enregistrement remplacé sous
-  le même nom (le texte en aurait mêlé deux) ; elle reste telle quelle.
-  `--recommencer` et « Recommencer du début » n'effacent plus rien avant le
-  départ de la transcription, et jamais la reprise d'un autre modèle.
-- **Divers** : deux plantages de suite n'effacent plus des segments gardés
-  quand l'état était en retard ; nos états d'avant le 15/11 sont mis à l'abri
-  de la purge d'une 2.x qui partage le dossier ; nom provisoire court pour les
-  sorties (chemins proches de 260 caractères) ; nom provisoire unique pour le
-  journal de migration ; la simulation du registre des vérifications refuse
-  un autre nom du vrai dossier.
-
-Après le quatrième essai sur le PC du travail (16/11)
-
-- **Plafond du cache d'OpenVINO vraiment tenu** : sur le portable, le cache
-  restait à 6 Go malgré la purge. OpenVINO écrit ses modèles compilés en
-  lecture seule : leur effacement échouait, la purge comptait quand même
-  leur taille comme libérée et s'arrêtait en se croyant sous les 4 Go (le
-  journal annonçait 3,9 Go restants). L'attribut est désormais levé juste
-  avant d'effacer (`effacer cache_openvino` compris) ; un échec n'est plus
-  décompté, la purge passe au suivant, et le reste annoncé est celui du
-  dossier réel. Les échecs sont notés au journal en une ligne (nombre,
-  taille, cause) et dits par `diagnostic`, `espace` et l'écran « Espace
-  disque ».
-- **Jamais les compilés en service** : ceux d'avant le suivi du cache
-  n'étaient rattachés à aucun réglage, et les plus anciens, ceux du réglage
-  habituel, seraient partis les premiers. Chaque ouverture d'un modèle
-  rattache désormais à son réglage les compilés qu'elle relit (dernier accès
-  avancé pendant l'ouverture, fichier tenu ou projeté en mémoire), puis
-  borne le cache dans la foulée. Tant qu'un réglage chargé dans les 30
-  derniers jours n'est pas reconnu, rien d'antérieur ne part au plafond (au
-  plus 30 jours, et c'est dit) ; ensuite, le dernier accès le plus ancien
-  part d'abord. Sur un cache comme celui du portable (essai à l'échelle),
-  un chargement de chacun des deux modèles en service suffit pour repasser
-  sous 4 Go, sans recompilation.
-- **Fichiers d'état réécrits à l'identique** : `config-scribouille.json`,
-  `config.json`, l'index du cache d'OpenVINO, les mesures de durée, la
-  mémoire du dossier surveillé et le choix du dossier des modèles ne sont
-  plus réécrits (ni redatés) quand rien n'y change.
-- **`vocabulaire apprendre`** : horodatages et marques de voix (ceux de
-  Scribouille et les variantes courantes, entre crochets ou parenthèses,
-  collés à un mot) sont retirés des deux côtés avant de comparer ; ce que la
-  relue n'a pas en face dans le brut (en-tête, participants, sommaire, pied
-  de page) ne propose plus rien. Plus de « terme [hh:mm:ss », plus de noms
-  tirés de l'en-tête. Un compte rendu (`--cr`) reste lu en entier.
-- **Reprise sur OpenVINO identique au passage complet** : la parole d'après
-  la coupure était redécoupée en fenêtres depuis la jointure, et toutes les
-  fenêtres suivantes se décalaient (sur 11 min 49, 269 segments au lieu de
-  271 et 95,4 % de mots identiques ; reproduit sur processeur, 10 min : 218
-  au lieu de 220, 94,1 %). Ce sont maintenant celles du passage complet :
-  même texte au mot près quand la coupure tombe entre deux fenêtres (le cas
-  habituel, puisque les segments s'écrivent fenêtre par fenêtre) ; la seule
-  fenêtre à cheval sur la jointure est redécoupée sur sa partie d'après,
-  comme avant, sans segment perdu ni doublé. De même pour le rejeu après une
-  panne d'OpenVINO. Sur CTranslate2, rien ne change : ses passages complets
-  ne sont pas toujours reproductibles au mot près (repli de température par
-  tirage).
-
-Ce que change chaque choix
-
-- **Fiche « ce que ça change »** : un bouton ⓘ à côté de la qualité, du
-  rythme, de l'adaptation automatique, du réglage en service, du réglage
-  proposé, du conseil du banc, du mode avancé et de « Forcer le processeur »
-  dit ce que la transcription appliquera réellement sur ce poste : modèle et
-  fichier chargé, moteur, périphérique, précision, faisceau, lots ; fils de
-  calcul, priorité, énergie, pauses, adaptation et seuils de mémoire du
-  rythme ; durée pour une heure (mesurée sur ce poste ou estimée, c'est dit),
-  mémoire, processeur ; justesse avec les seules mesures que Scribouille
-  possède, et sur quoi elles ont été prises ; ce qui est allégé pour gagner
-  du temps. Au clavier (Entrée, Échap), lue par un lecteur d'écran, d'un
-  choix à l'autre du même groupe, en fenêtre étroite. Rien n'est appliqué.
-- **Une seule source** : la fiche refait, sur une copie, les décisions de
-  l'ouverture de la file avec les mêmes fonctions ; une vérification la
-  compare à la vraie file dans 192 situations (bureau, Core Ultra avec puce
-  graphique, carte NVIDIA, 8 Go) : elle ne peut pas dire autre chose que ce
-  qui sera fait.
-- **Sans fenêtre** : `scribouille reglages decrire` donne les mêmes lignes,
-  pour le réglage en service ou pour `preset=`, `rythme=`, `moteur=`,
-  `peripherique=`..., ou `proposition`, `banc`, `automatique` ; `--json`
-  donne aussi le plan structuré. Rien n'est enregistré.
-- **Le meilleur texte, peu importe le temps** : c'est Qualité maximale, avec
-  Vitesse maximale, et la carte le dit. Rien de ce qu'elle allège pour gagner
-  du temps n'a coûté un mot aux mesures (faisceau 5 au lieu de 8, lots) ;
-  les autres rythmes peuvent passer à turbo quand la mémoire libre manque,
-  Vitesse maximale jamais. La précision int8 n'a jamais été comparée à une
-  précision plus haute ; sur la puce graphique, le décodage glouton est une
-  limite d'OpenVINO.
-
-Des durées qui suivent ce qui calcule
-
-- **Forcer le processeur** : les cartes de qualité, le bandeau, la ligne
-  d'un fichier en file, le décompte de départ, `diagnostic` et
-  `transcrire` annonçaient la durée de la puce graphique (ou de la carte
-  NVIDIA) alors que le calcul tournait sur le processeur : 21 min 36
-  annoncées pour une heure en Qualité maximale sur un Core Ultra 5 225U,
-  quand le processeur en demande environ 1 h 24. Toutes disent maintenant
-  la durée du processeur.
-- **Une seule décision** (`app/calcul.py`) : le moteur que crée la file et
-  toutes les durées annoncées en dépendent. Elles suivent aussi la puce
-  suspendue ou écartée après un plantage depuis l'ouverture de la fenêtre,
-  OpenVINO retiré, un modèle sans version OpenVINO (sur le même poste, 6 min
-  18 annoncées pour une heure au lieu de 25 min 51), la puce qui
-  refuse de s'ouvrir (le décompte part de ce qui a été ouvert), le modèle et
-  le faisceau du mode avancé dans le bandeau et les cartes, le faisceau posé
-  par la campagne et les lots posés par le banc (leur mesure sur le poste
-  sert enfin). `materiel proposer` annonce la durée de ce qui calculera une
-  fois la proposition appliquée, et dit quand « Forcer le processeur » ou
-  une puce écartée l'empêchent de prendre effet. Changer le mode avancé, le
-  modèle, le faisceau ou « Forcer le processeur » recalcule les durées
-  affichées.
-- **Mémoire libre basse sur OpenVINO** : « passages traités un à un » ne
-  s'affiche plus, OpenVINO n'ayant pas de lots (le journal note que la
-  borne vaudrait pour un repli sur CTranslate2). Le modèle plus léger, lui,
-  est toujours dit.
-- Contrôlé par `outils/verifier_fiches.py` : chaque durée, dans la vraie
-  fenêtre, la ligne de commande et la vraie file, comparée à ce que coûte
-  le moteur réellement créé, dans onze situations.
+- Séparation des voix non revérifiée sur cette version.
+- Programme d'installation et désinstalleur vérifiés par des essais
+  automatiques sur Windows (installation neuve, mises à jour depuis la 2.3.3
+  et la 2.4.0 publiées, cohabitation avec une 2.3.3 installée pour tous les
+  utilisateurs, désinstallations silencieuse et avec effacement), pas encore
+  sur un poste de travail.
+- Fenêtre vérifiée par contrôles automatiques et captures.
+- Mesures faites sur un seul modèle de portable ; le gain du vocabulaire date
+  d'avant la correction à l'oreille plus prudente, à remesurer.
 
 ---
 
 ## 2.4.0
 
-*Non publiée.*
+*Publiée le 11 novembre 2026.*
 
 Les portables Intel ne sont plus laissés au seul processeur.
 
