@@ -281,6 +281,44 @@ Après la revue de code du 15/11
   --recommencer` garde les anciens rapports ; après un repli dû à un
   plantage, « Chargement du modèle » dit « sur le processeur ».
 
+Après le troisième essai sur le PC du travail (16/11)
+
+- **Cache d'OpenVINO borné** : il avait atteint 6 Go sur le portable
+  d'essai (dix modèles compilés de 165 Mo à 1,3 Go, un par réglage essayé :
+  campagne, propriétés, deux modèles ; OpenVINO n'en efface aucun). Chaque
+  ouverture note désormais ce qu'elle y écrit et pour quel réglage ; à
+  l'ouverture de la fenêtre et avant une transcription en ligne de commande,
+  ce qui n'a pas servi depuis 30 jours part, et au-delà de 4 Go le moins utile
+  (jamais le réglage en service, jamais pendant un calcul, jamais une entrée
+  écrite dans la journée). Les entrées d'avant ce suivi partent 30 jours
+  après avoir été vues. `diagnostic` montre le cache, sa taille et ses
+  bornes ; `scribouille effacer cache_openvino` le libère tout de suite. Avec
+  une WhiScribe 2.3.3, qui n'a pas de moteur OpenVINO, le cache n'est plus
+  rangé parmi ses fichiers ; avec une 2.4 (ou dans le doute), seules les
+  entrées notées par la 3.x sont touchées.
+- **Reprise gardée faute de source, dite comme telle** : `etat` sépare ce
+  que `--nettoyer` efface de ce qui est gardé, et dit pour chaque reprise
+  gardée où sa source était attendue et quoi faire ; `reprendre` ne répond
+  plus « aucune transcription interrompue » quand une reprise attend un
+  lecteur débranché : il le dit, avec le dossier attendu.
+- **Coupure de courant pendant la réécriture de l'état d'une reprise** : la
+  demande de départ est écrite une fois pour toutes, vidée sur le disque, et
+  la reprise se reconstruit avec elle et les segments gardés : elle reste
+  proposée, au segment près. Des segments sans état lisible ne sont plus
+  effacés par `etat --nettoyer` (redéposer le fichier les poursuit) ni sur
+  une lecture refusée un instant.
+- **Reprise d'un autre modèle** : redéposer un fichier ne poursuit plus une
+  reprise faite avec un autre modèle, ou d'un enregistrement remplacé sous
+  le même nom (le texte en aurait mêlé deux) ; elle reste telle quelle.
+  `--recommencer` et « Recommencer du début » n'effacent plus rien avant le
+  départ de la transcription, et jamais la reprise d'un autre modèle.
+- **Divers** : deux plantages de suite n'effacent plus des segments gardés
+  quand l'état était en retard ; nos états d'avant le 15/11 sont mis à l'abri
+  de la purge d'une 2.x qui partage le dossier ; nom provisoire court pour les
+  sorties (chemins proches de 260 caractères) ; nom provisoire unique pour le
+  journal de migration ; la simulation du registre des vérifications refuse
+  un autre nom du vrai dossier.
+
 ---
 
 ## 2.4.0
