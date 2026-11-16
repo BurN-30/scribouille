@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import audio as audio_module
-from . import calibration
+from . import calcul, calibration
 from . import config as config_module
 from . import diarisation, energie, journal, langues, moteur, presets, reprise as reprise_module
 from . import instance as instances
@@ -170,7 +170,8 @@ def fabriquer_moteur(mat: Materiel, reglages: dict):
         from . import moteur_factice
 
         return moteur_factice.fabriquer(essai, mat)
-    if mat.moteur == "openvino" and not reglages.get("forcer_processeur"):
+    # La décision est celle que suivent toutes les durées annoncées (`app/calcul.py`).
+    if calcul.moteur_retenu(mat, bool(reglages.get("forcer_processeur"))) == "openvino":
         from . import moteur_openvino
 
         return moteur_openvino.MoteurAvecRepli(mat, mat.peripherique_openvino or "CPU")
@@ -647,8 +648,11 @@ class FileTraitement:
                 journal.info("Reprise de %s abandonnée à la demande (recommencer)", element.nom)
             precoce = self._session = reprise_module.Session(
                 reprise_module.cle(source, reglages["modele"]), active=True)
-            precoce.noter_calcul(self.materiel.cle_calcul,
-                                 modele_du_calcul(reglages["modele"], self.materiel.cle_calcul))
+            # Ce qui calculera (`app/calcul.py`), pas le seul réglage du poste :
+            # processeur forcé, modèle sans version OpenVINO.
+            prevu = calcul.materiel_du_calcul(self.materiel, bool(reglages.get("forcer_processeur")),
+                                              reglages["modele"])
+            precoce.noter_calcul(prevu.cle_calcul, modele_du_calcul(reglages["modele"], prevu.cle_calcul))
             precoce.ouvrir(source, reglages["modele"], float(element.duree_annoncee or 0),
                            sortie=str(config.get("dossier_sortie") or ""),
                            demande=reprise_module.demande_de(config), nouvelle=True)
@@ -700,10 +704,20 @@ class FileTraitement:
             modele, lot, raison = rythme.garde_memoire(
                 choisi, nom_moteur, reglages["modele"], int(reglages.get("lot") or 0), libre, leger)
             if raison:
-                journal.attention("Mémoire libre %.1f Go : %s", libre, raison)
-                signaler("attention", langues.t(
-                    f"rythme.memoire_{raison}", libre=langues.nombre(libre, 1),
-                    modele=moteur.nom_court(modele)))
+                # Le message ne dit que ce qui change vraiment : OpenVINO calcule
+                # fenêtre par fenêtre, sans lots ; des lots ramenés à un passage
+                # n'y changent rien (seul un repli sur CTranslate2 en tiendrait
+                # compte), l'écran n'en dit donc rien.
+                sans_lots = calcul.materiel_du_calcul(
+                    self.materiel, bool(reglages.get("forcer_processeur")), modele).moteur == "openvino"
+                if raison == "lots" and sans_lots:
+                    journal.info("Mémoire libre %.1f Go : lots ramenés à un passage pour un éventuel repli sur "
+                                 "CTranslate2 ; OpenVINO, fenêtre par fenêtre, n'en a pas", libre)
+                else:
+                    journal.attention("Mémoire libre %.1f Go : %s", libre, raison)
+                    signaler("attention", langues.t(
+                        f"rythme.memoire_{raison}", libre=langues.nombre(libre, 1),
+                        modele=moteur.nom_court(modele)))
                 reglages["modele"], reglages["lot"] = modele, lot
                 if modele != (precoce and precoce._infos.get("modele")) and not element.recommencer \
                         and config.get("sauvegarde_progressive", True):
@@ -758,8 +772,9 @@ class FileTraitement:
                 if precoce.identifiant != identifiant:
                     precoce.effacer()   # autre modèle, autre clé
             session = self._session = reprise_module.Session(identifiant, active=True)
-            session.noter_calcul(self.materiel.cle_calcul,
-                                 modele_du_calcul(reglages["modele"], self.materiel.cle_calcul))
+            prevu = calcul.materiel_du_calcul(self.materiel, bool(reglages.get("forcer_processeur")),
+                                              reglages["modele"])
+            session.noter_calcul(prevu.cle_calcul, modele_du_calcul(reglages["modele"], prevu.cle_calcul))
             session.alerte = lambda _detail: signaler("attention", langues.t("trait.reprise_coupee"))
             session.ouvrir(
                 source, reglages["modele"], duree_audio,
@@ -781,21 +796,6 @@ class FileTraitement:
 
         # 2. Transcription
         element.etat = "transcription"
-        # Rythme équilibré ou discret : l'estimation de départ en tient compte
-        # (adaptation automatique : celle du rythme choisi, la plus longue).
-        # C'est la même fonction que pour les annonces de l'écran.
-        estimation = presets.estimer_annonce(
-            duree_audio,
-            reglages["preset"],
-            self.materiel,
-            choisi,
-            diarisation=diarisation.effective(config.get("diarisation")),
-            modele_avance=reglages["modele"] if (
-                config.get("mode_avance")
-                or reglages["modele"] != presets.preset(reglages["preset"])["modele"]) else "",
-            beam=int(reglages["beam_size"] or 0),
-            lot=int(reglages.get("lot") or 0),
-        )
         regulateur = (self._rythme or {}).get("regulateur")
         durees_avant = regulateur.releve_durees() if regulateur is not None else {}
         rappels.etat(element.identifiant, "transcription", langues.t("etat.transcription"))
@@ -811,6 +811,26 @@ class FileTraitement:
         debut_chargement = time.time()
         instance.charger(reglages["modele"], signaler)
         _noter_calcul(session, instance, reglages["modele"])
+        # Estimation de départ, une fois le modèle ouvert : celle de ce qui
+        # calcule vraiment (`app/calcul.py`), repli sur CTranslate2 à
+        # l'ouverture compris (le moteur ouvert dit sa situation de calcul).
+        # Rythme équilibré ou discret : elle en tient compte (adaptation
+        # automatique : celle du rythme choisi, la plus longue). C'est la même
+        # fonction que pour les annonces de l'écran.
+        prevu = calcul.materiel_du_calcul(self.materiel, bool(reglages.get("forcer_processeur")),
+                                          reglages["modele"])
+        estimation = presets.estimer_annonce(
+            duree_audio,
+            reglages["preset"],
+            calcul.selon_cle(prevu, str(getattr(instance, "cle_calcul", "") or "")),
+            choisi,
+            diarisation=diarisation.effective(config.get("diarisation")),
+            modele_avance=reglages["modele"] if (
+                config.get("mode_avance")
+                or reglages["modele"] != presets.preset(reglages["preset"])["modele"]) else "",
+            beam=int(reglages["beam_size"] or 0),
+            lot=int(reglages.get("lot") or 0),
+        )
         # Le pied de page montre la dernière ligne du journal : sans celle-ci,
         # il affichait « Chargement du modèle... » pendant toute la transcription.
         signaler("info", langues.t(

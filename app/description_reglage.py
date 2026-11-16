@@ -15,9 +15,10 @@ du poste (`reglage_machine.appliquer_au_materiel`), réglages du preset
 (`config.reglages_effectifs`), lots (`presets.taille_lot`, `lot_impose`, borne
 du rythme), faisceau (`faisceau_impose`, `moteur_openvino.faisceau_effectif`),
 rythme (`rythme.retenu`, `bornes_chargement`, `bornes`, `pause`), moteur
-(celui que `traitement.fabriquer_moteur` créerait), puis la garde de la
-mémoire de `traiter_element` (`rythme.garde_memoire`, `besoin_memoire_go`) et
-la durée annoncée partout (`presets.estimer_annonce`). La file n'en dépend
+(`calcul.materiel_du_calcul`, la décision même de `traitement.fabriquer_moteur`),
+puis la garde de la mémoire de `traiter_element` (`rythme.garde_memoire`,
+`besoin_memoire_go`) et la durée annoncée partout (`calcul.annonce_sur`, sur ce
+qui calcule vraiment). La file n'en dépend
 pas : ce module ne fait que lire, et `outils/verifier_fiches.py` compare la
 fiche à ce que la vraie `ouvrir_file` pose, cas par cas.
 
@@ -36,12 +37,9 @@ ne sont pas notées pour une fiche (filtre propre au fil appelant).
 from __future__ import annotations
 
 import copy
-import logging
-import threading
-from contextlib import contextmanager
 from dataclasses import dataclass
 
-from . import calibration, langues, presets, reglage_machine, rythme
+from . import calcul, calibration, langues, presets, reglage_machine, rythme
 from .materiel import Materiel
 
 #: Clés de la configuration qu'une hypothèse peut changer.
@@ -158,28 +156,8 @@ def hypothese(config: dict, mat: Materiel, choix: dict | None = None) -> dict:
 # Le plan : ce que la file appliquerait
 # ---------------------------------------------------------------------------
 
-class _SansJournal(logging.Filter):
-    """Écarte du journal les lignes du seul fil qui décrit (les autres passent)."""
-
-    def __init__(self):
-        super().__init__()
-        self.fil = threading.get_ident()
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        return threading.get_ident() != self.fil
-
-
-@contextmanager
-def _muet():
-    journal = logging.getLogger("transcripteur")
-    filtre = _SansJournal()
-    journal.addFilter(filtre)
-    reessai = reglage_machine.REESSAI_EN_COURS
-    try:
-        yield
-    finally:
-        journal.removeFilter(filtre)
-        reglage_machine.REESSAI_EN_COURS = reessai
+#: Réglage du poste relu sans journal ni réessai marqué (voir `app/calcul.py`).
+_muet = calcul.muet
 
 
 def _origine_fils(mat: Materiel) -> str:
@@ -195,19 +173,20 @@ def _origine_fils(mat: Materiel) -> str:
     return "moins_deux"
 
 
-def plan(config: dict, mat: Materiel, choix: dict | None = None) -> dict:
+def plan(config: dict, mat: Materiel, choix: dict | None = None, ecartee: bool = False) -> dict:
     """
     Ce que `ouvrir_file` (puis `traiter_element`) appliquerait avec ce choix,
     sur ce poste. Rien n'est modifié : ni la configuration, ni le matériel.
+    `ecartee` : puce écartée pour la session par le superviseur de la fenêtre
+    (`Superviseur.puce_ecartee`), que le processus moteur applique.
     """
     conf = hypothese(config, mat, choix)
     choix = choix or {}
-    m = copy.copy(mat)
     from . import config as config_module
 
+    m, effet = calcul.poste(conf, mat, ecartee)
     with _muet():
-        effet = reglage_machine.appliquer_au_materiel(conf, m)
-        if effet.get("plantage") and choix.get("leve_suspension"):
+        if effet.get("plantage") and choix.get("leve_suspension") and not ecartee:
             # « Appliquer » une proposition ou un conseil d'OpenVINO lève la
             # suspension (`reglage_machine.enregistrer` efface le témoin) : la
             # file ouvrirait alors la puce, si elle est là.
@@ -243,19 +222,15 @@ def plan(config: dict, mat: Materiel, choix: dict | None = None) -> dict:
 
     modele = reglages["modele"]
     forcer = bool(reglages["forcer_processeur"])
-    sur_openvino = m.moteur == "openvino" and not forcer
-    depot = ""
-    sans_equivalent = False
-    if sur_openvino:
-        from . import moteur
-
-        depot = presets.depot_openvino(modele) or (modele if moteur.est_modele_openvino(modele) else "")
-        sans_equivalent = not depot
-    if sur_openvino and depot:
+    # Ce qui calcule : la décision de la file (`app/calcul.py`), la même que
+    # celle des cartes, du bandeau et du décompte de départ.
+    prevu = calcul.materiel_du_calcul(m, forcer, modele)
+    sans_equivalent = calcul.moteur_retenu(m, forcer) == "openvino" and prevu.moteur != "openvino"
+    if prevu.moteur == "openvino":
         from . import moteur_openvino
 
-        peripherique = (m.peripherique_openvino or "CPU").upper()
-        moteur_calcul, calcule = "openvino", depot
+        peripherique = (prevu.peripherique_openvino or "CPU").upper()
+        moteur_calcul, calcule = "openvino", presets.depot_openvino(modele) or modele
         faisceau = moteur_openvino.faisceau_effectif(peripherique, faisceau_ov)
         faisceau_demande = max(1, int(faisceau_ov or 1))
         precision = "int8"
@@ -264,7 +239,7 @@ def plan(config: dict, mat: Materiel, choix: dict | None = None) -> dict:
     else:
         # CTranslate2 : forcé, réglé, ou repli d'OpenVINO pour un modèle sans
         # version OpenVINO (`MoteurAvecRepli` ouvre alors son CTranslate2).
-        peripherique = "cpu" if forcer else m.peripherique
+        peripherique = prevu.peripherique
         moteur_calcul, calcule = "ctranslate2", modele
         faisceau = faisceau_demande = max(1, beam or 5)
         precision = "float16" if peripherique == "cuda" else "int8"
@@ -292,23 +267,14 @@ def plan(config: dict, mat: Materiel, choix: dict | None = None) -> dict:
                                     if modele in ("large-v3", "large-v2") else None),
                  "modele_leger": presets.MODELE_TURBO if not conf.get("mode_avance") else ""}
 
-    # Durée annoncée : la même que les cartes des presets et le bandeau
-    # (`pour_une_heure`), sur la copie du matériel ; mode avancé : celle de la
-    # file (`traiter_element`). Forcer le processeur : la durée du processeur.
-    m_duree = m
-    if forcer and m.cle_calcul != "cpu":
-        m_duree = copy.copy(m)
-        m_duree.moteur, m_duree.peripherique_openvino, m_duree.cuda_disponible = "ctranslate2", "", False
-    avance = bool(conf.get("mode_avance")) and (
-        modele != presets.preset(reglages["preset"])["modele"]
-        or int(reglages["beam_size"] or 0) != presets.preset(reglages["preset"])["beam_size"])
-    modele_avance = modele if avance else ""
-    beam_annonce = int(reglages["beam_size"] or 0) if avance else 0
-    secondes = presets.estimer_annonce(3600, reglages["preset"], m_duree, choisi,
-                                       modele_avance=modele_avance, beam=beam_annonce)
-    vitesse_s = presets.estimer_annonce(3600, reglages["preset"], m_duree, "vitesse",
-                                        modele_avance=modele_avance, beam=beam_annonce)
-    duree = _source_duree(reglages["preset"], m_duree, modele_avance, beam_annonce)
+    # Durée annoncée : celle des cartes des presets, du bandeau et du décompte
+    # de départ de la file (`calcul.annonce_sur`), sur ce qui calcule vraiment
+    # (processeur forcé, modèle sans version OpenVINO, puce suspendue...).
+    annonce = calcul.parametres(conf, m)
+    m_duree = annonce["materiel"]
+    secondes = calcul.annonce_sur(conf, m, rythme_choisi=choisi)
+    vitesse_s = calcul.annonce_sur(conf, m, rythme_choisi="vitesse")
+    duree = _source_duree(reglages["preset"], m_duree, annonce["modele_avance"], annonce["beam"], annonce["lot"])
     coefficient = rythme.coefficient(choisi, m_duree.cle_calcul)
     famille = "puce" if m_duree.cle_calcul in ("openvino-gpu", "openvino-npu", "cuda") else "processeur"
     try:
@@ -392,13 +358,12 @@ def plan(config: dict, mat: Materiel, choix: dict | None = None) -> dict:
     }
 
 
-def _source_duree(cle_preset: str, mat: Materiel, modele_avance: str, beam: int) -> dict:
+def _source_duree(cle_preset: str, mat: Materiel, modele_avance: str, beam: int, lot: int) -> dict:
     """
     D'où vient la durée annoncée : mesure du poste (et son poids), ou facteur
     de repli. Mêmes paramètres que `presets._facteur_mesure_pondere`.
     """
     modele = presets.modele_du_preset(cle_preset, modele_avance)
-    lot = presets.taille_lot(cle_preset, mat)
     faisceau = beam or presets.preset(cle_preset)["beam_size"]
     if mat.cle_calcul.startswith("openvino"):
         faisceau, lot = 1, 0
@@ -741,13 +706,14 @@ def verdict(p: dict) -> str:
     return t("fiche.verdict.autre")
 
 
-def decrire(config: dict, mat: Materiel, choix: dict | None = None, sujet: str = "") -> dict:
+def decrire(config: dict, mat: Materiel, choix: dict | None = None, sujet: str = "",
+            ecartee: bool = False) -> dict:
     """
     La fiche complète : le plan (structuré) et ses sections traduites. Pour un
     rythme (ou l'adaptation), le rythme passe en tête et l'en-tête dit ce
     qu'il vise ; les mêmes lignes, dans un autre ordre.
     """
-    p = plan(config, mat, choix)
+    p = plan(config, mat, choix, ecartee)
     p["verdict"] = verdict(p)
     p["sections"] = sections(p)
     if sujet in ("rythme", "auto"):
@@ -765,7 +731,7 @@ SUJETS = ("actuel", "preset", "rythme", "auto", "proposition", "banc", "automati
 
 
 def choix_du_sujet(config: dict, mat: Materiel, sujet: str, valeur=None,
-                   proposition: dict | None = None) -> tuple[dict, str, list[dict]]:
+                   proposition: dict | None = None, ecartee: bool = False) -> tuple[dict, str, list[dict]]:
     """
     Le choix décrit par un bouton d'information de la fenêtre (ou un mot de
     `reglages decrire`), la phrase qui dit dans quel cadre, et les autres
@@ -773,9 +739,7 @@ def choix_du_sujet(config: dict, mat: Materiel, sujet: str, valeur=None,
     """
     t = langues.t
     preset_actuel = presets.preset(config.get("preset", presets.PRESET_DEFAUT))["cle"]
-    m = copy.copy(mat)
-    with _muet():
-        reglage_machine.appliquer_au_materiel(config, m)
+    m, _effet = calcul.poste(config, mat, ecartee)
     rythme_actuel = rythme.retenu(config, m)
     groupe_presets = [{"sujet": "preset", "valeur": cle, "nom": presets.nom_preset(cle)} for cle in presets.PRESETS]
     groupe_rythmes = [{"sujet": "rythme", "valeur": nom, "nom": _nom_rythme(nom)} for nom in rythme.RYTHMES]
@@ -797,7 +761,7 @@ def choix_du_sujet(config: dict, mat: Materiel, sujet: str, valeur=None,
         if proposition is None:
             from . import adaptation
 
-            proposition = adaptation.proposition_du_poste(mat)
+            proposition = adaptation.proposition_du_poste(mat, config, ecartee)
         choix = choix_proposition(config, mat, proposition)
         choix["leve_suspension"] = proposition["moteur"] == "openvino"
         return choix, t("fiche.contexte.proposition", resume=proposition.get("resume", "")), []

@@ -863,15 +863,15 @@ def _config_de_commande(options, materiel_poste) -> dict:
 
 
 def _modele_attendu(config: dict, mat) -> str:
-    from . import presets, reglage_machine
+    from . import calcul, presets, reglage_machine
 
     essai = dict(config)
     reglage_machine.appliquer_au_materiel(essai, mat)
     avance = config.get("modele_avance", "") if config.get("mode_avance") else ""
     modele = presets.modele_du_preset(config.get("preset", presets.PRESET_DEFAUT), avance)
-    forcer = bool(config.get("forcer_processeur")) and bool(config.get("mode_avance"))
-    if mat.moteur == "openvino" and not forcer and presets.depot_openvino(modele):
-        return presets.depot_openvino(modele)
+    # Ce qui calculera (`app/calcul.py`) : le dépôt OpenVINO seulement si OpenVINO calcule.
+    if calcul.materiel_du_calcul(mat, calcul.forcer_demande(config), modele).moteur == "openvino":
+        return presets.depot_openvino(modele) or modele
     return modele
 
 
@@ -978,18 +978,20 @@ def _executer_file(sortie: Sortie, elements: list, config: dict, telecharger: bo
         reprise=lambda i, c: resultats[i].update({"reprise": c}))
     # Rythme et durée tels que le moteur les prendra : réglage du poste posé
     # sur une copie du matériel (le moteur le pose pour de bon de son côté).
-    from . import reglage_machine, rythme as rythme_module
+    from . import calcul, reglage_machine, rythme as rythme_module
 
     essai = copy.copy(mat)
     reglage_machine.appliquer_au_materiel(config, essai)
     rythme_retenu = rythme_module.retenu(config, essai)
     from . import diarisation
 
+    # Durée de ce qui calculera vraiment (`app/calcul.py`) : processeur forcé,
+    # puce suspendue, modèle du mode avancé compris.
     sortie.evenement("debut", fichiers=[e.chemin for e in elements], version=VERSION,
                      preset=config.get("preset"), rythme=rythme_retenu,
                      locuteurs={"demandes": bool(config.get("diarisation")),
                                 "disponibles": diarisation.disponible()},
-                     pour_une_heure=presets.pour_une_heure(config.get("preset", "qualite"), essai, rythme_retenu))
+                     pour_une_heure=presets.formater_duree(calcul.annonce(config, mat, rythme_choisi=rythme_retenu)))
     interrompu = False
     file.demarrer(config, rappels)
     try:
@@ -1759,8 +1761,8 @@ def _ligne_cache(cache: dict) -> str:
 def cmd_diagnostic(options, sortie: Sortie) -> int:
     import importlib.util
 
-    from . import config as config_module, diarisation, materiel, moteur, moteur_openvino, presets, reglage_machine
-    from . import rythme as rythme_module, vocabulaire
+    from . import calcul, config as config_module, diarisation, materiel, moteur, moteur_openvino, presets
+    from . import reglage_machine, rythme as rythme_module, vocabulaire
 
     if options.materiel:
         materiel.rafraichir()
@@ -1823,8 +1825,9 @@ def cmd_diagnostic(options, sortie: Sortie) -> int:
                     "modele": modele, "rythme": rythme_module.retenu(config, mat),
                     "rythme_reglage": config.get("rythme") or "", "rythme_auto": bool(config.get("rythme_auto")),
                     "indisponible": bool(effet.get("indisponible")), "plantage": effet.get("plantage") or ""},
-        "pour_une_heure": presets.pour_une_heure(config.get("preset", "qualite"), mat,
-                                                 rythme_module.retenu(config, mat)),
+        # Durée de ce qui calculera vraiment (`app/calcul.py`).
+        "pour_une_heure": presets.formater_duree(calcul.annonce(config, mat,
+                                                                rythme_choisi=rythme_module.retenu(config, mat))),
         "modeles": modeles,
         "locuteurs": {"demandes": bool(config.get("diarisation")), "disponibles": diarisation.disponible(),
                       "indisponibilite": diarisation.indisponibilite()},
@@ -1898,7 +1901,7 @@ def cmd_materiel(options, sortie: Sortie) -> int:
         config = config_module.charger()
         mat = materiel.detecter()
         description = adaptation.decrire(adaptation.profil(mat))
-        proposition = adaptation.proposition_du_poste(mat)
+        proposition = adaptation.proposition_du_poste(mat, config)
         deja = adaptation.deja_en_place(proposition, config, mat)
         applique = False
         if not deja and options.appliquer:

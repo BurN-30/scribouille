@@ -26,6 +26,14 @@ Six contrôles :
   5. LIGNE DE COMMANDE : `reglages decrire` (texte et `--json`) n'écrit rien,
      rend les mêmes lignes que la fonction, refuse une clé inconnue.
   6. PASSERELLE : `decrire_reglage` de la fenêtre rend la même fiche.
+  7. DURÉES : toute durée annoncée (cartes, bandeau, ligne d'un fichier en
+     file et fiche de la fenêtre, `diagnostic`, `transcrire`, `materiel
+     proposer`, décompte de départ de la vraie `traiter_element`) est celle
+     de ce qui calculera vraiment : processeur forcé, modèle sans version
+     OpenVINO, puce suspendue ou écartée depuis l'ouverture de la fenêtre,
+     OpenVINO retiré, repli à l'ouverture, faisceau et lots posés par le
+     réglage du poste. La garde de la mémoire ne dit « un passage à la fois »
+     que si des lots tournent vraiment.
 
     python outils/verifier_fiches.py
 
@@ -579,7 +587,354 @@ def essai_passerelle() -> None:
              "la fenêtre et la fonction de la fiche disent les mêmes lignes")
 
 
+# ---------------------------------------------------------------------------
+# 7. Les durées annoncées sont celles de ce qui calcule vraiment
+# ---------------------------------------------------------------------------
+
+DISTIL = "bofenghuang/whisper-large-v3-distil-fr-v0.2"
+POSTES = {"225u": poste_225u, "bureau": poste_bureau, "nvidia": poste_nvidia}
+
+#: Situations où le réglage du poste ne dit pas ce qui calcule. « ov » :
+#: OpenVINO installé ; « avant » : état vu à l'ouverture de la fenêtre (son
+#: matériel posé alors), si autre que celui du moment ; « ecartee » : puce
+#: écartée pour la session par le superviseur ; « mesure » : transcription
+#: déjà mesurée sur ce poste (modèle, clé de calcul, faisceau, lots).
+SITUATIONS = (
+    {"nom": "processeur forcé, puce Intel réglée", "poste": "225u", "ov": True, "reglage": "ov_gpu",
+     "conf": {"mode_avance": True, "forcer_processeur": True, "rythme": "vitesse"}},
+    {"nom": "processeur forcé, puce Intel réglée, Équilibré", "poste": "225u", "ov": True, "reglage": "ov_gpu",
+     "conf": {"mode_avance": True, "forcer_processeur": True, "rythme": "equilibre"}},
+    {"nom": "processeur forcé, carte NVIDIA", "poste": "nvidia", "ov": False, "reglage": "aucun",
+     "conf": {"mode_avance": True, "forcer_processeur": True}},
+    {"nom": "modèle sans version OpenVINO sur la puce", "poste": "225u", "ov": True, "reglage": "ov_gpu",
+     "conf": {"mode_avance": True, "modele_avance": DISTIL, "rythme": "vitesse"}},
+    {"nom": "puce suspendue depuis l'ouverture de la fenêtre", "poste": "225u", "ov": True, "reglage": "ov_gpu",
+     "conf": {"rythme": "vitesse"}, "avant": {"temoin": None},
+     "temoin": {"etat": "suspendue", "peripherique": "GPU"}},
+    {"nom": "OpenVINO retiré depuis l'ouverture de la fenêtre", "poste": "225u", "ov": False, "reglage": "ov_gpu",
+     "conf": {"rythme": "vitesse"}, "avant": {"ov": True}},
+    {"nom": "puce écartée pour la session par le superviseur", "poste": "225u", "ov": True, "reglage": "ov_gpu",
+     "conf": {"rythme": "vitesse"}, "ecartee": True},
+    {"nom": "faisceau 1 posé par la campagne, déjà mesuré", "poste": "bureau", "ov": False, "reglage": "ct2_f1",
+     "conf": {"rythme": "vitesse"}, "mesure": ("large-v3", "cpu", 1, 8)},
+    {"nom": "lots de 4 posés par le banc, déjà mesurés", "poste": "bureau", "ov": False, "reglage": "ct2_banc",
+     "conf": {"rythme": "vitesse"}, "mesure": ("large-v3", "cpu", 5, 4)},
+    {"nom": "mode avancé, turbo choisi avec Qualité maximale", "poste": "bureau", "ov": False, "reglage": "aucun",
+     "conf": {"mode_avance": True, "modele_avance": presets.MODELE_TURBO, "rythme": "vitesse"}},
+    {"nom": "puce Intel réglée, rien de particulier (témoin)", "poste": "225u", "ov": True, "reglage": "ov_gpu",
+     "conf": {"rythme": "vitesse"}},
+)
+
+
+def _conf(s: dict, mat: materiel.Materiel) -> dict:
+    return {**copy.deepcopy(config_module.DEFAUTS), "preset": "qualite", **s["conf"],
+            reglage_machine.CLE: reglage_de(mat, s["reglage"])}
+
+
+@contextlib.contextmanager
+def _etat(s: dict, moment: str = "pendant"):
+    """La simulation du moment : « avant » (ouverture de la fenêtre) ou « pendant » (la file qui part)."""
+    avant = (s.get("avant") or {}) if moment == "avant" else {}
+    temoin = avant["temoin"] if "temoin" in avant else s.get("temoin")
+    with simulation(avant.get("ov", s["ov"]), temoin) as leviers:
+        yield leviers
+
+
+@contextlib.contextmanager
+def _mesure(s: dict):
+    """La transcription déjà mesurée de la situation, posée sur ce poste le temps du contrôle."""
+    if s.get("mesure"):
+        modele, cle, faisceau, lot = s["mesure"]
+        calibration.enregistrer(modele, cle, faisceau, 1800.0, 300.0, POSTES[s["poste"]](), lot=lot)
+    try:
+        yield
+    finally:
+        calibration.oublier()
+
+
+def _selon_cle(mat: materiel.Materiel, cle: str) -> materiel.Materiel:
+    """Le matériel tel que le moteur ouvert le dit (sa clé de calcul) : écrit ici, sans `app/calcul.py`."""
+    m = copy.copy(mat)
+    cle = str(cle or "").lower()
+    if cle.startswith("openvino-"):
+        m.moteur, m.peripherique_openvino = "openvino", cle.split("-", 1)[1].upper()
+    else:
+        m.moteur, m.peripherique_openvino, m.cuda_disponible = "ctranslate2", "", cle == "cuda"
+    return m
+
+
+def _vraie(s: dict, conf: dict | None = None, duree: float = 3600.0, cle_ouverte: str = "") -> tuple[float, str]:
+    """
+    Ce que coûte vraiment la situation : la vraie `ouvrir_file` crée son moteur,
+    sa clé de calcul (celle sous laquelle la file rangera la mesure) donne le
+    matériel de l'estimation ; faisceau et lots sont ceux que la file pose.
+    Rend (secondes annoncées, rythme).
+    """
+    with _etat(s), _mesure(s):
+        mat = POSTES[s["poste"]]()
+        conf = conf or _conf(s, mat)
+        reglage_machine.PUCE_ECARTEE = bool(s.get("ecartee"))
+        file = traitement.FileTraitement(copy.copy(mat))
+        try:
+            contexte = file.ouvrir_file(copy.deepcopy(conf))
+            try:
+                instance, reglages = contexte["instance"], contexte["reglages"]
+                if isinstance(instance, moteur_openvino.MoteurAvecRepli) and not (
+                        presets.depot_openvino(reglages["modele"]) or moteur.est_modele_openvino(reglages["modele"])):
+                    instance._actif = instance._ct2   # premier geste de `MoteurAvecRepli.charger`
+                reel = _selon_cle(file.materiel, cle_ouverte or instance.cle_calcul)
+                lot = presets.taille_lot(reglages["preset"], file.materiel)
+                impose = reglage_machine.lot_impose(conf, file.materiel)
+                if impose is not None and lot:
+                    lot = impose
+                avance = bool(conf.get("mode_avance")) or reglages["modele"] != presets.preset(reglages["preset"])["modele"]
+                choisi = contexte["regulateur"].choisi
+                return presets.estimer_annonce(duree, reglages["preset"], reel, choisi,
+                                               modele_avance=reglages["modele"] if avance else "",
+                                               beam=int(reglages["beam_size"] or 0), lot=lot), choisi
+            finally:
+                file.fermer_file(contexte, traitement.Rappels())
+        finally:
+            reglage_machine.PUCE_ECARTEE = False
+
+
+def _fenetre_durees() -> dict:
+    """
+    Dans un processus à part (`--fenetre`) : la vraie Passerelle de la fenêtre,
+    son matériel posé à l'ouverture (état « avant »), puis ce qu'elle affiche
+    au moment où la file part (état « pendant »).
+    """
+    import runpy
+
+    sys.argv = [str(RACINE / "transcriber.pyw")]
+    ns = runpy.run_path(sys.argv[0], run_name="essai-durees")
+    passerelle = ns["Passerelle"]()
+    # Les durées sont écrites dans la langue de l'interface : celle du contrôle.
+    langues.definir("fr")
+    retour = {}
+    for s in SITUATIONS:
+        with _etat(s, "avant"):
+            mat = POSTES[s["poste"]]()
+            conf = _conf(s, mat)
+            reglage_machine.appliquer_au_materiel(conf, mat)
+            passerelle.config, passerelle.materiel = conf, mat
+            passerelle.file.materiel = mat
+        with _etat(s), _mesure(s):
+            passerelle.moteur.puce_ecartee = bool(s.get("ecartee"))
+            try:
+                d = passerelle.durees_affichees()
+                avance = conf.get("modele_avance", "") if conf.get("mode_avance") else ""
+                fiche_fenetre = passerelle.decrire_reglage({"sujet": "actuel"})
+                retour[s["nom"]] = {
+                    "carte": next(c["pour_une_heure"] for c in d["presets"] if c["cle"] == conf["preset"]),
+                    "bandeau": d["rythme"]["pour_une_heure"][d["rythme"]["choisi"]],
+                    "rythme": d["rythme"]["choisi"],
+                    "ligne": passerelle.estimation(3600, conf["preset"], False, avance),
+                    "fiche": (fiche_fenetre.get("cout") or {}).get("pour_une_heure", fiche_fenetre.get("message")),
+                }
+            except Exception as exc:  # une erreur se dit, elle ne cache pas les autres situations
+                retour[s["nom"]] = {"erreur": f"{type(exc).__name__}: {exc}"}
+            finally:
+                passerelle.moteur.puce_ecartee = False
+    return retour
+
+
+class _SortieNotee:
+    """Sortie de la ligne de commande qui note ce qu'elle reçoit."""
+
+    def __init__(self):
+        self.donnees_recues: dict = {}
+        self.evenements: dict = {}
+
+    def donnees(self, donnees, texte=""):
+        self.donnees_recues = donnees
+
+    def evenement(self, nom, **champs):
+        self.evenements[nom] = champs
+
+    def dire(self, *a, **k):
+        pass
+
+    progression = fin_progression = dire
+
+
+@contextlib.contextmanager
+def _ligne_de_commande(mat: materiel.Materiel, conf: dict):
+    """La ligne de commande sur ce poste simulé et cette configuration, sans moteur ni modèle."""
+    from app import cache_openvino, superviseur
+
+    class _Superviseur:
+        puce_ecartee = False
+
+        def __init__(self, *a, **k):
+            pass
+
+    sauve = (materiel.detecter_au_demarrage, materiel.detecter, config_module.charger, cache_openvino.purger,
+             superviseur.Superviseur, traitement.FileTraitement.demarrer)
+    materiel.detecter_au_demarrage = lambda *a, **k: (copy.copy(mat), False)
+    materiel.detecter = lambda *a, **k: copy.copy(mat)
+    config_module.charger = lambda *a, **k: copy.deepcopy(conf)
+    cache_openvino.purger = lambda *a, **k: None
+    superviseur.Superviseur = _Superviseur
+    traitement.FileTraitement.demarrer = lambda self, config, rappels: (rappels.file_terminee({}), True)[1]
+    try:
+        yield
+    finally:
+        (materiel.detecter_au_demarrage, materiel.detecter, config_module.charger, cache_openvino.purger,
+         superviseur.Superviseur, traitement.FileTraitement.demarrer) = sauve
+
+
+def _depart_de_file(s: dict, duree: float = 60.0, libre: float = 0.0, repli_ouverture: bool = False):
+    """
+    La vraie `traiter_element` sur un enregistrement factice (signal muet), le
+    moteur réel créé par `ouvrir_file` mais sans modèle ouvert : rend le reste
+    à faire annoncé au départ du calcul et les messages montrés à l'écran.
+    `libre` : mémoire libre simulée (Go) ; `repli_ouverture` : la puce refuse
+    de s'ouvrir deux fois, le moteur bascule sur CTranslate2.
+    """
+    import numpy as np
+
+    from app import audio as audio_module
+
+    recus: list = []
+    with _etat(s), _mesure(s):
+        mat = POSTES[s["poste"]]()
+        conf = {**_conf(s, mat), "utiliser_glossaire": False, "sauvegarde_progressive": False,
+                "diarisation": False, "dossier_sortie": str(TEMPORAIRE / "sorties")}
+        reglage_machine.PUCE_ECARTEE = bool(s.get("ecartee"))
+        sauve = (audio_module.decoder, materiel._memoire)
+        audio_module.decoder = lambda *a, **k: np.zeros(int(duree * audio_module.FREQUENCE), dtype=np.float32)
+        if libre:
+            materiel._memoire = lambda: (16.0, float(libre))
+        file = traitement.FileTraitement(copy.copy(mat))
+        try:
+            contexte = file.ouvrir_file(copy.deepcopy(conf))
+            instance = contexte["instance"]
+
+            def rien(*a, **k):
+                return None
+
+            def refus(*a, **k):
+                raise RuntimeError("ouverture refusée (essai)")
+
+            def arret(*a, **k):
+                raise moteur.Interruption()
+
+            if isinstance(instance, moteur_openvino.MoteurAvecRepli):
+                instance.PAUSE_RECREATION_S = 0
+                instance._ov.charger = refus if repli_ouverture else rien
+                instance._ct2.charger = rien
+            else:
+                instance.charger = rien
+            instance.transcrire = arret
+            source = TEMPORAIRE / "essai-duree.wav"
+            source.write_bytes(b"RIFF")
+            element = traitement.Element(identifiant="essai", chemin=str(source), nom=source.name,
+                                         duree_annoncee=duree)
+            rappels = traitement.Rappels(progression=lambda i, d: recus.append(("progression", dict(d))),
+                                         journal_ui=lambda n, t: recus.append(("journal", t)))
+            file.traiter_element(element, conf, contexte, rappels)
+            file.fermer_file(contexte, traitement.Rappels())
+        finally:
+            audio_module.decoder, materiel._memoire = sauve
+            reglage_machine.PUCE_ECARTEE = False
+    restant = next((d["restant_s"] for k, d in recus if k == "progression" and d.get("restant_s") is not None), None)
+    return restant, [t for k, t in recus if k == "journal"]
+
+
+def essai_durees() -> None:
+    titre("7. Durées annoncées : celles de ce qui calcule vraiment")
+    vraies = {}
+    for s in SITUATIONS:
+        secondes, choisi = _vraie(s)
+        vraies[s["nom"]] = (presets.formater_duree(secondes), choisi)
+    # La fenêtre : cartes, bandeau, ligne d'un fichier en file, fiche.
+    python, ajout = _python()
+    p = subprocess.run([python, str(Path(__file__).resolve()), "--fenetre"], capture_output=True, timeout=300,
+                       cwd=str(TEMPORAIRE), env={**os.environ, **ajout, "PYTHONIOENCODING": "utf-8"},
+                       creationflags=SANS_FENETRE)
+    try:
+        fenetre = json.loads(p.stdout.decode("utf-8", "replace").strip().splitlines()[-1])
+    except (IndexError, ValueError):
+        fenetre = {}
+        verifier(False, "la fenêtre répond", p.stderr.decode("utf-8", "replace")[-600:])
+    for s in SITUATIONS:
+        attendu, choisi = vraies[s["nom"]]
+        vu = fenetre.get(s["nom"]) or {}
+        dits = {cle: vu.get(cle) for cle in ("carte", "bandeau", "ligne", "fiche")}
+        verifier(set(dits.values()) == {attendu} and vu.get("rythme") == choisi,
+                 f"fenêtre, {s['nom']} : cartes, bandeau, ligne en file et fiche disent {attendu} ({choisi})",
+                 f"{dits}, rythme {vu.get('rythme')}{', ' + vu['erreur'] if vu.get('erreur') else ''}")
+    # La ligne de commande : diagnostic et événement « debut » de transcrire.
+    from app import cli
+
+    for s in SITUATIONS:
+        if s.get("avant") or s.get("ecartee"):
+            continue   # propres à une fenêtre restée ouverte
+        attendu, _choisi = vraies[s["nom"]]
+        with _etat(s), _mesure(s):
+            mat = POSTES[s["poste"]]()
+            conf = _conf(s, mat)
+            with _ligne_de_commande(mat, conf):
+                sortie = _SortieNotee()
+                try:
+                    cli.cmd_diagnostic(__import__("types").SimpleNamespace(materiel=False), sortie)
+                    diagnostic = sortie.donnees_recues.get("pour_une_heure")
+                    sortie = _SortieNotee()
+                    cli._executer_file(sortie, [], conf, False)
+                    debut = (sortie.evenements.get("debut") or {}).get("pour_une_heure")
+                except Exception as exc:
+                    diagnostic = debut = f"{type(exc).__name__}: {exc}"
+        verifier(diagnostic == attendu and debut == attendu,
+                 f"ligne de commande, {s['nom']} : diagnostic et transcrire (debut) disent {attendu}",
+                 f"diagnostic {diagnostic}, debut {debut}")
+    # `materiel proposer` avec le processeur forcé : la durée de ce qui
+    # calculera une fois la proposition appliquée, et c'est dit.
+    s = SITUATIONS[0]
+    with _etat(s):
+        mat = POSTES[s["poste"]]()
+        conf = _conf(s, mat)
+        with _ligne_de_commande(mat, conf):
+            sortie = _SortieNotee()
+            cli.cmd_materiel(__import__("types").SimpleNamespace(action="proposer", appliquer=False), sortie)
+        proposition = sortie.donnees_recues.get("proposition") or {}
+        appliquee = copy.deepcopy(conf)
+        adaptation.appliquer(appliquee, copy.copy(mat), proposition)
+    attendu = presets.formater_duree(_vraie(s, appliquee)[0])
+    verifier(proposition.get("moteur") == "openvino" and proposition.get("une_heure") == attendu
+             and any("Forcer le processeur" in n for n in proposition.get("notes") or []),
+             f"materiel proposer, processeur forcé : {attendu} (CTranslate2 sur le processeur), et c'est dit",
+             f"{proposition.get('moteur')} {proposition.get('une_heure')} {proposition.get('notes')}")
+    # Le décompte de départ de la vraie `traiter_element` (une minute d'audio).
+    for s in SITUATIONS:
+        if s.get("avant"):
+            continue   # le moteur relit le réglage au départ de chaque file
+        attendu = round(_vraie(s, duree=60.0)[0], 1)
+        restant, _messages = _depart_de_file(s)
+        verifier(restant == attendu, f"départ de la file, {s['nom']} : reste {attendu} s", f"annoncé {restant}")
+    s = SITUATIONS[-1]
+    attendu = round(_vraie(s, duree=60.0, cle_ouverte="cpu")[0], 1)
+    restant, messages = _depart_de_file(s, repli_ouverture=True)
+    verifier(restant == attendu and any("processeur" in m for m in messages),
+             f"départ de la file, puce refusée à l'ouverture : reste {attendu} s, celui du processeur",
+             f"annoncé {restant}")
+    # La garde de la mémoire ne dit que ce qui change vraiment.
+    un_a_un = langues.t("rythme.memoire_lots", libre=langues.nombre(4.0, 1))
+    for s, dit in ((dict(SITUATIONS[-1], conf={"rythme": "equilibre"}), False),
+                   (dict(SITUATIONS[1]), True),
+                   ({"nom": "bureau", "poste": "bureau", "ov": False, "reglage": "aucun",
+                     "conf": {"rythme": "equilibre"}}, True)):
+        _restant, messages = _depart_de_file(s, libre=4.0)
+        moteur_reel = "OpenVINO" if not dit else "CTranslate2"
+        verifier((un_a_un in messages) == dit,
+                 f"mémoire libre basse, {s['nom']} ({moteur_reel}) : « un passage à la fois » "
+                 + ("dit" if dit else "tu, OpenVINO n'a pas de lots"), str(messages))
+
+
 def principal() -> int:
+    if "--fenetre" in sys.argv:
+        print(json.dumps(_fenetre_durees(), ensure_ascii=False))
+        return 0
     print(f"Vérification des fiches « ce que ça change »\n{'=' * 44}")
     essai_chiffres()
     essai_fiche_contre_file()
@@ -587,6 +942,7 @@ def principal() -> int:
     essai_textes()
     essai_ligne_de_commande()
     essai_passerelle()
+    essai_durees()
     print(f"\n{_reussites} contrôles réussis, {len(_echecs)} en échec.")
     for libelle in _echecs:
         print(f"  ECHEC : {libelle}")

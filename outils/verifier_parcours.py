@@ -1279,7 +1279,10 @@ def essai_ce_que_l_ecran_affirme(base: Path) -> None:
             ("le bilan de la file ne compte pas les zéros", "d.annules ? tn('ui.etat.annulees', d.annules) : ''"),
             ("une durée illisible est dite, pas « -- »", "ui.ligne.duree_illisible")):
         verifier(preuve.replace("\r\n", "\n") in js.replace("\r\n", "\n"), f"écran : {constat}")
-    verifier("lot=presets.taille_lot(cle_preset, self.materiel)" in passerelle,
+    # Contrôlé par le résultat dans `outils/verifier_fiches.py` (section 7) :
+    # ligne en attente et décompte de départ égaux, situation par situation.
+    estimation = passerelle[passerelle.index("def estimation("):][:2500]
+    verifier("calcul.annonce(" in estimation,
              "la ligne en attente et le décompte de départ partent du même calcul (lots compris)")
 
 

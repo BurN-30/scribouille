@@ -1084,6 +1084,8 @@ async function leverSuspensionPuce() {
   journaliser(r.ok ? 'ok' : 'attention', r.message);
   if (r.vitesse) etat.vitesse = r.vitesse;
   majVitesse();
+  // La puce calculera de nouveau : cartes, bandeau et lignes en attente le disent.
+  if (r.ok) rafraichirDurees();
 }
 
 async function appliquerProposition() {
@@ -2968,23 +2970,30 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#btn-confirmer-import').addEventListener('click', confirmerImport);
   $('#btn-recommencer-reprise').addEventListener('click', recommencerTrouvees);
 
-  $('#opt-avance').addEventListener('change', (e) => {
+  /* Mode avance, modele, faisceau, processeur force : ce qui calcule change,
+     donc les cartes, le bandeau et les lignes en attente aussi (une fois le
+     reglage enregistre, sinon Python lirait l'ancien). */
+  $('#opt-avance').addEventListener('change', async (e) => {
     $('#bloc-avance').style.display = e.target.checked ? 'block' : 'none';
-    enregistrer({ mode_avance: e.target.checked });
-    rafraichirEstimations();
+    await enregistrer({ mode_avance: e.target.checked });
+    rafraichirDurees();
   });
-  $('#modele-avance').addEventListener('change', (e) => {
-    enregistrer({ modele_avance: e.target.value });
-    rafraichirEstimations();
+  $('#modele-avance').addEventListener('change', async (e) => {
+    await enregistrer({ modele_avance: e.target.value });
+    rafraichirDurees();
   });
-  $('#beam').addEventListener('change', (e) =>
-    enregistrer({ beam_size: parseInt(e.target.value, 10) || 0 }));
+  $('#beam').addEventListener('change', async (e) => {
+    await enregistrer({ beam_size: parseInt(e.target.value, 10) || 0 });
+    rafraichirDurees();
+  });
   $('#opt-contexte').addEventListener('change', (e) =>
     enregistrer({ condition_on_previous_text: e.target.checked }));
   $('#opt-salle').addEventListener('change', (e) =>
     enregistrer({ filtres_salle: e.target.checked }));
-  $('#opt-processeur').addEventListener('change', (e) =>
-    enregistrer({ forcer_processeur: e.target.checked }));
+  $('#opt-processeur').addEventListener('change', async (e) => {
+    await enregistrer({ forcer_processeur: e.target.checked });
+    rafraichirDurees();
+  });
 
   // Glossaire et corrections (ancien format)
   $('#btn-glossaire').addEventListener('click', async () => {

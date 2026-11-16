@@ -165,10 +165,14 @@ def _preset_du_verdict(verdict: dict) -> str:
 
 
 def proposer(mat: Materiel, p: Profil, verdict: dict | None = None, conseil: dict | None = None,
-             etat_modele: Callable[[str], str] | None = None) -> dict:
+             etat_modele: Callable[[str], str] | None = None, config: dict | None = None,
+             ecartee: bool = False) -> dict:
     """
     Réglage proposé pour ce poste, et pourquoi. Fonction pure si `etat_modele`
     est fourni (les vérifications le simulent) ; sinon l'état réel du disque.
+    `config` : la configuration en service, pour annoncer la durée de ce qui
+    calculera une fois la proposition appliquée (mode avancé, « Forcer le
+    processeur » compris) ; sans elle, le preset proposé tel quel.
     """
     from . import moteur
 
@@ -228,9 +232,22 @@ def proposer(mat: Materiel, p: Profil, verdict: dict | None = None, conseil: dic
     essai.moteur = choix["moteur"]
     essai.peripherique_openvino = choix["peripherique"] if choix["moteur"] == "openvino" else ""
     # Le même calcul que partout ailleurs, rythme proposé compris : une fois
-    # appliquée, la proposition annonce ce que diront les cartes des presets.
+    # appliquée, la proposition annonce ce que diront les cartes des presets,
+    # sur ce qui calculera vraiment (`app/calcul.py`) : « Forcer le processeur »
+    # garde CTranslate2 sur le processeur quel que soit le réglage du poste.
+    from . import calcul, description_reglage
+
     rythme_choix, auto_choix = rythme_propose(choix)
-    une_heure = presets.pour_une_heure(choix["preset"], essai, rythme_choix)
+    # La configuration telle qu'« Appliquer » la laisserait (`appliquer`).
+    hypothese = description_reglage.hypothese(config or {}, mat, description_reglage.choix_proposition(
+        config or {}, mat, {**choix, "rythme": rythme_choix, "rythme_auto": auto_choix}))
+    apres = copy.copy(essai)
+    if ecartee and apres.moteur == "openvino" and (apres.peripherique_openvino or "CPU").upper() != "CPU":
+        apres.moteur, apres.peripherique_openvino = "ctranslate2", ""
+    une_heure = presets.formater_duree(calcul.annonce_sur(hypothese, apres, rythme_choisi=rythme_choix))
+    if choix["moteur"] != "ctranslate2" and calcul.materiel_du_calcul(
+            apres, calcul.forcer_demande(hypothese), "").moteur != "openvino":
+        notes.append(langues.t("adapt.note.forcer" if calcul.forcer_demande(hypothese) else "adapt.note.ecartee"))
 
     if choix["moteur"] == "openvino":
         from . import moteur_openvino
@@ -314,11 +331,12 @@ def appliquer(config: dict, mat: Materiel, proposition: dict) -> dict:
     return propre
 
 
-def proposition_du_poste(mat: Materiel) -> dict:
+def proposition_du_poste(mat: Materiel, config: dict | None = None, ecartee: bool = False) -> dict:
     """Proposition réelle : verdict de campagne et conseil du banc lus sur ce poste."""
     from . import banc, campagne
 
-    return proposer(mat, profil(mat), campagne.dernier_verdict(), banc.dernier_conseil())
+    return proposer(mat, profil(mat), campagne.dernier_verdict(), banc.dernier_conseil(), config=config,
+                    ecartee=ecartee)
 
 
 def decrire(p: Profil) -> list[str]:
@@ -357,7 +375,7 @@ def principal_cli(arguments: list[str]) -> int:
     config = config_module.charger()
     mat = materiel.detecter()
     p = profil(mat)
-    proposition = proposition_du_poste(mat)
+    proposition = proposition_du_poste(mat, config)
     print(langues.t("adapt.cli.titre"))
     for ligne in decrire(p):
         print("  - " + ligne)

@@ -437,7 +437,7 @@ if __name__ == "__main__":
 from app import audio as audio_module  # noqa: E402
 from app import config as config_module  # noqa: E402
 from app import barre_taches, diarisation, donnees, ecoute, gabarit, lecture, maj  # noqa: E402
-from app import banc, materiel, nommage, presets, reglage_machine, reprise, rythme, stockage  # noqa: E402
+from app import banc, calcul, materiel, nommage, presets, reglage_machine, reprise, rythme, stockage  # noqa: E402
 from app import surveillance, traitement, vocabulaire, vocabulaire_interface  # noqa: E402
 from app import inventaire, processus, superviseur  # noqa: E402
 
@@ -715,7 +715,7 @@ class Passerelle:
         # Une seule décision pour tout l'écran : la proposition du poste pilote
         # la pastille « conseillé ici », la fiche du matériel et l'encart, et
         # toutes les durées tiennent compte du rythme choisi, une seule fois.
-        rythme_choisi = rythme.retenu(self.config, self.materiel)
+        rythme_choisi = self._rythme_en_service()
         proposition = self._proposition_du_poste()
 
         return {
@@ -723,7 +723,7 @@ class Passerelle:
             "nom": NOM_APPLICATION,
             "config": self.config,
             "materiel": self.materiel.en_dict(),
-            "recommandation": presets.recommandation(self.materiel, proposition, rythme_choisi),
+            "recommandation": presets.recommandation(self._calcul_prevu(), proposition, rythme_choisi),
             "presets": self._presets_affiches(rythme_choisi),
             "modeles_avances": presets.modeles_avances(),
             "langues_interface": langues.liste_langues(),
@@ -805,11 +805,11 @@ class Passerelle:
 
     def _etat_materiel(self) -> dict:
         """Ce qui, à l'écran, dépend du matériel : renvoyé quand il change."""
-        rythme_choisi = rythme.retenu(self.config, self.materiel)
+        rythme_choisi = self._rythme_en_service()
         proposition = self._proposition_du_poste()
         return {
             "materiel": self.materiel.en_dict(),
-            "recommandation": presets.recommandation(self.materiel, proposition, rythme_choisi),
+            "recommandation": presets.recommandation(self._calcul_prevu(), proposition, rythme_choisi),
             "presets": self._presets_affiches(rythme_choisi),
             "avertissements": self._avertissements(),
             "vitesse": self.etat_vitesse(),
@@ -854,33 +854,70 @@ class Passerelle:
 
         self._fond(travail)
 
+    def _puce_ecartee(self) -> bool:
+        """Puce écartée pour le reste de la session par le superviseur, après une mort du moteur sur elle."""
+        return bool(getattr(self.moteur, "puce_ecartee", False))
+
+    def _poste_en_service(self, config: dict | None = None):
+        """
+        Le matériel avec le réglage du poste relu à l'instant (puce suspendue
+        depuis, OpenVINO retiré, puce écartée pour la session par le
+        superviseur), tel que la prochaine file le posera : la base de toutes
+        les durées affichées (`app/calcul.py`). `self.materiel` n'est pas touché.
+        """
+        return calcul.poste(self.config if config is None else config, self.materiel,
+                            self._puce_ecartee())[0]
+
+    def _rythme_en_service(self) -> str:
+        return rythme.retenu(self.config, self._poste_en_service())
+
+    def _calcul_prevu(self):
+        """Ce qui calculera la prochaine file (`calcul.calcul_prevu`), pour les durées du conseil."""
+        return calcul.calcul_prevu(self.config, self.materiel, self._puce_ecartee())
+
     def _presets_affiches(self, rythme_choisi: str) -> list[dict]:
-        return [
-            {
+        """
+        Les cartes des presets : pour chacune, ce que la file calculerait si on
+        la choisissait (mode avancé compris : modèle et faisceau choisis), sur
+        ce qui calculera vraiment (processeur forcé, puce suspendue...).
+        """
+        cartes = []
+        for p in presets.PRESETS.values():
+            conf = {**self.config, "preset": p["cle"]}
+            m_poste = self._poste_en_service(conf)
+            annonce = calcul.parametres(conf, m_poste)
+            modele = annonce["modele"]
+            poids = (presets.taille_modele_avance(modele) if modele != p["modele"] else "") \
+                or langues.octets(p["telechargement_go"] * 1024 ** 3)
+            cartes.append({
                 "cle": p["cle"],
                 "nom": presets.nom_preset(p["cle"]),
                 "resume": presets.resume_preset(p["cle"]),
-                "modele": moteur_nom_court(p["modele"]),
-                "telechargement": langues.octets(p["telechargement_go"] * 1024 ** 3),
-                "facteur": presets.facteur_temps_reel(p["cle"], self.materiel),
-                "pour_une_heure": presets.pour_une_heure(p["cle"], self.materiel, rythme_choisi),
-            }
-            for p in presets.PRESETS.values()
-        ]
+                "modele": moteur_nom_court(modele),
+                "telechargement": poids,
+                "facteur": presets.facteur_temps_reel(p["cle"], annonce["materiel"],
+                                                      modele_avance=annonce["modele_avance"],
+                                                      beam=annonce["beam"], lot=annonce["lot"]),
+                "pour_une_heure": presets.formater_duree(
+                    calcul.annonce_sur(conf, m_poste, rythme_choisi=rythme_choisi)),
+            })
+        return cartes
 
     # -- rythme et réglage proposé pour le poste ----------------------------
 
     def etat_rythme(self) -> dict:
         """Rythme choisi, adaptation, et durée pour une heure dans chaque rythme."""
-        choisi = rythme.retenu(self.config, self.materiel)
-        preset_choisi = self.config.get("preset", "qualite")
+        m_poste = self._poste_en_service()
+        choisi = rythme.retenu(self.config, m_poste)
         courant = __import__("app.energie", fromlist=["alimentation"]).alimentation()
         return {
             "choisi": choisi,
             "auto": bool(self.config.get("rythme_auto")),
             "batterie": bool(courant["batterie"] and not courant["secteur"]),
+            # Le réglage en service, mode avancé compris : la durée que la file
+            # annoncera au départ (`traitement`), et celle de la fiche.
             "pour_une_heure": {
-                nom: presets.pour_une_heure(preset_choisi, self.materiel, nom)
+                nom: presets.formater_duree(calcul.annonce_sur(self.config, m_poste, rythme_choisi=nom))
                 for nom in rythme.RYTHMES},
         }
 
@@ -889,7 +926,7 @@ class Passerelle:
         try:
             from app import adaptation
 
-            proposition = adaptation.proposition_du_poste(self.materiel)
+            proposition = adaptation.proposition_du_poste(self.materiel, self.config, self._puce_ecartee())
             proposition["deja"] = adaptation.deja_en_place(proposition, self.config, self.materiel)
             return proposition
         except Exception as exc:
@@ -932,7 +969,7 @@ class Passerelle:
             except Exception as exc:
                 journal.exception("Nouvelle détection du matériel impossible", exc)
             self._effet_reglage = reglage_machine.appliquer_au_materiel(self.config, self.materiel)
-        proposition = adaptation.proposition_du_poste(self.materiel)
+        proposition = adaptation.proposition_du_poste(self.materiel, self.config, self._puce_ecartee())
         proposition["deja"] = adaptation.deja_en_place(proposition, self.config, self.materiel)
         self._proposition = {**proposition, "_vue": True}
         journal.info("Proposition du poste : %s (%s)", proposition["regle"], proposition["source"])
@@ -943,7 +980,8 @@ class Passerelle:
 
         if self.file.occupee:
             return {"ok": False, "message": langues.t("app.banc.file_occupee")}
-        proposition = self._proposition or adaptation.proposition_du_poste(self.materiel)
+        proposition = self._proposition or adaptation.proposition_du_poste(
+            self.materiel, self.config, self._puce_ecartee())
         adaptation.appliquer(self.config, self.materiel, proposition)
         self._enregistrer_config()
         self._effet_reglage = reglage_machine.appliquer_au_materiel(self.config, self.materiel)
@@ -968,8 +1006,10 @@ class Passerelle:
             proposition = None
             if sujet == "proposition":
                 proposition = {k: v for k, v in (self._proposition or {}).items() if k != "_vue"} or None
-            choix, contexte, autres = fiche.choix_du_sujet(self.config, self.materiel, sujet, valeur, proposition)
-            resultat = fiche.decrire(self.config, self.materiel, choix, sujet)
+            ecartee = self._puce_ecartee()
+            choix, contexte, autres = fiche.choix_du_sujet(self.config, self.materiel, sujet, valeur, proposition,
+                                                           ecartee)
+            resultat = fiche.decrire(self.config, self.materiel, choix, sujet, ecartee)
         except Exception as exc:
             journal.exception("Fiche du réglage impossible", exc)
             return {"ok": False, "message": langues.t("fiche.erreur")}
@@ -1005,9 +1045,9 @@ class Passerelle:
         """
         avance = self.config.get("modele_avance", "") if self.config.get("mode_avance") else ""
         modele = presets.modele_du_preset(self.config.get("preset", "qualite"), avance)
-        forcer = bool(self.config.get("forcer_processeur")) and bool(self.config.get("mode_avance"))
-        if self.materiel.moteur == "openvino" and not forcer and presets.depot_openvino(modele):
-            return presets.depot_openvino(modele)
+        # La décision de la file (`app/calcul.py`) : le dépôt OpenVINO seulement si OpenVINO calcule.
+        if calcul.materiel_du_calcul(self.materiel, calcul.forcer_demande(self.config), modele).moteur == "openvino":
+            return presets.depot_openvino(modele) or modele
         return modele
 
     def _annonce_telechargement(self) -> str:
@@ -2077,19 +2117,22 @@ class Passerelle:
     def estimation(self, duree_secs: float, cle_preset: str, diarisation_active: bool,
                    modele_avance: str = "") -> str:
         # La largeur de faisceau change le coût du simple au double : elle entre
-        # dans la clé des mesures relevées sur le poste, elle doit donc être dite.
-        beam = int(self.config.get("beam_size") or 0) \
-            if self.config.get("mode_avance") else 0
+        # dans la clé des mesures relevées sur le poste (mode avancé, faisceau
+        # posé par la campagne), elle est donc lue comme la file la lira.
         # Rythme équilibré ou discret : plus long, et l'annonce le dit (en
         # adaptation automatique, la durée du rythme choisi, la plus longue).
         # La séparation des locuteurs ne compte que si elle tournera vraiment :
         # cochée par défaut, elle ajoutait son coût sans être installée.
         # Même calcul que le décompte de départ de la file (`app/traitement.py`),
-        # taille des lots comprise : la ligne et le décompte disent la même durée.
-        return presets.formater_duree(presets.estimer_annonce(
-            duree_secs, cle_preset, self.materiel, rythme.retenu(self.config, self.materiel),
-            diarisation.effective(diarisation_active), modele_avance or "", beam=beam,
-            lot=presets.taille_lot(cle_preset, self.materiel)))
+        # taille des lots comprise, sur ce qui calculera vraiment (`app/calcul.py` :
+        # processeur forcé, puce suspendue, modèle sans version OpenVINO) : la
+        # ligne et le décompte disent la même durée.
+        conf = {**self.config, "preset": cle_preset}
+        if modele_avance:
+            conf.update(mode_avance=True, modele_avance=modele_avance)
+        return presets.formater_duree(calcul.annonce(
+            conf, self.materiel, duree_secs, diarisation=diarisation.effective(diarisation_active),
+            ecartee=self._puce_ecartee()))
 
     def durees_affichees(self) -> dict:
         """Durées du bandeau et des cartes, recalculées après chaque mesure du poste."""
