@@ -113,9 +113,20 @@ scribouille reglages [liste]
 scribouille reglages lire CLE
 scribouille reglages definir CLE=VALEUR [CLE=VALEUR...]
 scribouille reglages defaut CLE [CLE...]
+scribouille reglages decrire [CLE=VALEUR...|proposition|banc|automatique]
 ```
 
-Actions : `liste` (défaut), `lire`, `definir`, `defaut`. Une clé inconnue fait tout refuser, rien n'est changé.
+Actions : `liste` (défaut), `lire`, `definir`, `defaut`, `decrire`. Une clé inconnue fait tout refuser, rien n'est changé.
+
+`decrire` dit ce que la transcription appliquerait réellement sur ce poste, avec les mêmes lignes que la fiche « ce que ça change » de la fenêtre (`app/description_reglage.py`), sans rien enregistrer ni écrire :
+
+- **ce qui calcule** : modèle (et fichier chargé), moteur (CTranslate2 ou OpenVINO), périphérique (processeur, puce graphique, NPU, carte NVIDIA), précision (int8, float16), faisceau (et pourquoi : glouton imposé sur la puce, faisceau du réglage mesuré du poste), lots (et ce qui les borne : mémoire vive, rythme, banc), texte précédent, garde-fous ;
+- **le rythme** : fils de calcul sur combien de processeurs logiques, priorité du processus, énergie (HighQoS, EcoQoS), lectures et écritures, cœurs permis, propriétés demandées à OpenVINO, pauses, adaptation automatique (quand elle bascule, ce qui est fixé au chargement), garde de la mémoire (seuils en Go) ;
+- **le coût sur ce poste** : durée pour une heure d'audio (la même que les cartes de la fenêtre) et d'où elle vient (mesurée sur ce poste, avec les minutes et leur poids, ou estimation), effet du rythme (coefficient mesuré ou de repli), mémoire au pic, processeur ;
+- **la justesse mesurée** : seulement les chiffres que Scribouille possède, avec ce sur quoi ils ont été mesurés ; aucune ligne inventée ;
+- **ce qui est allégé pour gagner du temps**, et ce que les mesures en disent.
+
+Sans argument : le réglage en service. Paires `CLE=VALEUR` (rien n'est enregistré) : `preset`, `rythme`, `rythme_auto`, `moteur`, `peripherique`, `mode_avance`, `modele_avance`, `beam_size`, `forcer_processeur`, `condition_on_previous_text`. Mots : `proposition` (le réglage proposé pour ce poste, tel que `materiel proposer` le poserait une fois appliqué), `banc` (le conseil du dernier banc d'essai ; code 2 s'il n'y en a pas), `automatique` (le réglage du poste remis à l'automatique). Exemples : `scribouille reglages decrire preset=qualite rythme=vitesse --json` (le texte le plus juste, au plus vite) ; `scribouille reglages decrire moteur=openvino peripherique=GPU`. En JSON : `donnees.fiche` porte le plan structuré (`modele`, `modele_calcule`, `moteur`, `peripherique`, `precision`, `faisceau`, `lots`, `rythme`, `garde_memoire`, `cout`...) et `sections` (`titre`, `lignes` de `libelle` et `valeur`), dans la langue de l'interface.
 
 Chaque réglage, sa valeur par défaut et son effet : [reglages.md](reglages.md). Pseudo-clés : `moteur`, `peripherique`, `dossier_modeles`.
 
@@ -177,7 +188,7 @@ scribouille vocabulaire retirer-exemples | remettre-exemples
 
 ### materiel
 
-`scribouille materiel [detecter]` : relance la détection lente (cartes, NPU, OpenVINO) et l'écrit dans `materiel.json`. `scribouille materiel proposer [--appliquer]` : le poste, le réglage proposé et pourquoi ; `--appliquer` l'enregistre.
+`scribouille materiel [detecter]` : relance la détection lente (cartes, NPU, OpenVINO) et l'écrit dans `materiel.json`. `scribouille materiel proposer [--appliquer]` : le poste, le réglage proposé et pourquoi ; `--appliquer` l'enregistre. Ce que ce réglage changerait, ligne à ligne (moteur, périphérique, faisceau, fils, durée, justesse) : `scribouille reglages decrire proposition`.
 
 `scribouille materiel puce [--lever]` : le témoin de la puce graphique (`openvino-chargement-en-cours.txt`), posé pendant chaque ouverture d'un modèle sur la puce ou le NPU. `etat` vaut :
 

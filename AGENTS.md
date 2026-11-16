@@ -16,4 +16,6 @@ Lire le résultat : `segments[]` = `{d, f, t, l?, m?}` (début et fin en seconde
 
 La fenêtre peut être ouverte en même temps : un fichier qu'elle transcrit déjà est refusé (`fichier_echec`, « Déjà en cours ailleurs »), à relancer plus tard.
 
+Ce que change un réglage (modèle, moteur, périphérique, faisceau, fils, durée pour une heure, justesse mesurée), sans rien enregistrer : `scribouille reglages decrire [preset=qualite rythme=vitesse...] --json`.
+
 Ne jamais modifier sans demande : réglages (`reglages definir`), vocabulaire (`vocabulaire importer`), fichiers (`effacer`). Guide complet : [docs/ligne-de-commande.md](docs/ligne-de-commande.md). Pour modifier le code de Scribouille : [CONTRIBUTING.md](CONTRIBUTING.md) et [docs/architecture.md](docs/architecture.md).

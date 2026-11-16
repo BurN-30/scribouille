@@ -72,5 +72,6 @@ Une clé ajoutée ne change pas la version ; une clé retirée ou un sens chang�
 | `app/cli.py` | Ligne de commande |
 | `app/inventaire.py` | Inventaire, libération, effacement |
 | `app/cache_openvino.py` | Cache de compilation d'OpenVINO : index, marque d'usage, purge bornée |
+| `app/description_reglage.py` | Fiche « ce que ça change » d'un choix : refait sur une copie les décisions d'`ouvrir_file` (moteur, faisceau, lots, rythme) et la durée annoncée, sans rien appliquer ; servie à la fenêtre (`decrire_reglage`) et à `reglages decrire`, comparée à la vraie file par `outils/verifier_fiches.py` |
 | `app/instance.py` | Fenêtre unique, verrou d'un fichier en cours |
 | `app/lecture.py`, `app/relecture.py` | Relecture : situer, corriger, annuler, exporter |

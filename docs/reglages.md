@@ -2,7 +2,7 @@
 
 Fichier : `config.json` dans le dossier de données (`%LOCALAPPDATA%\Scribouille` ; `%LOCALAPPDATA%\WhiScribe` tant qu'une version 2.x installée le lit ; ou `SCRIBOUILLE_DONNEES`). Une clé absente prend sa valeur par défaut ; une clé inconnue est ignorée, et gardée telle quelle à la sauvegarde. Lire les réglages ne les réécrit jamais (aucune commande de lecture n'écrit quoi que ce soit). Tant qu'une WhiScribe 2.x installée lit le même dossier, son `config.json` n'est jamais modifié : les réglages de la 3.x qui en diffèrent vont dans `config-scribouille.json`, relu par-dessus ; une fois la 2.x partie, la première sauvegarde les reverse dans `config.json` et retire ce fichier.
 
-En ligne de commande : `scribouille reglages` (liste), `reglages lire CLE`, `reglages definir CLE=VALEUR [CLE=VALEUR...]`, `reglages defaut CLE`. Booléens : `oui`/`non` ; listes : séparées par `;` ; `formats` : `txt,srt`. `transcrire` n'enregistre jamais rien : ses options ne valent que pour la commande.
+En ligne de commande : `scribouille reglages` (liste), `reglages lire CLE`, `reglages definir CLE=VALEUR [CLE=VALEUR...]`, `reglages defaut CLE`, et `reglages decrire [CLE=VALEUR...]` : ce qu'un réglage applique réellement sur ce poste (modèle, moteur, périphérique, précision, faisceau, lots, fils, priorité, durée, mémoire, justesse mesurée), sans rien enregistrer ; dans la fenêtre, le bouton ⓘ à côté de chaque choix. Booléens : `oui`/`non` ; listes : séparées par `;` ; `formats` : `txt,srt`. `transcrire` n'enregistre jamais rien : ses options ne valent que pour la commande.
 
 ## Transcription
 

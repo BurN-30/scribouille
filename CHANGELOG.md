@@ -319,6 +319,36 @@ Après le troisième essai sur le PC du travail (16/11)
   journal de migration ; la simulation du registre des vérifications refuse
   un autre nom du vrai dossier.
 
+Ce que change chaque choix
+
+- **Fiche « ce que ça change »** : un bouton ⓘ à côté de la qualité, du
+  rythme, de l'adaptation automatique, du réglage en service, du réglage
+  proposé, du conseil du banc, du mode avancé et de « Forcer le processeur »
+  dit ce que la transcription appliquera réellement sur ce poste : modèle et
+  fichier chargé, moteur, périphérique, précision, faisceau, lots ; fils de
+  calcul, priorité, énergie, pauses, adaptation et seuils de mémoire du
+  rythme ; durée pour une heure (mesurée sur ce poste ou estimée, c'est dit),
+  mémoire, processeur ; justesse avec les seules mesures que Scribouille
+  possède, et sur quoi elles ont été prises ; ce qui est allégé pour gagner
+  du temps. Au clavier (Entrée, Échap), lue par un lecteur d'écran, d'un
+  choix à l'autre du même groupe, en fenêtre étroite. Rien n'est appliqué.
+- **Une seule source** : la fiche refait, sur une copie, les décisions de
+  l'ouverture de la file avec les mêmes fonctions ; une vérification la
+  compare à la vraie file dans 192 situations (bureau, Core Ultra avec puce
+  graphique, carte NVIDIA, 8 Go) : elle ne peut pas dire autre chose que ce
+  qui sera fait.
+- **Sans fenêtre** : `scribouille reglages decrire` donne les mêmes lignes,
+  pour le réglage en service ou pour `preset=`, `rythme=`, `moteur=`,
+  `peripherique=`..., ou `proposition`, `banc`, `automatique` ; `--json`
+  donne aussi le plan structuré. Rien n'est enregistré.
+- **Le meilleur texte, peu importe le temps** : c'est Qualité maximale, avec
+  Vitesse maximale, et la carte le dit. Rien de ce qu'elle allège pour gagner
+  du temps n'a coûté un mot aux mesures (faisceau 5 au lieu de 8, lots) ;
+  les autres rythmes peuvent passer à turbo quand la mémoire libre manque,
+  Vitesse maximale jamais. La précision int8 n'a jamais été comparée à une
+  précision plus haute ; sur la puce graphique, le décodage glouton est une
+  limite d'OpenVINO.
+
 ---
 
 ## 2.4.0

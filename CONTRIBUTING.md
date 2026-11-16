@@ -37,6 +37,7 @@ run by hand, without the network and without a window:
 .venv\Scripts\python outils\verifier_socle.py
 .venv\Scripts\python outils\verifier_moteur.py
 .venv\Scripts\python outils\verifier_ligne_de_commande.py
+.venv\Scripts\python outils\verifier_fiches.py
 ```
 
 All of them exit with code 0 when everything passes. Run at least `--verifier` and
