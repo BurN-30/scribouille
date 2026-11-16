@@ -83,10 +83,13 @@ def ecrire_memoire(memoire: dict) -> None:
     # Écrite à côté (nom propre à ce processus) puis renommée : tronquée par
     # une coupure, elle remettait tout le dossier surveillé en file.
     cible = fichier_memoire()
+    texte = json.dumps(memoire, ensure_ascii=False)
+    if chemins.contenu_identique(cible, texte):
+        return  # rien de changé : ni réécrite, ni redatée
     provisoire = cible.with_name(f"{cible.name}.{os.getpid()}.tmp")
     try:
         chemins.RACINE.mkdir(parents=True, exist_ok=True)
-        provisoire.write_text(json.dumps(memoire, ensure_ascii=False), encoding="utf-8")
+        provisoire.write_text(texte, encoding="utf-8")
         os.replace(provisoire, cible)
     except OSError as exc:
         journal.attention("Mémoire du dossier surveillé non enregistrée : %s", exc)

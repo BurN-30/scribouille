@@ -1329,9 +1329,10 @@ def essai_reprise_locuteurs(base: Path) -> None:
             pass
 
         def transcrire(self, signal, duree_totale, langue, reglages, amorce="",
-                       progression=None, interrompu=None, decalage=0.0, sur_segment=None):
+                       progression=None, interrompu=None, decalage=0.0, sur_segment=None, origine=None):
             vus["moteur"] = signal.size / frequence
             vus["decalage"] = decalage
+            vus["origine"] = None if origine is None else origine.size / frequence
             return [moteur.Segment(debut=decalage + 1.0, fin=decalage + 3.0, texte="suite")], {}
 
     def diariser_simule(signal, frequence_recue, **_options):
@@ -1378,6 +1379,9 @@ def essai_reprise_locuteurs(base: Path) -> None:
              "le moteur ne reçoit que la fin du signal", str(vus.get("moteur")))
     verifier(vus.get("decalage") == position,
              "les horodatages repris sont décalés de la position atteinte")
+    verifier(vus.get("origine") is not None and abs(vus["origine"] - duree) < 0.01,
+             "le moteur reçoit aussi le signal entier (OpenVINO y retrouve les fenêtres du passage complet)",
+             str(vus.get("origine")))
     verifier(abs(vus.get("locuteurs", 0) - duree) < 0.01,
              "la séparation des locuteurs reçoit l'enregistrement entier",
              str(vus.get("locuteurs")))
@@ -2657,7 +2661,7 @@ def essai_filet_openvino() -> None:
             self.liberations += 1
 
         def transcrire(self, signal, duree_totale, langue, reglages, amorce="", progression=None,
-                       interrompu=None, decalage=0.0, sur_segment=None):
+                       interrompu=None, decalage=0.0, sur_segment=None, origine=None):
             self.departs.append(round(decalage, 3))
             sortis, duree, t = [], signal.size / 16000, 0.0
             while t < duree - 1e-6:

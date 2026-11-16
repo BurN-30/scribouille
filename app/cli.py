@@ -1755,7 +1755,10 @@ def _ligne_cache(cache: dict) -> str:
                       plafond=langues.octets(cache["plafond_octets"]))
     if cache["non_reconnues_octets"]:
         texte += langues.t("cli.cache_openvino.non_reconnues", taille=langues.octets(cache["non_reconnues_octets"]))
-    return "  " + texte
+    from . import cache_openvino
+
+    etat = cache_openvino.phrase_etat(cache)
+    return "  " + texte + (f"\n    {etat}" if etat else "")
 
 
 def cmd_diagnostic(options, sortie: Sortie) -> int:
@@ -1947,6 +1950,11 @@ def cmd_espace(options, sortie: Sortie) -> int:
              + f"\n  Libérable sans rien perdre : {langues.octets(resultat['liberable_octets'])}"
              + f"\n  Transcriptions (à part, jamais effacées sans demande) : "
                f"{langues.octets(resultat['transcriptions_octets'])} dans {resultat['transcriptions']['dossier']}")
+    from . import cache_openvino
+
+    etat = cache_openvino.phrase_etat()
+    if etat:
+        texte += f"\n  {etat}"
     texte += _laisses(resultat, "jamais touchés")
     sortie.donnees(resultat, texte)
     return OK

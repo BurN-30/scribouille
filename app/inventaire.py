@@ -300,6 +300,16 @@ def _libeller(poste: Poste, modele: str = "") -> None:
     poste.libelle = langues.t(f"inv.{base}.libelle", modele=modele)
     poste.description = langues.t(f"inv.{base}.description" + (".libre" if base == "modele" and poste.liberable
                                                               else ""), modele=modele)
+    if base == "cache_openvino":
+        # Ce que la purge n'a pas pu faire (fichiers non effacés, plafond en attente), dit ici aussi.
+        try:
+            from . import cache_openvino
+
+            etat = cache_openvino.phrase_etat()
+        except Exception:
+            etat = ""
+        if etat:
+            poste.description += " " + etat
 
 
 def partage_2x() -> Path | None:
@@ -594,7 +604,23 @@ def _supprimer(chemin: Path, permises: list[Path]) -> tuple[int, str]:
 
     try:
         if chemin.is_symlink() or chemin.is_file():
-            chemin.unlink()
+            try:
+                chemin.unlink()
+            except PermissionError:
+                # Fichier en lecture seule (OpenVINO écrit ainsi ses compilés) :
+                # attribut levé, puis remis si l'effacement échoue encore. Un
+                # fichier refusé pour une autre raison n'est pas touché.
+                if chemin.is_symlink() or os.access(chemin, os.W_OK):
+                    raise
+                os.chmod(chemin, 0o600)
+                try:
+                    chemin.unlink()
+                except OSError:
+                    try:
+                        os.chmod(chemin, 0o400)
+                    except OSError:
+                        pass
+                    raise
         elif chemin.is_dir():
             shutil.rmtree(chemin, onerror=surmonter)
         else:

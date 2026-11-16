@@ -231,7 +231,7 @@ class _MoteurCompte:
         self.charge = ""
 
     def transcrire(self, signal, duree, langue, reglages, amorce="", progression=None,
-                   interrompu=None, decalage=0.0, sur_segment=None):
+                   interrompu=None, decalage=0.0, sur_segment=None, origine=None):
         from app.moteur import Segment
 
         self.appels += 1
@@ -1002,11 +1002,16 @@ def essai_cache_openvino(base: Path) -> None:
     jour = 86400
 
     class Pipeline:
-        """WhisperPipeline factice : « compile » en écrivant dans CACHE_DIR, comme OpenVINO."""
+        """WhisperPipeline factice : « compile » encodeur et décodeur dans CACHE_DIR, en lecture seule, comme OpenVINO."""
 
         def __init__(self, dossier, peripherique, **proprietes):
-            empreinte = abs(hash((peripherique, json.dumps(proprietes, sort_keys=True)))) % 10 ** 18
-            (Path(proprietes["CACHE_DIR"]) / f"{10 ** 18 + empreinte}.blob").write_bytes(b"x" * 5000)
+            empreinte = abs(hash((peripherique, json.dumps(proprietes, sort_keys=True)))) % 10 ** 17
+            for rang, taille in ((1, 3000), (2, 2000)):
+                blob = Path(proprietes["CACHE_DIR"]) / f"{rang * 10 ** 17 + empreinte}.blob"
+                if blob.exists():
+                    os.chmod(blob, 0o600)
+                blob.write_bytes(b"x" * taille)
+                os.chmod(blob, 0o400)
 
     try:
         os.environ["LOCALAPPDATA"] = str(base / "cache-ov-local")
@@ -1021,8 +1026,9 @@ def essai_cache_openvino(base: Path) -> None:
         ov.charger(presets.MODELE_TURBO)
         marques = list(cache.glob("scribouille-usage-*.marque"))
         index = cache_openvino.lire_index()
-        verifier(len(index["entrees"]) == 1 and len(index["cles"]) == 1 and len(marques) == 1,
-                 "ouverture : le compilé écrit est rattaché à son réglage, marque d'usage posée", json.dumps(index)[:300])
+        verifier(len(index["entrees"]) == 2 and len(index["cles"]) == 1 and len(marques) == 1,
+                 "ouverture : les compilés écrits sont rattachés à leur réglage, marque d'usage posée",
+                 json.dumps(index)[:300])
         (cache / "999999999999999999.cl_cache").write_bytes(b"k" * 50)   # noyau compilé pendant le calcul
         ov.liberer()
         index = cache_openvino.lire_index()
@@ -1131,6 +1137,528 @@ def essai_cache_openvino(base: Path) -> None:
         moteur_openvino._peripheriques_vus, moteur_openvino._version_vue, moteur_openvino._supposes = vus_ov
         chemins.RACINE, chemins.DONNEES_IMPOSEES = racine, imposees
         _rendre_environnement(reels)
+
+
+def essai_cache_plafond_tenu(base: Path) -> None:
+    """
+    16/11 (tour 7) : le plafond du cache est tenu sur le dossier réel. Scénario
+    du portable, à l'échelle (1 Go = 1 000 octets) : dix compilés d'avant
+    l'index, en lecture seule comme OpenVINO les écrit, dont les quatre des
+    deux réglages en service (les plus anciens), un fichier tenu ouvert par un
+    autre programme ; deux lancements suffisent, sans recompilation.
+    """
+    import json
+    import stat
+    import time
+    import types
+
+    from app import cache_openvino, chemins, cli, instance, inventaire, journal, moteur, moteur_openvino, presets
+
+    titre("Cache OpenVINO : plafond tenu sur le dossier réel, compilés en service jamais effacés")
+    racine, imposees = chemins.RACINE, chemins.DONNEES_IMPOSEES
+    reels = _environnement_garde()
+    plafond_reel = cache_openvino.PLAFOND_OCTETS
+    chemins.RACINE, chemins.DONNEES_IMPOSEES = base / "plafond-ov", True
+    cache = chemins.RACINE / "cache-openvino"
+    cache.mkdir(parents=True)
+    sauves = (moteur.etat_modele, moteur.assurer_modele_telecharge, sys.modules.get("openvino_genai"))
+    vus_ov = (moteur_openvino._peripheriques_vus, moteur_openvino._version_vue, moteur_openvino._supposes)
+    maintenant = time.time()
+    heure = 3600
+    turbo = presets.depot_openvino(presets.MODELE_TURBO) or "OpenVINO/whisper-large-v3-turbo-int8-ov"
+    large = "OpenVINO/whisper-large-v3-int8-ov"
+    # Réglage -> (encodeur, décodeur) : noms et tailles des compilés qu'OpenVINO relit.
+    compiles = {"turbo": (("11111111111111111101.blob", 633), ("11111111111111111102.blob", 234)),
+                "large": (("22222222222222222201.blob", 1280), ("22222222222222222202.blob", 689))}
+    inutiles = {"33333333333333333301.blob": 622, "33333333333333333302.blob": 622,
+                "33333333333333333303.blob": 233, "33333333333333333304.blob": 165,
+                "33333333333333333305.blob": 944, "33333333333333333306.blob": 600}
+    tenu_ailleurs = "33333333333333333305.blob"
+    compilations: list[str] = []
+
+    def poser(nom: str, taille: int, ecrit: float, accede: float) -> None:
+        chemin = cache / nom
+        chemin.write_bytes(b"o" * taille)
+        os.utime(chemin, (accede, ecrit))
+        os.chmod(chemin, stat.S_IREAD)    # OpenVINO écrit ses compilés en lecture seule
+
+    class Pipeline:
+        """WhisperPipeline factice : relit ses compilés s'ils sont là (encodeur tenu, dernier accès du
+        décodeur avancé, comme sur processeur et sur la puce), sinon « compile »."""
+        signal = True
+
+        def __init__(self, dossier, peripherique, **proprietes):
+            reglage = Path(dossier).name
+            self.tenus = []
+            for rang, (nom, taille) in enumerate(compiles[reglage]):
+                chemin = Path(proprietes["CACHE_DIR"]) / nom
+                if not chemin.exists():
+                    compilations.append(nom)
+                    chemin.write_bytes(b"c" * taille)
+                    os.chmod(chemin, stat.S_IREAD)
+                elif Pipeline.signal and rang == 0:
+                    self.tenus.append(open(chemin, "rb"))    # projeté tant que le modèle est ouvert
+                elif Pipeline.signal:
+                    os.utime(chemin, ns=(time.time_ns(), chemin.stat().st_mtime_ns))    # relu
+
+    tenant = None
+    messages: list[str] = []
+    info_reelle = journal.info
+
+    def noter_info(message, *args, **kwargs):
+        messages.append(message % args if args else message)
+        return info_reelle(message, *args, **kwargs)
+
+    journal.info = noter_info
+    try:
+        os.environ["LOCALAPPDATA"] = str(base / "plafond-ov-local")
+        os.environ["SCRIBOUILLE_ESSAI_REGISTRE"] = "[]"
+        dossiers = {turbo: base / "plafond-modeles" / "turbo", large: base / "plafond-modeles" / "large"}
+        for d in dossiers.values():
+            d.mkdir(parents=True)
+        moteur.etat_modele = lambda depot: {"etat": "complet", "snapshot": str(dossiers[depot])}
+        moteur.assurer_modele_telecharge = lambda depot, etat, signaler=None: {"snapshot": str(dossiers[depot])}
+        sys.modules["openvino_genai"] = types.SimpleNamespace(WhisperPipeline=Pipeline)
+        moteur_openvino.amorcer("2026.4.1", ["CPU", "GPU"])
+        presets_ov = {turbo: presets.MODELE_TURBO, large: large}
+        cache_openvino.PLAFOND_OCTETS = 4000
+
+        # Le portable : compilés des 11 et 12/11 (ceux en service sont les plus
+        # anciens), dernier accès de la sauvegarde de nuit pour les inutiles,
+        # du passage du jour pour ceux en service ; noyaux de la puce ; index
+        # de la 3.x d'avant ce tour : deux clés, des noyaux, aucun compilé.
+        for reglage, paires in compiles.items():
+            for nom, taille in paires:
+                poser(nom, taille, maintenant - 5 * 86400, maintenant - 2 * heure)
+        for k, (nom, taille) in enumerate(inutiles.items()):
+            poser(nom, taille, maintenant - 4 * 86400 + k * 60, maintenant - 10 * heure + k)
+        index = cache_openvino._index_vide()
+        cles = {}
+        for reglage, depot in (("turbo", turbo), ("large", large)):
+            cle, infos = cache_openvino.cle_reglage(depot, "CPU", {}, moteur_openvino.version(), "", True)
+            cles[reglage] = cle
+            index["cles"][cle] = {**infos, "premier_usage": maintenant - 4 * heure, "dernier_usage": maintenant - 3 * heure}
+        for k in range(20):
+            nom = f"9{k:017d}.cl_cache"
+            (cache / nom).write_bytes(b"k" * 5)
+            os.utime(cache / nom, (maintenant - 3 * 86400, maintenant - 3 * 86400))
+            if k < 4:
+                index["entrees"][nom] = {"cle": cles["turbo" if k % 2 else "large"], "octets": 5, "ecrit": 0}
+        cache_openvino._ecrire_index(index)
+        en_service = {nom for paires in compiles.values() for nom, _ in paires}
+        total_depart = sum(f.stat().st_size for f in cache.iterdir() if cache_openvino.est_entree(f.name))
+        # Un autre programme (sauvegarde, antivirus) tient un inutile ouvert, sans partage d'effacement.
+        tenant = subprocess.Popen([sys.executable, "-c",
+                                   f"import time; f = open(r'{cache / tenu_ailleurs}', 'rb'); print('ok', flush=True); "
+                                   "time.sleep(120)"], stdout=subprocess.PIPE, creationflags=SANS_FENETRE)
+        tenant.stdout.readline()
+
+        # Ouverture de la fenêtre (ou début de transcrire) : rien ne dit encore
+        # quels compilés servent, aucun antérieur ne part au plafond.
+        bilan = cache_openvino.purger()
+        res = cache_openvino.resume()
+        verifier(not bilan["effacees"] and sorted(bilan["attente"]) == sorted(cles.values())
+                 and res["octets"] == total_depart and res["attente"]
+                 and "gardés jusqu'au prochain chargement" in cache_openvino.phrase_etat(res),
+                 "premier lancement : au-delà du plafond, les compilés d'avant l'index attendent que chaque "
+                 "réglage en service soit reconnu (aucun effacé), et diagnostic le dit",
+                 str(bilan)[:300] + cache_openvino.phrase_etat(res))
+
+        # Lancement 1 : une transcription avec turbo. Ses compilés relus et tenus sont rattachés.
+        ov = moteur_openvino.MoteurOpenVINO(None, "CPU")
+        ov.temoin = True
+        ov.charger(presets_ov[turbo])
+        index = cache_openvino.lire_index()
+        rattaches = {n for n, f in index["entrees"].items() if f["cle"] == cles["turbo"] and n.endswith(".blob")}
+        verifier(rattaches == {n for n, _ in compiles["turbo"]} and not compilations
+                 and en_service <= {f.name for f in cache.iterdir()},
+                 "lancement 1 : les compilés de turbo, relus (dernier accès) et tenus (projetés), sont rattachés "
+                 "à son réglage ; rien n'est recompilé ni effacé de ce qui sert", str(sorted(rattaches)))
+        ov.liberer()
+
+        # Lancement 2 : large-v3. Les deux réglages en service sont reconnus,
+        # le plafond s'applique sur le dossier réel ; l'entrée tenue ailleurs
+        # n'est pas décomptée, la purge passe aux suivantes.
+        ov.charger(presets_ov[large])
+        presentes = {f.name: f.stat().st_size for f in cache.iterdir() if cache_openvino.est_entree(f.name)}
+        index = cache_openvino.lire_index()
+        reconnues = sum(presentes.values())
+        verifier(en_service <= set(presentes) and not compilations,
+                 "lancement 2 : les quatre compilés en service sont toujours là, aucune recompilation",
+                 str(sorted(presentes)))
+        verifier(reconnues <= 4000 and tenu_ailleurs in presentes,
+                 "lancement 2 : le dossier réel repasse sous le plafond malgré l'entrée tenue ailleurs "
+                 f"({reconnues} octets pour 4 000)", str(presentes))
+        verifier(index["echecs"].get(tenu_ailleurs, {}).get("erreur") == "ouvert_ailleurs"
+                 and not os.access(cache / tenu_ailleurs, os.W_OK),
+                 "échec d'effacement noté avec sa cause, et l'attribut lecture seule remis",
+                 json.dumps(index["echecs"]))
+        ov.liberer()
+        res = cache_openvino.resume()
+        phrase = cache_openvino.phrase_etat(res)
+        ligne = cli._ligne_cache(res)
+        poste = {p.cle: p for p in inventaire.postes({"dossier_sortie": str(base / "plafond-sorties")})[0]}
+        verifier(res["echecs"] == 1 and "n'a pas pu être effacé" in phrase and phrase in ligne
+                 and phrase in poste["cache_openvino"].description and not res["attente"],
+                 "diagnostic et espace disent en une phrase ce qui n'a pas pu être effacé", ligne)
+        lignes_echec = [m for m in messages if "non effacée(s)" in m]
+        lignes_borne = [m for m in messages if m.startswith("Cache OpenVINO borné")]
+        verifier(len(lignes_echec) == 1 and "ouvert_ailleurs 1" in lignes_echec[0]
+                 and not [m for m in messages if "laissé (" in m],
+                 "journal : les échecs sont dits en une ligne groupée (nombre, taille, cause), pas un par fichier",
+                 str(lignes_echec))
+        verifier(lignes_borne and f"reste {langues.octets(reconnues)}" in lignes_borne[-1],
+                 "journal : le reste annoncé est celui du dossier réel après effacement", str(lignes_borne))
+
+        # L'autre programme lâche le fichier : la purge suivante n'a plus d'échec à dire.
+        tenant.kill()
+        tenant.wait(10)
+        tenant = None
+        bilan = cache_openvino.purger()
+        verifier(bilan["fait"] and not bilan["echecs"] and not cache_openvino.phrase_etat()
+                 and bilan["reconnues_octets"] == sum(f.stat().st_size for f in cache.iterdir()
+                                                      if cache_openvino.est_entree(f.name)),
+                 "fichier relâché : plus d'échec dit, le reste annoncé est le dossier réel", str(bilan)[:300])
+
+        # « effacer cache_openvino » : compilés en lecture seule effacés aussi,
+        # dossier entier (à nous) comme entrée par entrée (dossier partagé
+        # avec une 2.4 possible : seules nos entrées indexées).
+        sorties_liberer = {"dossier_sortie": str(base / "plafond-sorties")}
+        libere = inventaire.liberer(["cache_openvino"], sorties_liberer)
+        verifier((not cache.exists() or not [f for f in cache.iterdir() if cache_openvino.est_entree(f.name)])
+                 and libere["octets"] > 0
+                 and not libere["restes"],
+                 "effacer cache_openvino : compilés en lecture seule effacés (dossier à nous)", str(libere)[:300])
+        cache.mkdir(parents=True, exist_ok=True)
+        local = base / "plafond-partage"
+        donnees_2x = local / "WhiScribe"
+        (donnees_2x / "cache-openvino").mkdir(parents=True)
+        _simuler_2x(local, [{"ruche": "HKCU", "version": "2.4.0", "dossier": ""}])
+        chemins.RACINE = donnees_2x
+        index = cache_openvino._index_vide()
+        for nom, taille in (("44444444444444444401.blob", 70), ("44444444444444444402.blob", 30)):
+            poser(nom, taille, maintenant - 5 * 86400, maintenant - 5 * 86400)
+            os.replace(cache / nom, donnees_2x / "cache-openvino" / nom)
+            index["entrees"][nom] = {"cle": "k", "octets": taille, "ecrit": 0}
+        (donnees_2x / "cache-openvino" / "55555555555555555501.blob").write_bytes(b"2" * 40)
+        cache = donnees_2x / "cache-openvino"
+        cache_openvino._ecrire_index(index)
+        libere = inventaire.liberer(["cache_openvino"], sorties_liberer)
+        verifier(sorted(f.name for f in cache.iterdir() if cache_openvino.est_entree(f.name))
+                 == ["55555555555555555501.blob"] and libere["octets"] == 100 and not libere["restes"],
+                 "dossier partagé (2.4 possible) : nos entrées en lecture seule effacées une à une, l'autre laissée",
+                 str(libere)[:300])
+        chemins.RACINE = base / "plafond-ov"
+        cache = chemins.RACINE / "cache-openvino"
+        _simuler_2x(base / "plafond-ov-local", "[]")
+        # Marques d'usage laissées par un arrêt forcé : processus mort, PID
+        # réutilisé (vivant, autre heure de création), notre propre PID d'un
+        # lancement d'avant. Retirées, elles ne bloquent pas la purge.
+        enfant = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], creationflags=SANS_FENETRE)
+        try:
+            (cache / "scribouille-usage-999999.marque").write_text("999999 1000.000", encoding="ascii")
+            (cache / f"scribouille-usage-{enfant.pid}.marque").write_text(
+                f"{enfant.pid} {instance._creation(enfant.pid) - 500:.3f}", encoding="ascii")
+            (cache / f"scribouille-usage-{os.getpid()}.marque").write_text(
+                f"{os.getpid()} {instance._creation(os.getpid()) - 900:.3f}", encoding="ascii")
+            vieux = time.time() - 600
+            for m in cache.glob("scribouille-usage-*.marque"):
+                os.utime(m, (vieux, vieux))
+            bilan = cache_openvino.purger()
+            restantes = [m.name for m in cache.glob("scribouille-usage-*.marque")]
+            verifier(bilan["fait"] and restantes in ([], [f"scribouille-usage-{os.getpid()}.marque"]),
+                     "marques d'un arrêt forcé (processus mort, PID réutilisé) : la purge se fait quand même",
+                     str(bilan)[:200] + str(restantes))
+            verifier(not [n for n in restantes if n != f"scribouille-usage-{os.getpid()}.marque"],
+                     "marques mortes retirées au lancement suivant", str(restantes))
+        finally:
+            enfant.kill()
+            enfant.wait(10)
+            for m in cache.glob("scribouille-usage-*.marque"):
+                m.unlink(missing_ok=True)
+
+        # Sans signal (dernier accès non tenu, compilé relu puis refermé) :
+        # rien d'antérieur ne part au plafond tant que le réglage n'est pas
+        # reconnu ; seule la règle des 30 jours finit par s'appliquer.
+        muet = base / "plafond-ov-muet"
+        chemins.RACINE = muet
+        cache = muet / "cache-openvino"
+        cache.mkdir(parents=True)
+        for nom, taille in compiles["turbo"]:
+            poser(nom, taille, maintenant - 5 * 86400, maintenant - 5 * 86400)
+        for nom, taille in list(inutiles.items())[:4]:
+            poser(nom, taille, maintenant - 4 * 86400, maintenant - 4 * 86400)
+        Pipeline.signal = False
+        cache_openvino.PLAFOND_OCTETS = 1000
+        ov = moteur_openvino.MoteurOpenVINO(None, "CPU")
+        ov.temoin = True
+        avant = {f.name for f in cache.iterdir()}
+        bilan = cache_openvino.purger()
+        ov.charger(presets_ov[turbo])
+        ov.liberer()
+        bilan_apres = cache_openvino.purger()
+        verifier(avant <= {f.name for f in cache.iterdir()} and bilan["attente"] == [cache_openvino.AUCUN_CHARGEMENT]
+                 and bilan_apres["attente"] and not compilations,
+                 "sans signal au chargement : aucun antérieur effacé au plafond (ni avant le premier chargement, "
+                 "ni après un chargement qui n'a rien reconnu)", str(bilan_apres)[:300])
+        bilan = cache_openvino.purger(maintenant=maintenant + 31 * 86400)
+        verifier(not [f for f in cache.iterdir() if f.suffix == ".blob"]
+                 and {e["raison"] for e in bilan["effacees"]} == {"anterieure"},
+                 f"sans signal : la règle des {cache_openvino.DELAI_JOURS} jours s'applique quand même (plafond tenu)",
+                 str(bilan)[:300])
+    finally:
+        journal.info = info_reelle
+        cache_openvino.PLAFOND_OCTETS = plafond_reel
+        if tenant is not None:
+            tenant.kill()
+            tenant.wait(10)
+        moteur.etat_modele, moteur.assurer_modele_telecharge = sauves[0], sauves[1]
+        if sauves[2] is None:
+            sys.modules.pop("openvino_genai", None)
+        else:
+            sys.modules["openvino_genai"] = sauves[2]
+        moteur_openvino._peripheriques_vus, moteur_openvino._version_vue, moteur_openvino._supposes = vus_ov
+        chemins.RACINE, chemins.DONNEES_IMPOSEES = racine, imposees
+        _rendre_environnement(reels)
+
+
+def essai_ecritures_identiques(base: Path) -> None:
+    """16/11 (tour 7, point 2) : un fichier d'état n'est jamais réécrit (ni redaté) quand rien n'y change."""
+    import json
+    import time
+
+    from app import cache_openvino, calibration, chemins, config as config_module, surveillance
+
+    titre("Fichiers d'état : rien de réécrit quand le contenu serait identique à l'octet")
+    racine, imposees = chemins.RACINE, chemins.DONNEES_IMPOSEES
+    choix_modeles, dossier_modeles = chemins.FICHIER_CHOIX_MODELES, chemins.DOSSIER_MODELES
+    fichier_config = chemins.FICHIER_CONFIG
+    reels = _environnement_garde()
+    vieux = time.time() - 3 * 86400
+
+    def date(chemin: Path) -> int:
+        return chemin.stat().st_mtime_ns
+
+    def vieillir(chemin: Path) -> int:
+        os.utime(chemin, (vieux, vieux))
+        return date(chemin)
+
+    try:
+        # Dossier à nous : config.json.
+        chemins.RACINE, chemins.DONNEES_IMPOSEES = base / "identique-propre", True
+        chemins.RACINE.mkdir(parents=True)
+        chemins.FICHIER_CONFIG = chemins.RACINE / "config.json"
+        os.environ["LOCALAPPDATA"] = str(base / "identique-local-vide")
+        os.environ["SCRIBOUILLE_ESSAI_REGISTRE"] = "[]"
+        config_module._LECTURES.clear()
+        reglages = config_module.charger()
+        verifier(config_module.sauver(reglages) and chemins.FICHIER_CONFIG.is_file(), "réglages : première écriture")
+        avant = vieillir(chemins.FICHIER_CONFIG)
+        config_module.sauver(config_module.charger())
+        verifier(date(chemins.FICHIER_CONFIG) == avant, "config.json : resauvé sans changement, ni réécrit ni redaté")
+        reglages = config_module.charger()
+        reglages["preset"] = "rapide" if reglages.get("preset") != "rapide" else "qualite"
+        config_module.sauver(reglages)
+        verifier(date(chemins.FICHIER_CONFIG) != avant
+                 and json.loads(chemins.FICHIER_CONFIG.read_text(encoding="utf-8"))["preset"] == reglages["preset"],
+                 "config.json : un vrai changement est bien écrit")
+
+        # Dossier partagé avec une 2.3.3 : config-scribouille.json (le fichier du portable).
+        local = base / "identique-partage"
+        donnees = local / "WhiScribe"
+        donnees.mkdir(parents=True)
+        (local / "Programs" / "WhiScribe").mkdir(parents=True)
+        (local / "Programs" / "WhiScribe" / "WhiScribe.exe").write_bytes(b"MZ")
+        (donnees / "config.json").write_text(json.dumps({"preset": "rapide", "langue_interface": "fr"}), encoding="utf-8")
+        _simuler_2x(local, [{"ruche": "HKCU", "version": "2.3.3", "dossier": str(local / "Programs" / "WhiScribe")}])
+        chemins.RACINE = donnees
+        chemins.FICHIER_CONFIG = donnees / "config.json"
+        config_module._LECTURES.clear()
+        reglages = config_module.charger()
+        reglages["preset"] = "qualite"
+        config_module.sauver(reglages)
+        propre = config_module.fichier_propre()
+        verifier(config_module.partage_ancienne_version() and propre.is_file(),
+                 "dossier partagé : nos réglages à part dans config-scribouille.json", str(propre))
+        avant, avant_2x = vieillir(propre), vieillir(donnees / "config.json")
+        for _ in range(3):
+            config_module.sauver(config_module.charger())
+        verifier(date(propre) == avant and date(donnees / "config.json") == avant_2x,
+                 "config-scribouille.json : trois sauvegardes sans changement, ni réécrit ni redaté (celui de la 2.x non plus)")
+
+        # Index du cache OpenVINO : purgé à chaque lancement, réécrit seulement s'il change.
+        (donnees / "cache-openvino").mkdir()
+        (donnees / "cache-openvino" / "123456789012345678.blob").write_bytes(b"b" * 10)
+        cache_openvino.purger()
+        index = donnees / "cache-openvino" / cache_openvino.NOM_INDEX
+        avant = vieillir(index)
+        cache_openvino.purger()
+        cache_openvino.purger()
+        verifier(date(index) == avant, "index du cache OpenVINO : purges sans changement, ni réécrit ni redaté")
+
+        # Mesures de durée, mémoire du dossier surveillé, choix du dossier des modèles.
+        calibration._ecrire({"format": 1, "mesures": {}})
+        avant = vieillir(calibration.fichier())
+        calibration._ecrire(json.loads(calibration.fichier().read_text(encoding="utf-8")))
+        verifier(date(calibration.fichier()) == avant, "mesures de durée : réécrites à l'identique, fichier inchangé")
+        surveillance.ecrire_memoire({})
+        avant = vieillir(surveillance.fichier_memoire())
+        surveillance.ecrire_memoire({})
+        verifier(date(surveillance.fichier_memoire()) == avant, "mémoire du dossier surveillé : même contenu, fichier inchangé")
+        chemins.FICHIER_CHOIX_MODELES = donnees / "dossier-modeles.txt"
+        chemins.definir_dossier_modeles(str(base / "identique-modeles"), memoriser=True)
+        avant = vieillir(chemins.FICHIER_CHOIX_MODELES)
+        chemins.definir_dossier_modeles(str(base / "identique-modeles"), memoriser=True)
+        verifier(date(chemins.FICHIER_CHOIX_MODELES) == avant, "choix du dossier des modèles : même chemin, fichier inchangé")
+    finally:
+        chemins.RACINE, chemins.DONNEES_IMPOSEES = racine, imposees
+        chemins.FICHIER_CHOIX_MODELES, chemins.FICHIER_CONFIG = choix_modeles, fichier_config
+        chemins.definir_dossier_modeles(str(dossier_modeles))
+        config_module._LECTURES.clear()
+        _rendre_environnement(reels)
+
+
+def essai_reprise_fenetres(base: Path) -> None:
+    """
+    16/11 (tour 7, point 4) : une reprise sur OpenVINO retrouve les fenêtres du
+    passage complet (même texte), sans segment perdu ni doublé à la jointure.
+    """
+    import hashlib
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    from app import materiel, moteur_openvino as mo
+
+    titre("Reprise sur OpenVINO : fenêtres du passage complet, jointure sans perte ni doublon")
+    F = mo.FREQUENCE
+    # 4 min de « parole » : salves de 3 à 9 s séparées de 0,6 à 1,6 s de silence,
+    # chacune reconnaissable à son contenu. VAD simulé : les salves non nulles.
+    graine = np.random.default_rng(7)
+    morceaux, t = [], 0
+    while t < 240 * F:
+        salve = int(graine.uniform(3, 9) * F)
+        silence = int(graine.uniform(0.6, 1.6) * F)
+        morceaux += [graine.uniform(0.2, 0.9, salve).astype(np.float32), np.zeros(silence, dtype=np.float32)]
+        t += salve + silence
+    signal = np.concatenate(morceaux)
+
+    marge = int(0.2 * F)
+
+    def vad(sig, _options=None, sampling_rate=16000, **_k):
+        # Comme Silero : rien sous une trame (512 échantillons), passages
+        # élargis d'une marge de silence de chaque côté, fondus s'ils se touchent.
+        actif = np.flatnonzero(np.diff(np.concatenate([[0], (sig != 0).astype(np.int8), [0]])))
+        passages: list[dict] = []
+        for a, b in zip(actif[::2], actif[1::2]):
+            if b - a < 512:
+                continue
+            a, b = max(0, int(a) - marge), min(sig.size, int(b) + marge)
+            if passages and a <= passages[-1]["end"]:
+                passages[-1]["end"] = b
+            else:
+                passages.append({"start": a, "end": b})
+        return passages
+
+    class Tube:
+        """Pipeline simulé : le texte d'une fenêtre ne dépend que de son audio ; une panne sur demande."""
+
+        def __init__(self, panne_a=None):
+            self.appels, self.panne_a = 0, panne_a
+
+        def get_generation_config(self):
+            return SimpleNamespace()
+
+        def generate(self, morceau, config, streamer=None):
+            self.appels += 1
+            if self.panne_a is not None and self.appels == self.panne_a:
+                self.panne_a = None
+                raise RuntimeError("panne simulée du pilote")
+            texte = "fenêtre " + hashlib.sha1(np.ascontiguousarray(morceau).tobytes()).hexdigest()[:10]
+            # Le dernier horodatage tombe à la fin de la parole, avant la marge
+            # de silence du passage : la jointure d'une reprise est à cheval.
+            return SimpleNamespace(texts=[texte], words=[], languages=["<|fr|>"], perf_metrics=None,
+                                   chunks=[SimpleNamespace(start_ts=0.0, end_ts=morceau.size / F - 0.2, text=texte)])
+
+    import faster_whisper.vad as fw_vad
+
+    vrai_vad = fw_vad.get_speech_timestamps
+    simule = "openvino_genai" not in sys.modules and __import__("importlib").util.find_spec("openvino_genai") is None
+    if simule:
+        sys.modules["openvino_genai"] = SimpleNamespace(
+            __version__="simulé", StreamingStatus=SimpleNamespace(RUNNING=0, CANCEL=1))
+    fw_vad.get_speech_timestamps = vad
+    try:
+        mat = materiel.detecter_au_demarrage()[0]
+
+        def instance(tube):
+            ov = mo.MoteurOpenVINO(mat, "CPU")
+            ov._pipeline, ov._mots, ov._nom_modele = tube, False, "turbo"
+            return ov
+
+        duree = signal.size / F
+        reglages = {"faisceau_openvino": 1}
+        complet, _d = instance(Tube()).transcrire(signal, duree, "fr", reglages)
+        verifier(len(complet) >= 8, f"passage complet : {len(complet)} fenêtres de 30 s au plus")
+
+        def reprendre(deja):
+            decalage = deja[-1].fin
+            debut = int(decalage * F)
+            suite, _d = instance(Tube()).transcrire(signal[debut:], duree, "fr", reglages, decalage=decalage,
+                                                    origine=signal)
+            return deja + suite, suite
+
+        k = len(complet) * 43 // 100
+        total, _s = reprendre(complet[:k])
+        verifier([s.texte for s in total] == [s.texte for s in complet]
+                 and [(round(s.debut, 3), round(s.fin, 3)) for s in total]
+                 == [(round(s.debut, 3), round(s.fin, 3)) for s in complet],
+                 "coupure entre deux fenêtres (jointure à la fin de la parole, avant la marge de silence) : la "
+                 "reprise donne exactement le passage complet, texte et heures")
+        # Coupure au milieu d'une fenêtre (segments d'une fenêtre écrits en partie) :
+        # la jointure est n'importe où, chaque échantillon d'après repasse une fois.
+        for position in (k * 3 + 0.37, duree * 0.43, duree * 0.71 + 0.11):
+            debut = int(position * F)
+            fenetres = mo.fenetres_reprise(signal, debut)
+            couverts = np.zeros(signal.size, dtype=np.int8)
+            for fenetre in fenetres:
+                for p in fenetre:
+                    couverts[p["start"] + debut:p["end"] + debut] += 1
+            parole = signal != 0
+            verifier(not couverts[:debut].any() and (couverts[debut:] <= 1).all()
+                     and (couverts[debut + 512:][parole[debut + 512:]] == 1).all(),
+                     f"jointure à {position:.2f} s : rien d'avant rejoué, toute la parole d'après une fois")
+            entieres = [f for f in mo.decouper(signal) if f[0]["start"] >= debut]
+            verifier(entieres and [[(p["start"] + debut, p["end"] + debut) for p in f] for f in fenetres[-len(entieres):]]
+                     == [[(p["start"], p["end"]) for p in f] for f in entieres],
+                     f"jointure à {position:.2f} s : les fenêtres suivantes sont celles du passage complet")
+        # Signal qui n'est pas la fin de l'entier (incohérence) : découpage d'avant, rien de faux.
+        autre = np.ascontiguousarray(signal[1000:][::-1])
+        segs, _d = instance(Tube()).transcrire(autre, duree, "fr", reglages, decalage=1.0, origine=signal)
+        verifier(len(segs) >= 1, "signal qui n'est pas la fin de l'entier : découpé seul, comme avant")
+        # Rejeu après une panne en cours de route (moteur avec repli) : même texte que sans panne.
+        repli = mo.MoteurAvecRepli(mat, "CPU")
+        repli._ov = repli._actif = instance(Tube(panne_a=k + 1))
+        repli._rouvrir = lambda: None
+        repli.PAUSE_RECREATION_S = 0
+        vus = []
+        segs, details = repli.transcrire(signal, duree, "fr", reglages, sur_segment=vus.append)
+        verifier(details.get("rejeux_openvino") == 1 and [s.texte for s in segs] == [s.texte for s in complet]
+                 and len(vus) == len(complet),
+                 "panne d'OpenVINO en cours de route : le rejeu retrouve les mêmes fenêtres, même texte, "
+                 "chaque segment sauvegardé une fois", str(details.get("rejeux_openvino")))
+        # Reprise passée par le moteur avec repli (chemin de l'application).
+        repli = mo.MoteurAvecRepli(mat, "CPU")
+        repli._ov = repli._actif = instance(Tube())
+        deja = complet[:k]
+        suite, _d = repli.transcrire(signal[int(deja[-1].fin * F):], duree, "fr", reglages,
+                                     decalage=deja[-1].fin, origine=signal)
+        verifier([s.texte for s in deja + suite] == [s.texte for s in complet],
+                 "reprise par le moteur avec repli : même texte que le passage complet")
+    finally:
+        fw_vad.get_speech_timestamps = vrai_vad
+        if simule:
+            sys.modules.pop("openvino_genai", None)
 
 
 def essai_reprise_reconstruite(base: Path) -> None:
@@ -1575,7 +2103,8 @@ def principal() -> int:
         essai_migration(base)
         essai_instances(base)
         for essai in (essai_version_2x, essai_reprise_tolerante, essai_verrou_et_ecritures, essai_classement_2x,
-                      essai_cache_openvino, essai_reprise_reconstruite, essai_migration_provisoire,
+                      essai_cache_openvino, essai_cache_plafond_tenu, essai_ecritures_identiques,
+                      essai_reprise_fenetres, essai_reprise_reconstruite, essai_migration_provisoire,
                       essai_relecture_8b5eae8):
             # Une section qui lève est un échec, et les suivantes passent quand même.
             try:

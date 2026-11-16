@@ -850,9 +850,15 @@ class MoteurTranscription:
         interrompu: Callable[[], bool] | None = None,
         decalage: float = 0.0,
         sur_segment: Callable[[Segment], None] | None = None,
+        origine: np.ndarray | None = None,
     ) -> tuple[list[Segment], dict]:
         """
         Transcrit un signal déjà décodé.
+
+        `origine` (le signal entier, après une reprise) n'est pas utilisé ici :
+        faster-whisper découpe et enchaîne ses fenêtres lui-même, et ses
+        passages complets ne sont pas toujours reproductibles au mot près
+        (repli de température par tirage) : une reprise ne peut pas les rejoindre.
 
         `decalage` déplace tous les horodatages : il vaut zéro en temps normal,
         et la position atteinte quand on reprend une transcription interrompue,

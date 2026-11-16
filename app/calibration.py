@@ -188,10 +188,13 @@ def _ecrire(donnees: dict) -> None:
     # Écrit à côté (nom propre à ce processus) puis renommé : une coupure ne
     # laisse jamais un fichier tronqué, et deux processus ne se mélangent pas.
     cible = fichier()
+    texte = json.dumps(donnees, indent=2, ensure_ascii=False) + "\n"
+    if chemins.contenu_identique(cible, texte):
+        return  # rien de changé : ni réécrit, ni redaté
     provisoire = cible.with_name(f"{cible.name}.{os.getpid()}.tmp")
     try:
         chemins.RACINE.mkdir(parents=True, exist_ok=True)
-        provisoire.write_text(json.dumps(donnees, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        provisoire.write_text(texte, encoding="utf-8")
         os.replace(provisoire, cible)
     except OSError as exc:
         journal.attention("Mesures de durée non enregistrées : %s", exc)

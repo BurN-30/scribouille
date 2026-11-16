@@ -628,7 +628,9 @@ def definir_dossier_modeles(chemin: str | Path | None, memoriser: bool = False) 
         try:
             RACINE.mkdir(parents=True, exist_ok=True)
             if texte:
-                FICHIER_CHOIX_MODELES.write_text(str(DOSSIER_MODELES) + "\n", encoding="utf-8")
+                # Même choix que sur le disque : le fichier garde sa date.
+                if not contenu_identique(FICHIER_CHOIX_MODELES, str(DOSSIER_MODELES) + "\n"):
+                    FICHIER_CHOIX_MODELES.write_text(str(DOSSIER_MODELES) + "\n", encoding="utf-8")
             else:
                 FICHIER_CHOIX_MODELES.unlink(missing_ok=True)
                 DOSSIER_MODELES = dossier_modeles_retenu()
@@ -637,6 +639,18 @@ def definir_dossier_modeles(chemin: str | Path | None, memoriser: bool = False) 
 
     confiner_cache_huggingface()
     return DOSSIER_MODELES
+
+
+def contenu_identique(chemin: str | Path, texte: str, encodage: str = "utf-8") -> bool:
+    """
+    Vrai si `chemin` contient déjà, à l'octet près, ce que `write_text(texte)`
+    y écrirait (fins de ligne du système comprises) : rien à réécrire, et le
+    fichier garde sa date. Faux s'il est absent ou ne se lit pas.
+    """
+    try:
+        return Path(chemin).read_bytes() == texte.replace("\n", os.linesep).encode(encodage)
+    except (OSError, UnicodeError):
+        return False
 
 
 def dossier_modeles_inscriptible(chemin: str | Path) -> str:

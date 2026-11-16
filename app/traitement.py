@@ -905,6 +905,9 @@ class FileTraitement:
             a_transcrire, duree_audio, config.get("langue", "fr"), reglages,
             amorce=amorce, progression=progression,
             interrompu=self._interrompu, decalage=decalage,
+            # Après une reprise, le signal entier : OpenVINO y retrouve les
+            # fenêtres du passage complet, donc le même texte (app/moteur_openvino.py).
+            **({"origine": signal} if decalage else {}),
             # Un repli sur le processeur en cours de route se note avec le segment suivant.
             sur_segment=lambda seg: (_noter_calcul(session, instance, reglages["modele"]),
                                      session.ajouter(seg, time.time() - depart)),

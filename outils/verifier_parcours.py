@@ -458,7 +458,7 @@ class _MoteurFactice(_MoteurInerte):
         time.sleep(self.pause)
 
     def transcrire(self, signal, duree, langue, reglages, amorce="", progression=None,
-                   interrompu=None, decalage=0.0, sur_segment=None):
+                   interrompu=None, decalage=0.0, sur_segment=None, origine=None):
         import time
 
         for rang, seg in enumerate(self.segments, start=1):

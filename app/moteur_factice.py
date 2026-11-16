@@ -92,7 +92,7 @@ class MoteurFactice:
         self.charge = ""
 
     def transcrire(self, signal, duree_totale, langue, reglages, amorce="", progression=None,
-                   interrompu=None, decalage=0.0, sur_segment=None):
+                   interrompu=None, decalage=0.0, sur_segment=None, origine=None):
         nombre = max(1, int(self.options.get("segments") or 20))
         pause = float(self.options.get("pause_s") if self.options.get("pause_s") is not None else 0.05)
         plantage = int(self.options.get("plantage_segment") or 0)

@@ -304,6 +304,42 @@ def decouper(signal: np.ndarray) -> list[list[dict]]:
     return fenetres
 
 
+def _meme_fin(origine: np.ndarray, signal: np.ndarray) -> bool:
+    """`signal` est bien la fin de `origine` (contrôle sur ses premiers et derniers échantillons)."""
+    import numpy as np
+
+    queue = origine[len(origine) - len(signal):]
+    return bool(np.array_equal(queue[:4096], signal[:4096]) and np.array_equal(queue[-4096:], signal[-4096:]))
+
+
+def fenetres_reprise(origine: np.ndarray, debut: int) -> list[list[dict]]:
+    """
+    Fenêtres d'une reprise à l'échantillon `debut` de `origine` (le signal
+    entier), dans le temps du signal repris (`origine[debut:]`).
+
+    Celles du passage complet, découpées sur le signal entier, tant qu'elles
+    commencent après la jointure : le calcul y retrouve exactement les mêmes
+    morceaux (la parole d'avant ne pèse sur aucune fenêtre d'OpenVINO), donc
+    le même texte. Avant, la parole était redécoupée depuis la jointure et
+    toutes les fenêtres suivantes se décalaient : sur 11 min 49, 269 segments
+    au lieu de 271 et 95,4 % de mots identiques. La seule fenêtre à cheval sur
+    la jointure est redécoupée sur sa partie d'après, comme avant : rien de ce
+    qui précède la jointure n'est rejoué (aucun segment doublé), rien de ce qui
+    la suit n'est sauté (aucun segment perdu).
+    """
+    fenetres: list[list[dict]] = []
+    for fenetre in decouper(origine):
+        fin = fenetre[-1]["end"]
+        if fin <= debut:
+            continue
+        if fenetre[0]["start"] >= debut:
+            fenetres.append([{**p, "start": p["start"] - debut, "end": p["end"] - debut} for p in fenetre])
+            continue
+        # À cheval : la partie d'après la jointure, redécoupée seule.
+        fenetres += decouper(origine[debut:fin])
+    return fenetres
+
+
 class Correspondance:
     """Ramène un temps de la fenêtre (silences retirés) au temps du signal."""
 
@@ -414,6 +450,7 @@ class MoteurOpenVINO:
         # (`app/cache_openvino.py`) ; la marque d'usage la tient à l'écart.
         cache_openvino.poser_usage()
         avant = cache_openvino.instantane()
+        acces_avant = cache_openvino.acces()
         appliquees = {}
         try:
             # Point d'essai (SCRIBOUILLE_ESSAI_PUCE) : échec simulé de la puce,
@@ -448,7 +485,17 @@ class MoteurOpenVINO:
         self._suivi_cache = (*cache_openvino.cle_reglage(
             depot, self.peripherique_ov, appliquees, version(),
             temoin_puce._pilote_graphique() if self.peripherique_ov != "CPU" else "", self._mots), avant)
-        self._noter_cache()
+        # Juste après l'ouverture : aussi les entrées relues ou tenues (un
+        # réglage déjà compilé ne réécrit rien), pour que la purge ne vise
+        # jamais celles qui servent ; puis la purge elle-même, maintenant
+        # qu'elle sait lesquelles servent (application seulement : le banc et
+        # la campagne essaient des réglages qu'ils rouvriront).
+        self._noter_cache(acces_avant=acces_avant, tenues=cache_openvino.entrees_tenues(), chargement=True)
+        if self.temoin:
+            try:
+                cache_openvino.purger()
+            except Exception as exc:  # un cache : jamais bloquant
+                journal.debug("Purge du cache OpenVINO après l'ouverture : %s", exc)
         try:
             from tokenizers import Tokenizer
 
@@ -477,13 +524,14 @@ class MoteurOpenVINO:
             self._autre.liberer()
             self._autre = None
 
-    def _noter_cache(self) -> None:
+    def _noter_cache(self, **signaux) -> None:
+        """`signaux` (dates d'accès d'avant, entrées tenues) : juste après l'ouverture seulement."""
         if self._suivi_cache is None:
             return
         from . import cache_openvino
 
         try:
-            cache_openvino.noter_usage(*self._suivi_cache)
+            cache_openvino.noter_usage(*self._suivi_cache, **signaux)
         except Exception as exc:  # un cache : jamais bloquant
             journal.debug("Usage du cache OpenVINO non noté : %s", exc)
 
@@ -623,7 +671,13 @@ class MoteurOpenVINO:
         interrompu: Callable[[], bool] | None = None,
         decalage: float = 0.0,
         sur_segment: Callable[[Segment], None] | None = None,
+        origine: "np.ndarray | None" = None,
     ) -> tuple[list[Segment], dict]:
+        """
+        `origine` : le signal entier quand `signal` n'en est que la fin (reprise
+        après une coupure, rejeu après une panne) ; les fenêtres sont alors
+        celles du passage complet (`fenetres_reprise`).
+        """
         if self._pipeline is None:
             raise ErreurLisible(langues.t("moteur.non_charge.titre"),
                                 langues.t("moteur.non_charge.msg"))
@@ -643,7 +697,13 @@ class MoteurOpenVINO:
         bilan = {"fenetres_repetitives": 0, "reprises": 0, "echecs_garde": 0, "erreur_garde": "",
                  "boucles_mots": 0, "fenetres_autre_moteur": 0, "boucles_coupees": 0}
         langue_fixee = None if (not langue or langue == "auto") else langue
-        fenetres = decouper(signal) if signal.size else []
+        reprise = origine is not None and signal.size and 0 < len(origine) - len(signal) < len(origine) \
+            and _meme_fin(origine, signal)
+        if reprise:
+            fenetres = fenetres_reprise(np.ascontiguousarray(origine, dtype=np.float32), len(origine) - len(signal))
+            journal.info("Reprise à %.1f s : fenêtres du passage complet, découpées sur le signal entier", decalage)
+        else:
+            fenetres = decouper(signal) if signal.size else []
         journal.info(
             "Transcription OpenVINO : %s, langue=%s, faisceau=%s, %s fenêtre(s), amorce=%s caractères",
             self.peripherique_ov, langue or "auto", faisceau, len(fenetres), len(amorce))
@@ -956,7 +1016,8 @@ class MoteurAvecRepli:
         self._ct2.liberer()
 
     def transcrire(self, signal, duree_totale, langue, reglages, amorce="",
-                   progression=None, interrompu=None, decalage=0.0, sur_segment=None):
+                   progression=None, interrompu=None, decalage=0.0, sur_segment=None, origine=None):
+        """`origine` : le signal entier quand `signal` n'en est que la fin (reprise)."""
         if self._actif is self._ct2:
             return self._ct2.transcrire(signal, duree_totale, langue, reglages, amorce,
                                         progression, interrompu, decalage, sur_segment)
@@ -969,12 +1030,16 @@ class MoteurAvecRepli:
 
         rejoue = False
         position = decalage
+        # Signal dont les fenêtres sont tirées, rejeu compris : celles du
+        # passage complet (reprise), ou de ce passage-ci (rejeu après une panne).
+        entier = origine if origine is not None else signal
         while True:
             debut = max(0, int(round((position - decalage) * FREQUENCE)))
             try:
                 _segments, details = self._ov.transcrire(
                     signal[debut:], duree_totale, langue, reglages, amorce,
-                    progression, interrompu, position, relais)
+                    progression, interrompu, position, relais,
+                    origine=entier if (origine is not None or debut > 0) else None)
                 details["rejeux_openvino"] = int(rejoue)
                 if rejoue and self.incidents:
                     self.incidents[-1]["issue"] = "rejeu_reussi"

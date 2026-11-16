@@ -446,6 +446,103 @@ def essai_apprentissage(base: Path) -> None:
         v2.FICHIER_PERSONNEL, chemins.FICHIER_VOCABULAIRE, chemins.FICHIER_CORRECTIONS = anciens
 
 
+# Textes inventés : un brut au format de Scribouille (en-tête encadré, heures,
+# voix numérotées) et sa relue au format d'un compte rendu (en-tête, voix
+# nommées, heures entre crochets et parenthèses, une heure collée à un terme,
+# sommaire et pied de page).
+BRUT_MARQUES = """====================================================================
+Point projet.ogg
+====================================================================
+Durée        : 12 min
+Transcrit le : 03/11/2026 10:00
+====================================================================
+
+[00:00:05] Locuteur 1 : Bonjour à tous, on commence le point sur le projet zéfirin ce matin avec toute l'équipe.
+
+[00:00:40] Locuteur 2 : Le module zéfirin est prêt pour la recette, il reste la migration vers cubernetes avant la fin du mois.
+
+[00:01:10] Locuteur 1 : D'accord, on garde zéfirin en production et on teste cubernetes la semaine prochaine sans faute.
+"""
+PROPRE_MARQUES = [
+    "Compte rendu relu : projet Zéphyrin",
+    "Date : 3 novembre 2026, 10:00",
+    "Participants : Ardoisine Velmont, Brévalec Quintard",
+    "Outil : Scribouille 3.0 (large-v3), relu par Ardoisine Velmont",
+    "Locuteur 1 [00:00:05] : Bonjour à tous, on commence le point sur le projet Zéphyrin ce matin avec toute l'équipe.",
+    "(00:00:40) SPEAKER_01 : Le module Zéphyrin [00:00:41] est prêt pour la recette, il reste la migration vers "
+    "Kubernetes avant la fin du mois.",
+    "Ardoisine Velmont  0:01:10",
+    "D'accord, on garde Zéphyrin en production et on teste Kubernetes la semaine prochaine sans faute.",
+    "Sommaire : Zéphyrin, Kubernetes, Brévalec Quintard, Ardoisine Velmont.",
+    "Pied de page : Brévalec Quintard, Ardoisine Velmont, Velmont Conseil, Scribouille.",
+]
+
+
+def essai_apprentissage_marques(base: Path) -> None:
+    titre("6 bis. Apprentissage : horodatages, voix, en-tête et pied de la relue")
+    cas = [
+        ("[01:02:03] Locuteur 2 : texte dit", ["texte", "dit"]),
+        ("00:00:01,000 --> 00:00:04,000", []),
+        ("<v Marie Fictive>texte dit</v>", ["texte", "dit"]),
+        ("terme [00:12:34] suite", ["terme", "suite"]),
+        ("terme (12:34) suite", ["terme", "suite"]),
+        ("terme 1:02:03.5 suite", ["terme", "suite"]),
+        ("[SPEAKER_00] texte", ["texte"]),
+        ("(Intervenant 3) texte", ["texte"]),
+        ("Speaker 2: texte", ["texte"]),
+        ("Marie Fictive [00:12:34] :", []),
+        ("Marie Fictive  0:12:34", []),
+        ("[00:12:34] Marie Fictive", []),
+        ("fin. [00:12:34] Marie Fictive : la suite", ["fin", "la", "suite"]),
+        ("le score est de 3 à 2", ["le", "score", "est", "de", "3", "à", "2"]),
+        ("On se voit à 10:30", ["on", "se", "voit", "à"]),
+        ("[00:12:34] Merci.", ["merci"]),
+        ("SPEAKER_00 [00:01:02]", []),
+        ("Locuteur 2  0:01:23", []),
+    ]
+    for texte, attendu in cas:
+        obtenu = lexique.mots_de(ap.sans_marques(texte))
+        verifier(obtenu == attendu, f"marques retirées : {texte!r}", str(obtenu))
+
+    # Chaîne complète, fichiers sur disque : brut en texte de Scribouille, relue en Word.
+    (base / "brut.txt").write_text(BRUT_MARQUES, encoding="utf-8")
+    _docx(base / "relue.docx", PROPRE_MARQUES)
+    anciens = (v2.FICHIER_PERSONNEL, chemins.FICHIER_VOCABULAIRE, chemins.FICHIER_CORRECTIONS)
+    try:
+        v2.FICHIER_PERSONNEL = base / "perso.toml"
+        chemins.FICHIER_VOCABULAIRE = base / "absent-v.txt"
+        chemins.FICHIER_CORRECTIONS = base / "absent-c.txt"
+        resultat = ap.executer([(str(base / "brut.txt"), str(base / "relue.docx"), "")], [],
+                               sortie=str(base / "propositions.toml"))
+    finally:
+        v2.FICHIER_PERSONNEL, chemins.FICHIER_VOCABULAIRE, chemins.FICHIER_CORRECTIONS = anciens
+    voc = v2.lire(base / "propositions.toml")[0]
+    formes = {e.forme for e in voc.entrees}
+    fautes = {f.forme for e in voc.entrees for f in e.fautes}
+    verifier(not [x for x in formes | fautes if any(c.isdigit() or c in "[]():<>" for c in x)],
+             "aucune proposition ni faute ne porte d'heure, de crochet ni de voix", str(sorted(formes | fautes)))
+    zeph = voc.chercher("Zéphyrin", etat="propose")
+    kube = voc.chercher("Kubernetes", etat="propose")
+    verifier(zeph is not None and zeph.faute("zéfirin") is not None and kube is not None
+             and kube.faute("cubernetes") is not None,
+             "les vraies fautes, venues de l'alignement brut -> relue, sont proposées", str(sorted(formes)))
+    entete = {"Ardoisine Velmont", "Brévalec Quintard", "Velmont Conseil", "Scribouille", "Ardoisine", "Velmont",
+              "Brévalec", "Quintard", "Conseil", "Outil", "Sommaire", "Participants"}
+    verifier(not formes & entete, "en-tête, sommaire et pied de la relue (sans correspondance) : aucune proposition",
+             str(sorted(formes & entete)))
+    verifier(formes <= {"Zéphyrin", "Kubernetes"}, "rien d'autre n'est proposé", str(sorted(formes)))
+    bilan = resultat["bilan"]
+    verifier(bilan.get("mots_relus_sans_correspondance", 0) >= 20, "mots de la relue sans correspondance comptés",
+             str(bilan.get("mots_relus_sans_correspondance")))
+    sans = ap.rediger_rapport({**bilan, "mots_relus_sans_correspondance": 0}, 0)
+    verifier(len(resultat["rapport"].splitlines()) == len(sans.splitlines()),
+             "rapport : pas une ligne de plus (le compte va sur la ligne des mots)")
+    # Relue seule, sans brut en face (un document) : rien ne change pour elle.
+    seule, _b = ap.apprendre([ap.Reunion("d", "", "Réunion avec Ardoisine Velmont. Ardoisine Velmont valide.")])
+    verifier(seule.chercher("Ardoisine Velmont", etat="propose") is not None,
+             "relue sans brut en face (document) : ses termes restent proposés, comme avant")
+
+
 # ---------------------------------------------------------------------------
 # 7. Documents
 # ---------------------------------------------------------------------------
@@ -784,6 +881,8 @@ def principal() -> int:
         essai_amorce()
         essai_correction()
         essai_apprentissage(base / "apprentissage")
+        (base / "marques").mkdir()
+        essai_apprentissage_marques(base / "marques")
         essai_documents(base / "documents")
         essai_mesure()
         (base / "reunions").mkdir()

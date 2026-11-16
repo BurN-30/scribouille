@@ -205,9 +205,13 @@ def _ecrire(chemin, contenu: dict) -> None:
     # et une commande qui écrivent en même temps ne se mélangent pas.
     import secrets
 
+    texte = json.dumps(contenu, indent=2, ensure_ascii=False) + "\n"
+    if chemins.contenu_identique(chemin, texte):
+        # Rien ne change : le fichier n'est ni réécrit ni redaté.
+        return
     temporaire = chemin.with_name(f"{chemin.name}.{os.getpid()}-{secrets.token_hex(3)}.tmp")
     try:
-        temporaire.write_text(json.dumps(contenu, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        temporaire.write_text(texte, encoding="utf-8")
         os.replace(temporaire, chemin)
     finally:
         try:

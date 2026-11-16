@@ -99,6 +99,107 @@ def _texte_entre(texte: str, mots: list[Mot], i: int, j: int) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Horodatages et marques de locuteur : retirés des deux côtés avant d'aligner
+# ---------------------------------------------------------------------------
+
+#: Une heure : « 1:02 », « 01:02:03 », « 00:01:02,500 », « 0:01:02.5 ».
+_HEURE = r"(?:\d{1,2}:)?\d{1,2}:\d{2}(?:[.,]\d{1,3})?"
+#: Une heure entre crochets ou parenthèses, ou seule (pas collée à un mot).
+_HEURE_PARTOUT = re.compile(rf"[\[(]\s*{_HEURE}\s*[\])]|(?<![\w:]){_HEURE}(?![\w:])")
+#: Étiquettes de voix, où qu'elles soient : « [SPEAKER_00] », « (Locuteur 2) »,
+#: « <v Marie> », « </v> », et les numérotées sans crochets (« Locuteur 3 : »).
+_VOIX_PARTOUT = re.compile(
+    r"[\[(]\s*(?:SPEAKER[_ ]?\d+|Speaker\s*\d+|Locuteur\s*\d+|Intervenant\s*\d+|Interlocuteur\s*\d+"
+    r"|Orateur\s*\d+|Participant\s*\d+)\s*[\])]\s*:?"
+    r"|<\s*v(?:\.[\w.-]+)?\s+[^>\n]{1,60}>|<\s*/\s*v\s*>"
+    r"|\b(?:SPEAKER[_ ]?\d+|Speaker\s*\d+|Locuteur\s*\d+|Intervenant\s*\d+|Interlocuteur\s*\d+|Orateur\s*\d+)\b\s*:?",
+    re.IGNORECASE)
+#: Ligne qui n'est qu'un en-tête de réplique : un nom (mots à majuscule ou
+#: numéro, au plus quatre) puis une heure (« Marie Dupont  0:01:23 »,
+#: « Locuteur 1 [00:01:23] : »), ou une heure puis un nom de deux ou trois
+#: mots, ou d'un mot suivi de deux-points (« [00:01:23] Marie Dupont »). Une
+#: phrase qui finit sur une heure (« On se voit à 10:30 ») n'en est pas une.
+_NOM = r"[A-ZÀ-Ý][\w'-]*"
+_LIGNE_NOM_HEURE = re.compile(
+    rf"^\s*{_NOM}(?:[ _]+[A-ZÀ-Ý0-9][\w'-]*){{0,3}}\s*[\[(]?\s*{_HEURE}\s*[\])]?\s*:?\s*$"
+    rf"|^\s*[\[(]?\s*{_HEURE}\s*[\])]?\s*[-:]?\s*(?:{_NOM}(?: {_NOM}){{1,2}}\s*:?|{_NOM}\s*:)\s*$")
+
+
+def sans_marques(texte: str) -> str:
+    """
+    Le texte sans horodatages ni marques de locuteur, où qu'ils soient : ceux
+    que Scribouille écrit (« [01:02:03] Locuteur 1 : », sous-titres, voix
+    renommées « Marie : ») et les variantes courantes entre crochets ou
+    parenthèses, en début de ligne comme collés à un mot (« terme [00:12:34] »).
+    Une heure retirée vaut une fin de ligne : la voix qui la suit est retirée
+    comme en début de ligne. Les mots dits restent, à leur place.
+    """
+    from .comparaison import _sans_locuteur
+
+    lignes = []
+    for ligne in (texte or "").replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        lignes.append("" if _LIGNE_NOM_HEURE.match(ligne) else ligne)
+    texte = "\n".join(lignes)
+    texte = re.sub(r"\s*-->\s*", "\n", texte)
+    texte = _HEURE_PARTOUT.sub("\n", texte)
+    texte = _VOIX_PARTOUT.sub("\n", texte)
+    return "\n".join(_sans_locuteur(l) for l in texte.split("\n"))
+
+
+#: Ancre d'alignement : tant de mots identiques à la suite, des deux côtés.
+ANCRE_MOTS = 3
+
+
+def mots_alignes(operations, n_propre: int) -> list[bool]:
+    """
+    Mots de la relue qui ont une vraie correspondance dans le brut : ceux qui
+    sont identiques, et ceux d'un passage divergent qui a des mots du brut en
+    face, entre la première et la dernière ancre (`ANCRE_MOTS` mots identiques
+    à la suite). L'en-tête, le pied, un sommaire, un paragraphe ajouté à la
+    relecture n'ont rien en face : ils ne proposent rien.
+    """
+    couverts = [False] * n_propre
+    egaux: list[int] = sorted(i1 for op, i1, _i2, _j1, _j2 in operations if op == "egal")
+    ancres: list[tuple[int, int]] = []
+    debut = None
+    for rang, i in enumerate(egaux):
+        if debut is None or i != egaux[rang - 1] + 1:
+            debut = i
+        if i - debut + 1 == ANCRE_MOTS:
+            ancres.append((debut, i + 1))
+        elif i - debut + 1 > ANCRE_MOTS:
+            ancres[-1] = (debut, i + 1)
+    if not ancres:
+        return couverts
+    premier, dernier = ancres[0][0], ancres[-1][1]
+    passage: list[int] | None = None   # [i1, i2, mots du brut]
+
+    def fermer() -> None:
+        # Des mots du brut en face, et pas démesurément moins que de la relue
+        # (un paragraphe ajouté à la relecture face à un mot du brut n'est
+        # pas une correspondance).
+        if passage and passage[2] > 0 and passage[0] >= premier and passage[1] <= dernier \
+                and passage[1] - passage[0] <= 3 * passage[2] + 2:
+            for k in range(passage[0], passage[1]):
+                couverts[k] = True
+
+    for op, i1, i2, j1, j2 in operations:
+        if op == "egal":
+            fermer()
+            passage = None
+            if premier <= i1 < dernier:
+                couverts[i1] = True
+            continue
+        if passage is None:
+            passage = [i1, i2, j2 - j1]
+        else:
+            passage[1] = max(passage[1], i2)
+            passage[2] += j2 - j1
+    fermer()
+    return couverts
+
+
+# ---------------------------------------------------------------------------
 # Réunion d'apprentissage
 # ---------------------------------------------------------------------------
 
@@ -157,8 +258,15 @@ def apprendre(reunions: list[Reunion], existant: Vocabulaire | None = None,
     bilan = Counter()
 
     for reunion in reunions:
+        # Horodatages et marques de locuteur retirés des deux côtés : ils ne
+        # sont pas des mots dits, et collés à un terme ils en faisaient un
+        # autre (« terme [00:12:34 »).
+        reunion = Reunion(reunion.ident, sans_marques(reunion.brut), sans_marques(reunion.propre),
+                          [sans_marques(t) for t in reunion.autres])
         propre = mots_reperes(reunion.propre) if reunion.propre else []
         brut = mots_reperes(reunion.brut) if reunion.brut else []
+        #: Mots de la relue qui ont une correspondance dans le brut (tous, sans brut en face).
+        couverts = [True] * len(propre)
         bilan["reunions"] += 1
         bilan["mots_propres"] += len(propre)
         bilan["mots_bruts"] += len(brut)
@@ -174,6 +282,8 @@ def apprendre(reunions: list[Reunion], existant: Vocabulaire | None = None,
             for op, i1, i2, j1, j2 in resultat.operations:
                 if op == "egal":
                     egaux[j1] = True
+            couverts = mots_alignes(resultat.operations, len(propre))
+            bilan["mots_relus_sans_correspondance"] += couverts.count(False)
             # Ce que le modèle écrit juste : utile pour écarter les fautes qui
             # sont aussi des mots dits.
             for n in range(1, MOTS_MAX_FAUTE + 1):
@@ -182,6 +292,10 @@ def apprendre(reunions: list[Reunion], existant: Vocabulaire | None = None,
                         justes_brut[" ".join(comparables_brut[j:j + n])] += 1
             for i1, i2, j1, j2 in resultat.passages():
                 if not (1 <= i2 - i1 <= MOTS_MAX_TERME and 1 <= j2 - j1 <= MOTS_MAX_FAUTE):
+                    continue
+                if not all(couverts[i1:i2]):
+                    # Hors de l'alignement réel (en-tête, pied, ajout à la relecture).
+                    bilan["passages_ecartes"] += 1
                     continue
                 juste = _texte_entre(reunion.propre, propre, i1, i2)
                 faute = " ".join(m.comparable for m in brut[j1:j2])
@@ -200,19 +314,22 @@ def apprendre(reunions: list[Reunion], existant: Vocabulaire | None = None,
                     if len(voisin) >= 3:
                         constat.voisins[voisin] += 1
 
-        # Termes des documents propres (relue, compte rendu, autres).
-        for document in [reunion.propre] + list(reunion.autres):
+        # Termes des documents propres (relue, compte rendu, autres). De la
+        # relue d'une paire, seuls les mots qui ont une correspondance dans le
+        # brut : un terme n'en vient que par un alignement réel.
+        for rang_document, document in enumerate([reunion.propre] + list(reunion.autres)):
             if not document:
                 continue
             mots = mots_reperes(document)
+            permis = couverts if rang_document == 0 else [True] * len(mots)
             bilan["mots_documents"] += len(mots)
             i = 0
             while i < len(mots):
-                if not _remarquable(mots[i]) or mots[i].comparable in CIVILITES:
+                if not permis[i] or not _remarquable(mots[i]) or mots[i].comparable in CIVILITES:
                     i += 1
                     continue
                 j = i + 1
-                while j < len(mots) and j - i < MOTS_MAX_TERME and _remarquable(mots[j]) \
+                while j < len(mots) and j - i < MOTS_MAX_TERME and permis[j] and _remarquable(mots[j]) \
                         and not mots[j].debut_phrase and mots[j].debut - mots[j - 1].fin <= 1:
                     j += 1
                 forme = _texte_entre(document, mots, i, j)
@@ -377,8 +494,10 @@ def rediger_rapport(bilan: dict, illisibles: int) -> str:
               "",
               f"Réunions lues : {bilan.get('reunions', 0)} (dont {bilan.get('paires', 0)} avec transcription "
               f"brute et relue), documents illisibles : {illisibles}",
-              f"Mots : {bilan.get('mots_bruts', 0)} bruts, {bilan.get('mots_propres', 0)} relus, "
-              f"{bilan.get('mots_documents', 0)} dans les documents propres",
+              f"Mots : {bilan.get('mots_bruts', 0)} bruts, {bilan.get('mots_propres', 0)} relus"
+              + (f" (dont {bilan['mots_relus_sans_correspondance']} sans correspondance dans le brut, ignorés)"
+                 if bilan.get("mots_relus_sans_correspondance") else "")
+              + f", {bilan.get('mots_documents', 0)} dans les documents propres",
               "",
               f"Remplacements vus : {bilan.get('remplacements_vus', 0)} formes distinctes",
               f"  proposés comme fautes : {bilan.get('fautes_proposees', 0)}",
