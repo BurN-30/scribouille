@@ -253,7 +253,7 @@ Schéma `scribouille.cli/1`. Une enveloppe par réponse :
 
 | Événement | Champs |
 |---|---|
-| `debut` | `fichiers`, `version`, `preset`, `rythme`, `pour_une_heure`, `locuteurs` (`demandes`, `disponibles`) |
+| `debut` | `fichiers`, `version`, `preset`, `rythme`, `pour_une_heure` (durée de ce qui calculera vraiment : processeur forcé, puce suspendue, modèle du mode avancé compris), `locuteurs` (`demandes`, `disponibles`) |
 | `etat` | `id`, `etat` (decodage, transcription, locuteurs, ecriture, termine, annule, erreur), `message` |
 | `progres` | `id`, `fichier`, `pct`, `phase`, `ecoule_s`, `reste_s` (une ligne par seconde au plus) |
 | `journal` | `niveau` (info, ok, attention, erreur), `texte` : replis, reprises, plantages du moteur |

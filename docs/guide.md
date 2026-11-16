@@ -116,6 +116,8 @@ For French, advanced mode also offers **large-v3 distil français** (`bofenghuan
 
 **Before the first transcription, the app shows a starting estimate, not a guarantee.** It is calibrated on public measurements and adjusted to the number of cores on your machine. The app shows the **time actually measured** after every transcription, and writes it in the header of the output file. Speaker separation adds roughly 0.2 x on CPU.
 
+**Every announced duration is that of what will really compute**: quality cards, banner, line of a queued file, countdown at the start, "what it changes" sheet, `diagnostic`, `transcrire`, `materiel proposer`. With "Force the processor", it is the processor's duration, even on a computer set up for the graphics chip or fitted with an NVIDIA card (on a Core Ultra 5 225U: about 1 h 24 for one hour at Highest quality, instead of 21 min 36 on the chip). Chip suspended or set aside after a crash, OpenVINO removed, model without an OpenVINO version, chip refusing to open: the usual engine's duration, on the processor. In advanced mode: that of the chosen model and beam. Beam set by the campaign or batches set by the benchmark: those, and their measurement on the computer if there is one.
+
 **They correct themselves.** As soon as a transcription completes, the observed factor is kept, and it is what the next announcements are based on: the durations shown are recalculated after each file. The last five measurements are averaged, the most recent and the longest weighing the most, and every combination of model and beam width is tracked separately. Nothing to set up, and nothing goes online: the measurements live in `calibration.json`, next to your settings.
 
 Acceleration: **CPU everywhere** with `int8` quantisation; **NVIDIA cards** in CUDA `float16`, automatically, when the driver and libraries answer; and, since 2.4.0, **Intel integrated graphics** (and, experimentally, the NPU) through the optional **OpenVINO** engine. AMD Radeon cards are detected and displayed but not used.
@@ -180,7 +182,7 @@ The **While transcribing** section of the settings bounds what the transcription
 | Windows priority | normal | below normal | low, and input-output at low priority |
 | Frequency (quality of service) | throttling lifted (as before) | decided by Windows | Windows "efficiency mode" (EcoQoS) |
 | Graphics chip (OpenVINO) | unchanged | low-priority queue | low-priority, low-throttle queue, a pause equal to the computation after each window |
-| Low free memory | nothing changes | batches, then a lighter model, and it is said | same |
+| Low free memory | nothing changes | batches, then a lighter model, and it is said (OpenVINO, window by window, has no batches: only the model can change) | same |
 
 **Adapt automatically**: the transcription takes the chosen pace while you use the computer (keyboard or mouse touched less than two minutes ago, other programs using more than 30 % of the processor, full screen or presentation, microphone open for a call, laptop on battery) and maximum speed when it is idle. Threads and batches are fixed when the model loads: they are then those of maximum speed, and switching goes through priority, quality of service and pauses. On battery, the chosen pace is kept until the laptop is plugged in. The remaining time shown follows the pace actually observed, switches included. The choice applies from the next transcription.
 

@@ -349,6 +349,36 @@ Ce que change chaque choix
   précision plus haute ; sur la puce graphique, le décodage glouton est une
   limite d'OpenVINO.
 
+Des durées qui suivent ce qui calcule
+
+- **Forcer le processeur** : les cartes de qualité, le bandeau, la ligne
+  d'un fichier en file, le décompte de départ, `diagnostic` et
+  `transcrire` annonçaient la durée de la puce graphique (ou de la carte
+  NVIDIA) alors que le calcul tournait sur le processeur : 21 min 36
+  annoncées pour une heure en Qualité maximale sur un Core Ultra 5 225U,
+  quand le processeur en demande environ 1 h 24. Toutes disent maintenant
+  la durée du processeur.
+- **Une seule décision** (`app/calcul.py`) : le moteur que crée la file et
+  toutes les durées annoncées en dépendent. Elles suivent aussi la puce
+  suspendue ou écartée après un plantage depuis l'ouverture de la fenêtre,
+  OpenVINO retiré, un modèle sans version OpenVINO (sur le même poste, 6 min
+  18 annoncées pour une heure au lieu de 25 min 51), la puce qui
+  refuse de s'ouvrir (le décompte part de ce qui a été ouvert), le modèle et
+  le faisceau du mode avancé dans le bandeau et les cartes, le faisceau posé
+  par la campagne et les lots posés par le banc (leur mesure sur le poste
+  sert enfin). `materiel proposer` annonce la durée de ce qui calculera une
+  fois la proposition appliquée, et dit quand « Forcer le processeur » ou
+  une puce écartée l'empêchent de prendre effet. Changer le mode avancé, le
+  modèle, le faisceau ou « Forcer le processeur » recalcule les durées
+  affichées.
+- **Mémoire libre basse sur OpenVINO** : « passages traités un à un » ne
+  s'affiche plus, OpenVINO n'ayant pas de lots (le journal note que la
+  borne vaudrait pour un repli sur CTranslate2). Le modèle plus léger, lui,
+  est toujours dit.
+- Contrôlé par `outils/verifier_fiches.py` : chaque durée, dans la vraie
+  fenêtre, la ligne de commande et la vraie file, comparée à ce que coûte
+  le moteur réellement créé, dans onze situations.
+
 ---
 
 ## 2.4.0
